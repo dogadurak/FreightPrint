@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 
 import requests
@@ -16,16 +17,30 @@ class RoadRoutingError(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class RoadRoute:
+    distance_km: float
+    duration_h: float
+    ferry_km: float = 0.0
+
+    @property
+    def driving_km(self) -> float:
+        return self.distance_km - self.ferry_km
+
+
 @lru_cache(maxsize=2048)
-def road_distance(
-    origin: tuple[float, float],
-    destination: tuple[float, float],
-) -> tuple[float, float]:
-    """Return (distance_km, duration_h) by road between two (lon, lat) points."""
+def road_route(origin: tuple[float, float], destination: tuple[float, float]) -> RoadRoute:
+    """Route two (lon, lat) points by road, separating any ferry distance.
+
+    OSRM's driving profile routes over ferries, so an all-road baseline that counted
+    them as road would apply a road factor to a sea crossing and overstate the saving.
+    """
     coords = f"{origin[0]},{origin[1]};{destination[0]},{destination[1]}"
     url = f"{OSRM_BASE_URL}/route/v1/driving/{coords}"
 
-    response = requests.get(url, params={"overview": "false"}, timeout=REQUEST_TIMEOUT_S)
+    response = requests.get(
+        url, params={"overview": "false", "steps": "true"}, timeout=REQUEST_TIMEOUT_S
+    )
     response.raise_for_status()
     payload = response.json()
 
@@ -42,4 +57,14 @@ def road_distance(
             )
 
     route = payload["routes"][0]
-    return route["distance"] / 1000.0, route["duration"] / 3600.0
+    ferry_m = sum(
+        step["distance"]
+        for leg in route["legs"]
+        for step in leg["steps"]
+        if step.get("mode") == "ferry"
+    )
+    return RoadRoute(
+        distance_km=route["distance"] / 1000.0,
+        duration_h=route["duration"] / 3600.0,
+        ferry_km=ferry_m / 1000.0,
+    )

@@ -3,7 +3,7 @@
 Çok modlu yük taşımacılığı karbon ve rota analiz motoru.
 Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
-**Durum:** Faz 1 — çekirdek rota motoru.
+**Durum:** Faz 2 — emisyon motoru.
 
 ## Kurulum
 
@@ -19,12 +19,21 @@ biçimini kullanın (aksi hâlde argparse bunu parametre sanır).
 
 ```bash
 cd backend
-python -m app.cli --origin=29.4306,40.7889 --destination=13.7768,45.6495 \
-                  --origin-name "Gebze" --destination-name "Trieste"
+python -m app.cli --origin=29.4306,40.7889 --destination=6.7735,51.2277 \
+                  --origin-name "Gebze" --destination-name "Dusseldorf" --tonnage 24
 ```
 
-Deniz bacaklarının searoute ile hesaplanan mesafesini referansla karşılaştırmak için
-`--compare-computed` ekleyin.
+Sık kullanılan seçenekler:
+
+| Seçenek | Ne yapar |
+|---|---|
+| `--tonnage` | Taşınan yük (ton), varsayılan 24 |
+| `--scope` | `TTW` veya `WTW` — faktör kapsamı |
+| `--fuel` | Karayolu yakıtı (`diesel`, `hvo`, `lng`, `electric`) |
+| `--load-factor` | Doluluk oranı 0-1 |
+| `--empty-return` | Boş dönüş payı 0-1 |
+| `--load-uncertainty` | Doluluğun ne kadar altına düşebileceği |
+| `--compare-computed` | Deniz bacağını searoute ile de hesaplayıp referansla karşılaştır |
 
 ## Testler
 
@@ -39,13 +48,27 @@ python -m pytest tests/ -q
 |---|---|
 | `data/terminals.geojson` | Terminal noktaları (brifing Bölüm 4.3) |
 | `data/service_legs.csv` | Deniz/demiryolu servis kenarları (Bölüm 4.4) |
+| `data/emission_factors.csv` | Versiyonlu faktör tablosu — kaynak, yıl, kapsam, doğrulanmış mı |
+| `data/tree_factors.csv` | Ağaç eşdeğeri katsayıları |
 | `backend/app/core/network.py` | NetworkX grafı, terminal yükleme, en yakın terminal |
-| `backend/app/core/road.py` | OSRM sarmalayıcı — serbest karayolu bacağı |
+| `backend/app/core/road.py` | OSRM sarmalayıcı — serbest karayolu bacağı, feribot ayrımı |
 | `backend/app/core/sea.py` | searoute sarmalayıcı + Korint Kanalı gerçekçilik kontrolü |
 | `backend/app/core/route.py` | İki nokta → çok modlu rota alternatifleri |
+| `backend/app/core/emissions.py` | Faktör uygulama, tam karayolu karşılaştırması, ağaç eşdeğeri |
+| `backend/app/core/uncertainty.py` | Monte Carlo belirsizlik aralığı |
 
 Rota arama, kalkış ve varış noktalarını grafa geçici düğüm olarak ekleyip k-en-kısa-yol
 çalıştırır; böylece tam karayolu seçeneği doğal olarak karşılaştırma temeli hâline gelir.
+
+## Emisyon hesabı
+
+`bacak_emisyonu = mesafe_km × ton × faktör`, faktör doluluk oranı ve boş dönüş payına göre
+düzeltilir. Tam karayolu senaryosu karşılaştırma temelidir; tasarruf bu ikisinin farkıdır.
+
+Faktörler koda gömülü değil — `data/emission_factors.csv` her satırda kaynağını, yılını,
+kapsamını (TTW/WTW) ve **doğrulanmış olup olmadığını** taşır. Doğrulanmamış bir faktör
+kullanıldığında çıktıya uyarı düşer. HVO/LNG/elektrik satırları şu an `PLACEHOLDER`
+kaynaklıdır ve rapora girmeden önce GLEC/ISO 14083 değeriyle değiştirilmelidir.
 
 ## Bilinen sınırlar
 
@@ -59,3 +82,6 @@ Rota arama, kalkış ve varış noktalarını grafa geçici düğüm olarak ekle
 - **Karayolu için public OSRM demo sunucusu kullanılıyor.** Hız sınırlı; prodüksiyon
   için `OSRM_BASE_URL` ortam değişkeniyle kendi OSRM örneğinizi gösterin.
 - **Geocoding yok.** Şehir adı değil, koordinat girilmesi gerekiyor.
+- **WTW faktörleri henüz yok.** Tablo kapsamı destekliyor ama yalnızca TTW satırları
+  doğrulanmış durumda; `--scope WTW` şu an faktör bulamaz.
+- **Yakıt tipi faktörleri doğrulanmamış.** Dizel dışındaki her seçenek `PLACEHOLDER`.

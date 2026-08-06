@@ -4,7 +4,7 @@ from itertools import islice
 import networkx as nx
 
 from .network import Terminal, build_network, load_terminals, nearest_terminals
-from .road import road_distance
+from .road import road_route
 from .sea import sea_distance
 
 ORIGIN_NODE = "__origin__"
@@ -23,6 +23,7 @@ class Leg:
     duration_h: float | None = None
     ref_distance_km: float | None = None
     computed_distance_km: float | None = None
+    ferry_km: float = 0.0
     notes: list[str] = field(default_factory=list)
 
 
@@ -64,20 +65,26 @@ def _build_routing_graph(
     graph.add_node(ORIGIN_NODE)
     graph.add_node(DESTINATION_NODE)
 
-    direct_km, direct_h = road_distance(origin, destination)
+    direct = road_route(origin, destination)
     graph.add_edge(
-        ORIGIN_NODE, DESTINATION_NODE, mode="road", distance_km=direct_km, duration_h=direct_h
+        ORIGIN_NODE,
+        DESTINATION_NODE,
+        mode="road",
+        distance_km=direct.distance_km,
+        duration_h=direct.duration_h,
+        ferry_km=direct.ferry_km,
     )
 
     for endpoint_node, point in ((ORIGIN_NODE, origin), (DESTINATION_NODE, destination)):
         for terminal in nearest_terminals(point, terminals, candidate_terminals, connected_only=graph):
-            distance_km, duration_h = road_distance(point, terminal.coords)
+            leg = road_route(point, terminal.coords)
             graph.add_edge(
                 endpoint_node,
                 terminal.id,
                 mode="road",
-                distance_km=distance_km,
-                duration_h=duration_h,
+                distance_km=leg.distance_km,
+                duration_h=leg.duration_h,
+                ferry_km=leg.ferry_km,
             )
     return graph
 
@@ -104,6 +111,7 @@ def _leg_from_edge(
         duration_h=edge.get("duration_h"),
         ref_distance_km=edge.get("ref_distance_km"),
         computed_distance_km=edge["distance_km"] if edge["mode"] == "road" else None,
+        ferry_km=edge.get("ferry_km", 0.0),
     )
 
 

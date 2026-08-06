@@ -1,0 +1,7 @@
+factor_set,mode,vehicle_type,fuel_type,scope,value_kg_co2_per_ton_km,source,year,is_verified,notes
+reference,road,truck_24t,diesel,TTW,0.121,Customer carbon footprint report (validation dataset),2024,yes,Scope not stated in the source report; assumed TTW
+reference,sea,roro,hfo,TTW,0.012,Customer carbon footprint report (validation dataset),2024,yes,Scope not stated in the source report; assumed TTW
+reference,rail,intermodal,mixed,TTW,0.016,Customer carbon footprint report (validation dataset),2024,yes,Scope not stated in the source report; assumed TTW
+placeholder,road,truck_24t,hvo,TTW,0.030,PLACEHOLDER,2024,no,Needs a GLEC/ISO 14083 value before use in any report
+placeholder,road,truck_24t,lng,TTW,0.110,PLACEHOLDER,2024,no,Needs a GLEC/ISO 14083 value before use in any report
+placeholder,road,truck_24t,electric,TTW,0.000,PLACEHOLDER,2024,no,TTW is zero by definition; the real number is WTW and grid dependent

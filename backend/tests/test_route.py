@@ -2,6 +2,7 @@ import pytest
 
 from app.core import road, route
 from app.core.network import haversine_km, load_terminals
+from app.core.road import RoadRoute
 from app.core.route import Leg, RouteAlternative, find_route_alternatives
 
 # Straight-line stand-in for OSRM so route selection can be tested without the network.
@@ -11,12 +12,12 @@ AVERAGE_ROAD_SPEED_KMH = 70.0
 
 @pytest.fixture
 def offline_road(monkeypatch):
-    def fake_road_distance(origin, destination):
+    def fake_road_route(origin, destination):
         distance_km = haversine_km(origin, destination) * ROAD_DETOUR_FACTOR
-        return distance_km, distance_km / AVERAGE_ROAD_SPEED_KMH
+        return RoadRoute(distance_km=distance_km, duration_h=distance_km / AVERAGE_ROAD_SPEED_KMH)
 
-    monkeypatch.setattr(route, "road_distance", fake_road_distance)
-    return fake_road_distance
+    monkeypatch.setattr(route, "road_route", fake_road_route)
+    return fake_road_route
 
 
 def _route(label, **distance_by_mode):
@@ -86,9 +87,7 @@ def test_multimodal_alternatives_are_sorted_by_total_distance(offline_road):
     assert totals == sorted(totals)
 
 
-def test_unreachable_point_is_rejected_instead_of_snapped(monkeypatch):
-    """OSRM answers for unreachable input by snapping to a far-away road; that must fail."""
-
+def _fake_osrm_response(monkeypatch, payload):
     class FakeResponse:
         @staticmethod
         def raise_for_status():
@@ -96,16 +95,55 @@ def test_unreachable_point_is_rejected_instead_of_snapped(monkeypatch):
 
         @staticmethod
         def json():
-            return {
-                "code": "Ok",
-                "routes": [{"distance": 2_027_000, "duration": 72_000}],
-                "waypoints": [{"distance": 100}, {"distance": 762_500}],
-            }
+            return payload
 
     monkeypatch.setattr(road.requests, "get", lambda *args, **kwargs: FakeResponse())
-    road.road_distance.cache_clear()
+    road.road_route.cache_clear()
+
+
+def test_unreachable_point_is_rejected_instead_of_snapped(monkeypatch):
+    """OSRM answers for unreachable input by snapping to a far-away road; that must fail."""
+    _fake_osrm_response(
+        monkeypatch,
+        {
+            "code": "Ok",
+            "routes": [{"distance": 2_027_000, "duration": 72_000, "legs": []}],
+            "waypoints": [{"distance": 100}, {"distance": 762_500}],
+        },
+    )
 
     with pytest.raises(road.RoadRoutingError, match="no road access"):
-        road.road_distance((6.73, 51.45), (-21.9, 64.1))
+        road.road_route((6.73, 51.45), (-21.9, 64.1))
 
-    road.road_distance.cache_clear()
+    road.road_route.cache_clear()
+
+
+def test_ferry_distance_is_separated_from_driving_distance(monkeypatch):
+    """OSRM routes over ferries under the driving profile; that km is not road."""
+    _fake_osrm_response(
+        monkeypatch,
+        {
+            "code": "Ok",
+            "routes": [
+                {
+                    "distance": 643_000,
+                    "duration": 67_000,
+                    "legs": [
+                        {
+                            "steps": [
+                                {"mode": "driving", "distance": 506_000},
+                                {"mode": "ferry", "distance": 137_000},
+                            ]
+                        }
+                    ],
+                }
+            ],
+            "waypoints": [{"distance": 50}, {"distance": 50}],
+        },
+    )
+
+    result = road.road_route((25.14, 35.34), (23.72, 37.98))
+    assert result.ferry_km == pytest.approx(137)
+    assert result.driving_km == pytest.approx(506)
+
+    road.road_route.cache_clear()

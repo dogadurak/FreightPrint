@@ -1,0 +1,3 @@
+species,kg_co2_per_tree_per_year,source,is_verified,notes
+average_tree,22.5,Customer carbon footprint report (validation dataset),yes,Generic average used by the source report
+pinus_brutia,411.4,Customer carbon footprint report (validation dataset),yes,Turkish red pine; per-hectare figure in the source divided by tree count
