@@ -1,0 +1,85 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"id": "pendik", "name": "Pendik", "country": "TR", "type": "roro_port"},
+      "geometry": {"type": "Point", "coordinates": [29.2500, 40.8667]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "yalova", "name": "Yalova", "country": "TR", "type": "roro_port"},
+      "geometry": {"type": "Point", "coordinates": [29.2769, 40.6550]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "ambarli", "name": "Ambarli", "country": "TR", "type": "port"},
+      "geometry": {"type": "Point", "coordinates": [28.6900, 40.9700]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "mersin", "name": "Mersin", "country": "TR", "type": "port"},
+      "geometry": {"type": "Point", "coordinates": [34.6300, 36.7900]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "halkali", "name": "Halkali", "country": "TR", "type": "rail_terminal"},
+      "geometry": {"type": "Point", "coordinates": [28.7800, 41.0300]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "trieste", "name": "Trieste", "country": "IT", "type": "roro_rail_hub"},
+      "geometry": {"type": "Point", "coordinates": [13.7600, 45.6400]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "bari", "name": "Bari", "country": "IT", "type": "roro_port"},
+      "geometry": {"type": "Point", "coordinates": [16.8700, 41.1400]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "patras", "name": "Patras", "country": "GR", "type": "roro_port"},
+      "geometry": {"type": "Point", "coordinates": [21.7346, 38.2466]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "sete", "name": "Sete", "country": "FR", "type": "roro_port"},
+      "geometry": {"type": "Point", "coordinates": [3.6970, 43.4030]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "duisburg", "name": "Duisburg", "country": "DE", "type": "rail_terminal"},
+      "geometry": {"type": "Point", "coordinates": [6.7300, 51.4500]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "koln", "name": "Koln", "country": "DE", "type": "rail_terminal"},
+      "geometry": {"type": "Point", "coordinates": [6.9603, 50.9375]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "ostrava", "name": "Ostrava", "country": "CZ", "type": "rail_terminal"},
+      "geometry": {"type": "Point", "coordinates": [18.2625, 49.8209]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "regensburg", "name": "Regensburg", "country": "DE", "type": "rail_terminal"},
+      "geometry": {"type": "Point", "coordinates": [12.0974, 49.0134]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "wels", "name": "Wels", "country": "AT", "type": "rail_terminal"},
+      "geometry": {"type": "Point", "coordinates": [14.0333, 48.1667]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "lambach", "name": "Lambach", "country": "AT", "type": "rail_terminal"},
+      "geometry": {"type": "Point", "coordinates": [13.8833, 48.0833]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "chitila", "name": "Chitila", "country": "RO", "type": "rail_terminal"},
+      "geometry": {"type": "Point", "coordinates": [25.9800, 44.5100]}
+    }
+  ]
+}

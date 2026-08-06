@@ -1,0 +1,5 @@
+networkx>=3.0
+searoute>=1.6
+shapely>=2.0
+requests>=2.31
+pytest>=8.0
