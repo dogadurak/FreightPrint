@@ -28,6 +28,11 @@ class FactorSetOut(BaseModel):
     description: str
 
 
+class Scenario(BaseModel):
+    factor_set: str
+    scope: str = Field(default="TTW", pattern="^(TTW|WTW)$")
+
+
 class RouteRequest(BaseModel):
     origin: Point
     destination: Point
@@ -43,6 +48,10 @@ class RouteRequest(BaseModel):
     load_uncertainty: float = Field(default=0.0, ge=0, lt=1)
     distance_uncertainty: float = Field(default=0.05, ge=0, lt=1)
     max_alternatives: int | None = Field(default=None, ge=1, le=20)
+    # Extra pricings of the same routes. Routing costs seconds and several OSRM calls;
+    # pricing costs nothing, so every scenario the dashboard offers is computed once
+    # here and switched client-side without another round trip.
+    scenarios: list[Scenario] = Field(default_factory=list, max_length=12)
 
 
 class LegOut(BaseModel):
@@ -80,6 +89,28 @@ class AlternativeOut(BaseModel):
     notes: list[str] = []
 
 
+class ScenarioTotalOut(BaseModel):
+    """One alternative priced under one scenario. Geometry is deliberately absent —
+    it is identical across scenarios and already carried by `alternatives`."""
+
+    label: str
+    is_all_road: bool
+    total_co2_kg: float
+    co2_by_mode: dict[str, float]
+    saving_co2_kg: float | None = None
+    emission_range: RangeOut | None = None
+
+
+class ScenarioOut(BaseModel):
+    factor_set: str
+    scope: str
+    sources: list[str]
+    is_verified: bool
+    totals: list[ScenarioTotalOut]
+    warnings: list[str] = []
+    error: str | None = None
+
+
 class RouteResponse(BaseModel):
     factor_set: str
     scope: str
@@ -87,3 +118,4 @@ class RouteResponse(BaseModel):
     sources: list[str]
     alternatives: list[AlternativeOut]
     warnings: list[str] = []
+    scenarios: list[ScenarioOut] = []

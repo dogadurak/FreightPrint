@@ -22,6 +22,8 @@ from .schemas import (
     RangeOut,
     RouteRequest,
     RouteResponse,
+    ScenarioOut,
+    ScenarioTotalOut,
     TerminalOut,
 )
 
@@ -91,6 +93,88 @@ def _leg_out(leg) -> LegOut:
         factor_value=leg.factor.value,
         factor_source=leg.factor.source,
         geometry=[list(point) for point in leg.geometry],
+    )
+
+
+def _price_scenario(routes, request: RouteRequest, scenario, factors) -> ScenarioOut:
+    """Reprice already-routed alternatives. No OSRM call, so this is effectively free.
+
+    A scenario that cannot be priced is returned carrying its error rather than
+    dropped: the dashboard offers it as a choice, so it has to say why it is empty.
+    """
+    verified = [
+        f for f in factors if f.factor_set == scenario.factor_set and f.scope == scenario.scope
+    ]
+    common = dict(
+        tonnage=request.tonnage,
+        scope=scenario.scope,
+        road_fuel_type=request.road_fuel_type,
+        factor_set=scenario.factor_set,
+    )
+    try:
+        band = (
+            load_band(request.load_factor, request.load_uncertainty)
+            if request.load_factor is not None
+            else None
+        )
+        priced = calculate_shipment(
+            routes,
+            load_factor=sum(band) / 2 if band else None,
+            empty_return_share=request.empty_return_share,
+            **common,
+        )
+    except (FactorNotFoundError, ValueError) as error:
+        return ScenarioOut(
+            factor_set=scenario.factor_set,
+            scope=scenario.scope,
+            sources=[],
+            is_verified=False,
+            totals=[],
+            error=str(error),
+        )
+
+    totals = []
+    for route, shipment in lowest_emission_first(routes, priced, limit=request.max_alternatives):
+        emission_range = None
+        try:
+            simulated = simulate_emission_range(
+                route,
+                load_factor=request.load_factor,
+                load_uncertainty=request.load_uncertainty,
+                distance_uncertainty=request.distance_uncertainty,
+                empty_return_share=request.empty_return_share,
+                seed=0,
+                **common,
+            )
+            low, high = simulated.rounded()
+            emission_range = RangeOut(
+                low_co2_kg=low, high_co2_kg=high, confidence=simulated.confidence
+            )
+        except (FactorNotFoundError, ValueError):
+            emission_range = None
+
+        totals.append(
+            ScenarioTotalOut(
+                label=shipment.label,
+                is_all_road=route.is_all_road,
+                total_co2_kg=round_to_significant(shipment.total_co2_kg),
+                co2_by_mode={k: round_to_significant(v) for k, v in shipment.co2_by_mode.items()},
+                saving_co2_kg=(
+                    round_to_significant(shipment.saving_co2_kg)
+                    if shipment.saving_co2_kg is not None
+                    else None
+                ),
+                emission_range=emission_range,
+            )
+        )
+
+    return ScenarioOut(
+        factor_set=scenario.factor_set,
+        scope=scenario.scope,
+        sources=sorted({f.source for f in verified if f.is_verified}),
+        is_verified=bool(verified) and all(f.is_verified for f in verified),
+        totals=totals,
+        warnings=sorted({w for shipment in priced for w in shipment.warnings}),
     )
 
 
@@ -203,6 +287,7 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
         sources=sources,
         alternatives=alternatives,
         warnings=warnings,
+        scenarios=[_price_scenario(routes, request, s, factors) for s in request.scenarios],
     )
 
 

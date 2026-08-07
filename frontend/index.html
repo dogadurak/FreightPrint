@@ -3,112 +3,152 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FreightPrint</title>
+<title>FreightPrint — Karbon ve Rota Panosu</title>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 <link href="/static/style.css" rel="stylesheet">
 </head>
 <body>
-<header class="site-header">
-  <h1>FreightPrint</h1>
-  <p>Çok modlu yük taşımacılığı karbon ve rota motoru</p>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <div>
+      <h1>FreightPrint</h1>
+      <p>Çok modlu yük taşımacılığı karbon ve rota panosu</p>
+    </div>
+  </div>
+  <p class="shipment-summary" id="shipment-summary" role="status"></p>
 </header>
 
-<main>
-  <div>
-    <section class="panel">
+<div class="layout">
+  <!-- ── Sevkiyat girdisi ─────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <section class="card">
+      <h2 class="card-title">Sevkiyat</h2>
       <form id="shipment-form">
-        <fieldset>
-          <legend>Sevkiyat</legend>
-          <p class="hint">Haritaya tıklayarak da seçebilirsiniz. İşaretleri sürükleyin.</p>
-          <div class="pick-row">
-            <button type="button" class="secondary" id="pick-origin" aria-pressed="false">
-              Kalkışı haritadan seç
-            </button>
-            <button type="button" class="secondary" id="pick-destination" aria-pressed="false">
-              Varışı haritadan seç
-            </button>
-          </div>
+        <p class="hint">Haritaya tıklayarak seçebilir, işaretleri sürükleyebilirsiniz.</p>
+        <div class="pick-row">
+          <button type="button" class="ghost" id="pick-origin" aria-pressed="false">
+            Kalkışı seç
+          </button>
+          <button type="button" class="ghost" id="pick-destination" aria-pressed="false">
+            Varışı seç
+          </button>
+        </div>
+        <div class="field-grid">
           <label>Kalkış <small>boylam, enlem</small>
             <input name="origin" id="origin" value="29.4306, 40.7889" required>
           </label>
-          <label>Kalkış adı
+          <label>Adı
             <input name="origin_name" value="Gebze">
           </label>
           <label>Varış <small>boylam, enlem</small>
             <input name="destination" id="destination" value="6.7735, 51.2277" required>
           </label>
-          <label>Varış adı
+          <label>Adı
             <input name="destination_name" value="Düsseldorf">
           </label>
-          <label>Tonaj
+          <label>Tonaj <small>ton</small>
             <input name="tonnage" type="number" value="24" min="0.1" step="0.1" required>
           </label>
-        </fieldset>
-
-        <fieldset>
-          <legend>Emisyon faktörü</legend>
-          <label>Faktör seti
-            <select name="factor_set" id="factor-set"></select>
-          </label>
-          <p class="hint" id="factor-hint"></p>
-          <label>Kapsam
-            <select name="scope" id="scope"></select>
-          </label>
-          <p class="hint">
-            TTW yalnızca araçtan çıkanı, WTW yakıtın üretimini de sayar.
-            ISO 14083 ve GLEC WTW ister.
-          </p>
-        </fieldset>
-
-        <fieldset>
-          <legend>İşletme varsayımları</legend>
-          <label>Doluluk oranı
+          <label>Doluluk <small>boş: yayın bazı</small>
             <input name="load_factor" type="number" min="0.05" max="1" step="0.01"
-                   placeholder="faktörün yayın bazı">
+                   placeholder="—">
           </label>
-          <label>Boş dönüş payı
+          <label>Boş dönüş <small>boş: yayın bazı</small>
             <input name="empty_return_share" type="number" min="0" max="1" step="0.01"
-                   placeholder="faktörün yayın bazı">
+                   placeholder="—">
           </label>
-          <p class="hint">
-            Boş bırakılırsa her faktör kendi yayınlanmış varsayımını kullanır —
-            kaynağının önerdiği budur.
-          </p>
-        </fieldset>
-
-        <button type="submit" id="submit">Hesapla</button>
+        </div>
+        <button type="submit" id="submit">Rotala ve hesapla</button>
         <p class="hint" id="status" role="status"></p>
       </form>
     </section>
 
-    <section class="panel">
+    <section class="card">
+      <h2 class="card-title">Toplu rapor</h2>
       <form id="report-form">
-        <fieldset>
-          <legend>Toplu rapor</legend>
-          <p class="hint">
-            CSV yükleyin, yukarıdaki faktör seti ve kapsamla hesaplanmış rapor inin.
-            Zorunlu sütunlar: <code>origin_lon, origin_lat, destination_lon,
-            destination_lat</code> · isteğe bağlı: <code>reference, origin_name,
-            destination_name, tonnage</code>
-          </p>
-          <label>Sevkiyat dosyası
-            <input type="file" name="file" accept=".csv,text/csv" required>
-          </label>
-          <button type="submit" id="report-submit">Rapor indir</button>
-          <p class="hint" id="report-status" role="status"></p>
-          <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya indir</a></p>
-        </fieldset>
+        <p class="hint">
+          Yüklediğiniz dosya, seçili senaryoyla fiyatlanır. Zorunlu sütunlar:
+          <code>origin_lon, origin_lat, destination_lon, destination_lat</code>
+        </p>
+        <label>Sevkiyat dosyası
+          <input type="file" name="file" accept=".csv,text/csv" required>
+        </label>
+        <button type="submit" class="ghost" id="report-submit">Rapor indir</button>
+        <p class="hint" id="report-status" role="status"></p>
+        <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya</a></p>
       </form>
     </section>
-  </div>
+  </aside>
 
-  <section class="map-and-results">
-    <div id="map" aria-label="Rota haritası"></div>
-    <div id="results">
-      <p class="empty panel">Sevkiyat bilgilerini girip “Hesapla”ya basın.</p>
+  <!-- ── Pano ─────────────────────────────────────────────────────────── -->
+  <main class="dashboard" id="dashboard" hidden>
+    <!-- Senaryo filtreleri: tek satır, panonun üstünde -->
+    <section class="scenario-bar" aria-label="Senaryo">
+      <div class="scenario-group">
+        <span class="scenario-label">Faktör esası</span>
+        <div class="segmented" id="scenario-set" role="radiogroup" aria-label="Faktör seti"></div>
+      </div>
+      <div class="scenario-group">
+        <span class="scenario-label">Kapsam</span>
+        <div class="segmented" id="scenario-scope" role="radiogroup" aria-label="Kapsam"></div>
+      </div>
+      <p class="scenario-note" id="scenario-note"></p>
+    </section>
+
+    <!-- KPI kartları -->
+    <section class="kpi-row" id="kpi-row" aria-label="Özet göstergeler"></section>
+
+    <div class="notice-slot" id="notice-slot"></div>
+
+    <!-- Harita + karşılaştırma grafiği -->
+    <section class="panel-grid">
+      <div class="card map-card">
+        <div class="card-head">
+          <h2 class="card-title">Rota</h2>
+          <div class="legend-inline" id="map-legend"></div>
+        </div>
+        <div id="map" aria-label="Rota haritası"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Alternatif karşılaştırması</h2>
+          <span class="card-note">moda göre kg CO2</span>
+        </div>
+        <div id="comparison-chart"></div>
+      </div>
+    </section>
+
+    <!-- Faktör esası duyarlılığı -->
+    <section class="card">
+      <div class="card-head">
+        <h2 class="card-title">Faktör esası duyarlılığı</h2>
+        <span class="card-note">seçilen rota, her esas altında</span>
+      </div>
+      <div id="sensitivity"></div>
+    </section>
+
+    <!-- Bacak dökümü -->
+    <section class="card">
+      <div class="card-head">
+        <h2 class="card-title">Bacak dökümü</h2>
+        <span class="card-note" id="leg-route-name"></span>
+      </div>
+      <div id="leg-detail"></div>
+      <p class="provenance" id="provenance"></p>
+    </section>
+  </main>
+
+  <main class="dashboard empty-state" id="empty-state">
+    <div class="card empty">
+      <h2>Sevkiyat girin</h2>
+      <p>Soldaki formu doldurup <strong>Rotala ve hesapla</strong>ya basın. Rotalama bir kez
+        çalışır; faktör esasını ve kapsamı sonrasında anında değiştirebilirsiniz.</p>
     </div>
-  </section>
-</main>
+  </main>
+</div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="/static/app.js"></script>

@@ -198,3 +198,71 @@ def test_the_sample_shipment_file_is_served_and_parses(client):
 
     assert response.status_code == 200
     assert _upload(client, content=response.text).status_code == 200
+
+
+SCENARIOS = [
+    {"factor_set": "reference", "scope": "TTW"},
+    {"factor_set": "glec", "scope": "TTW"},
+    {"factor_set": "glec", "scope": "WTW"},
+    {"factor_set": "glec_accompanied", "scope": "WTW"},
+    {"factor_set": "reference", "scope": "WTW"},
+]
+
+
+def test_scenarios_price_the_same_routes_without_rerouting(client, monkeypatch):
+    """Routing costs seconds and seven OSRM calls; every extra pricing must be free."""
+    calls = {"n": 0}
+    original = route_module.road_route
+
+    def counting(origin, destination):
+        calls["n"] += 1
+        return original(origin, destination)
+
+    monkeypatch.setattr(route_module, "road_route", counting)
+    payload = _post(client, scenarios=SCENARIOS).json()
+    with_scenarios = calls["n"]
+
+    calls["n"] = 0
+    _post(client)
+    assert with_scenarios == calls["n"]
+    assert len(payload["scenarios"]) == len(SCENARIOS)
+
+
+def test_each_scenario_reports_its_own_totals_and_sources(client):
+    scenarios = {
+        f"{s['factor_set']}|{s['scope']}": s for s in _post(client, scenarios=SCENARIOS).json()["scenarios"]
+    }
+
+    reference = scenarios["reference|TTW"]
+    glec = scenarios["glec|TTW"]
+    assert all("GLEC" in source for source in glec["sources"])
+    assert not any("GLEC" in source for source in reference["sources"])
+
+    # Same route, different basis: the ro-ro factor is what moves the answer.
+    label = next(t["label"] for t in glec["totals"] if not t["is_all_road"])
+    priced = {k: next(t["total_co2_kg"] for t in v["totals"] if t["label"] == label)
+              for k, v in scenarios.items() if v["totals"]}
+    assert priced["glec|TTW"] > priced["reference|TTW"] * 2
+    assert priced["glec_accompanied|WTW"] > priced["glec|WTW"]
+
+
+def test_an_unpriceable_scenario_carries_its_error_instead_of_vanishing(client):
+    """The dashboard offers it as a choice, so it has to be able to say why it is empty."""
+    scenarios = _post(client, scenarios=SCENARIOS).json()["scenarios"]
+    broken = next(s for s in scenarios if s["factor_set"] == "reference" and s["scope"] == "WTW")
+
+    assert broken["totals"] == []
+    assert "no WTW factor" in broken["error"]
+    assert broken["is_verified"] is False
+
+
+def test_scenario_totals_omit_geometry_that_alternatives_already_carry(client):
+    payload = _post(client, scenarios=SCENARIOS).json()
+    totals = [t for s in payload["scenarios"] for t in s["totals"]]
+
+    assert totals
+    assert all("geometry" not in total for total in totals)
+
+
+def test_a_request_without_scenarios_still_answers(client):
+    assert _post(client).json()["scenarios"] == []

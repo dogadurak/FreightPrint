@@ -45,9 +45,25 @@ cd backend
 python -m uvicorn app.main:app --reload
 ```
 
-Tarayıcıda `http://127.0.0.1:8000`. Form kalkış/varış koordinatı, tonaj, faktör seti ve
-kapsam alır; sonuç panelinde alternatifler **emisyona göre sıralı** listelenir, harita
-seçilen rotayı çizer. API dokümantasyonu `/docs` altında.
+Tarayıcıda `http://127.0.0.1:8000`. API dokümantasyonu `/docs` altında.
+
+Pano dört bölümden oluşur:
+
+| Bölüm | Ne gösterir |
+|---|---|
+| **Senaryo çubuğu** | Faktör esası (refakatsiz / refakatli / filo ort. / müşteri raporu) ve kapsam (TTW/WTW). Değiştirmek **anında** — yeniden rotalama yok |
+| **KPI kartları** | Seçilen rotanın emisyonu · tam karayoluna işaretli fark · Monte Carlo belirsizlik aralığı · ro-ro esasına duyarlılık |
+| **Harita + karşılaştırma** | Rota çizimi ve alternatiflerin moda göre yığılı emisyon çubukları |
+| **Duyarlılık paneli** | Aynı rota, her faktör esası altında — noktalar tam karayolu çizgisini geçtiğinde karar değişir |
+
+Rotalama pahalı (~6 sn, yedi OSRM çağrısı), fiyatlama bedava. Bu yüzden panonun sunduğu
+her senaryo **tek istekte** hesaplanır; sonrasında geçiş yapmak sunucuya hiç gitmez.
+
+**Manşet KPI neden "tasarruf" değil?** Bu koridorda doğru GLEC ro-ro faktörleriyle tasarruf
+negatif çıkıyor (aşağıdaki bulgu). Manşeti "tasarruf" diye kurmak ya negatif sayıyı yanlış
+çerçevede gösterir ya da kullanıcıyı yaltaklanan faktörlere iter. Onun yerine manşet
+**emisyon + işaretli fark**, dördüncü kart ise bu ürünün asıl bildiği şey: cevabın
+muhasebe esasına ne kadar bağlı olduğu.
 
 | Uç | İşlev |
 |---|---|
