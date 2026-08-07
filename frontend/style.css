@@ -98,7 +98,7 @@ input, select {
 }
 input[type="file"] { padding: 0.3rem; font-size: 0.82rem; }
 input:focus-visible, select:focus-visible, button:focus-visible,
-.seg-btn:focus-visible, .alt-row:focus-visible {
+.seg-btn:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 .hint { margin: 0.35rem 0 0.6rem; font-size: 0.8rem; color: var(--ink-muted); }
@@ -168,8 +168,6 @@ button.ghost:hover { background: var(--surface-sunken); }
 .kpi-sub { margin: 0.3rem 0 0; font-size: 0.79rem; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .kpi.good .kpi-value { color: var(--good); }
 .kpi.bad .kpi-value { color: var(--bad); }
-.kpi-band { margin-top: 0.5rem; height: 5px; border-radius: 3px; background: var(--surface-sunken); position: relative; }
-.kpi-band i { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: 3px; }
 
 /* ── charts ──────────────────────────────────────────────────────────── */
 .bars { display: grid; gap: 0.7rem; }

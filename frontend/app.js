@@ -38,6 +38,32 @@ let picking = null;
 const keyOf = (s) => `${s.factor_set}|${s.scope}`;
 const currentScenario = () => payload?.scenarios.find((s) => keyOf(s) === scenarioKey) ?? null;
 
+/**
+ * Re-price an alternative's legs under a scenario.
+ *
+ * `alternatives` carries geometry and legs priced under the primary scenario only, so a
+ * switched scenario has to redistribute. Scaling every leg by the change in the total is
+ * wrong — switching the ro-ro basis moves the sea factor and leaves road and rail alone,
+ * yet uniform scaling inflates all three. Within one mode every leg shares a factor, so
+ * splitting that mode's scenario total by distance is exact, and the factor it implies
+ * can be recovered the same way.
+ */
+function legsUnder(scenario, alternative, total) {
+  const kmByMode = {};
+  alternative.legs.forEach((leg) => {
+    kmByMode[leg.mode] = (kmByMode[leg.mode] ?? 0) + leg.distance_km;
+  });
+  return alternative.legs.map((leg) => {
+    const modeCo2 = total.co2_by_mode[leg.mode] ?? 0;
+    const modeKm = kmByMode[leg.mode] || 1;
+    return {
+      ...leg,
+      co2_kg: modeCo2 * (leg.distance_km / modeKm),
+      factor_value: payload.tonnage ? modeCo2 / (modeKm * payload.tonnage) : leg.factor_value,
+    };
+  });
+}
+
 function parsePoint(value) {
   const [lon, lat] = value.split(",").map((part) => Number(part.trim()));
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
@@ -181,13 +207,14 @@ function terminalCoordinate(name) {
 }
 
 /** Draw one alternative. Legs without geometry are dashed: schematic, not surveyed. */
-function drawAlternative(alternative, totals) {
+function drawAlternative(alternative, scenario, total) {
   if (!map || !alternative) return;
   clearRoute();
   const bounds = new maplibregl.LngLatBounds();
-  const co2ByLeg = alternative.legs.map((leg) => leg.co2_kg);
+  // Popups quote the scenario on screen, not the one the geometry was priced under.
+  const priced = legsUnder(scenario, alternative, total);
 
-  alternative.legs.forEach((leg, index) => {
+  priced.forEach((leg, index) => {
     let coordinates = leg.geometry;
     const schematic = !coordinates.length;
     if (schematic) {
@@ -210,7 +237,7 @@ function drawAlternative(alternative, totals) {
           label: `${leg.from_name} → ${leg.to_name}`,
           mode: MODE_LABELS[leg.mode] ?? leg.mode,
           km: nf.format(leg.distance_km),
-          co2: nf.format(co2ByLeg[index]),
+          co2: nf.format(leg.co2_kg),
           factor: `${nf3.format(leg.factor_value)} kg CO2/ton-km`,
           schematic: schematic ? "1" : "",
         },
@@ -308,12 +335,8 @@ function selectScenario(factorSet, scope) {
 
 /* ── dashboard ───────────────────────────────────────────────────────── */
 
-function totalsFor(scenario) {
-  return scenario.totals;
-}
-
 function renderKpis(scenario) {
-  const totals = totalsFor(scenario);
+  const totals = scenario.totals;
   const chosen = totals[selectedIndex] ?? totals[0];
   const baseline = totals.find((t) => t.is_all_road);
   const delta = chosen.saving_co2_kg;
@@ -331,8 +354,11 @@ function renderKpis(scenario) {
   const ratio = acrossBases.length > 1 && low ? high / low : null;
 
   const range = chosen.emission_range;
-  const bandFill = range && range.high_co2_kg > range.low_co2_kg
-    ? `<div class="kpi-band"><i style="left:0;right:0"></i></div>` : "";
+  // How wide the band is relative to the estimate. A bar that always filled its track
+  // looked like a measure while carrying nothing.
+  const bandWidth = range && chosen.total_co2_kg
+    ? ((range.high_co2_kg - range.low_co2_kg) / 2 / chosen.total_co2_kg) * 100
+    : null;
 
   const tiles = [
     `<article class="kpi">
@@ -355,15 +381,16 @@ function renderKpis(scenario) {
       <p class="kpi-label">Belirsizlik aralığı</p>
       <p class="kpi-value">${range ? nf.format(range.low_co2_kg) : "—"}<span class="unit">–
         ${range ? nf.format(range.high_co2_kg) : ""} kg</span></p>
-      <p class="kpi-sub">${range ? `%${Math.round(range.confidence * 100)} güven · Monte Carlo` : "hesaplanamadı"}</p>
-      ${bandFill}
+      <p class="kpi-sub">${
+        range ? `±%${bandWidth.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} · %${
+          Math.round(range.confidence * 100)} güven · Monte Carlo` : "hesaplanamadı"}</p>
     </article>`,
 
     `<article class="kpi">
       <p class="kpi-label">Ro-ro esasına duyarlılık</p>
       <p class="kpi-value">${
         ratio === null ? "—"
-        : `×${ratio.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`}</p>
+        : `×${ratio.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}</p>
       <p class="kpi-sub">${
         ratio === null ? "tek esas"
         : `${nf.format(low)}–${nf.format(high)} kg · ${acrossBases.length} GLEC esası`}</p>
@@ -373,7 +400,7 @@ function renderKpis(scenario) {
 }
 
 function renderComparison(scenario) {
-  const totals = totalsFor(scenario);
+  const totals = scenario.totals;
   const max = Math.max(...totals.map((t) => t.total_co2_kg), 1);
 
   const rows = totals.map((total, index) => {
@@ -408,7 +435,7 @@ function renderComparison(scenario) {
 }
 
 function renderSensitivity(scenario) {
-  const chosen = totalsFor(scenario)[selectedIndex] ?? totalsFor(scenario)[0];
+  const chosen = scenario.totals[selectedIndex] ?? scenario.totals[0];
   const rows = payload.scenarios
     .filter((s) => !s.error && s.totals.some((t) => t.label === chosen.label))
     .map((s) => ({
@@ -448,22 +475,19 @@ function renderSensitivity(scenario) {
 }
 
 function renderLegDetail(scenario) {
-  const totals = totalsFor(scenario);
+  const totals = scenario.totals;
   const chosen = totals[selectedIndex] ?? totals[0];
   const alternative = payload.alternatives.find((a) => a.label === chosen.label);
   $("leg-route-name").textContent = chosen.label;
 
   if (!alternative) { $("leg-detail").innerHTML = ""; return; }
-  // Leg geometry is priced under the primary scenario; scale each leg's share so the
-  // detail always adds up to the total shown above it.
-  const ratio = alternative.total_co2_kg ? chosen.total_co2_kg / alternative.total_co2_kg : 1;
 
   $("leg-detail").innerHTML = `<table>
     <thead><tr><th>Bacak</th><th>km</th><th>kg CO2</th><th>faktör</th></tr></thead>
-    <tbody>${alternative.legs.map((leg) => `<tr>
+    <tbody>${legsUnder(scenario, alternative, chosen).map((leg) => `<tr>
       <td><span class="leg-mark ${leg.mode}"></span>${leg.from_name} → ${leg.to_name}</td>
       <td class="num">${nf.format(leg.distance_km)}</td>
-      <td class="num">${nf.format(leg.co2_kg * ratio)}</td>
+      <td class="num">${nf.format(leg.co2_kg)}</td>
       <td class="num">${nf3.format(leg.factor_value)}</td>
     </tr>`).join("")}</tbody>
     <tfoot><tr>
@@ -493,7 +517,7 @@ function renderNotices(scenario) {
 function renderDashboard() {
   const scenario = currentScenario();
   if (!scenario) return;
-  const totals = totalsFor(scenario);
+  const totals = scenario.totals;
   if (selectedIndex >= totals.length) selectedIndex = 0;
 
   renderScenarioBar();
@@ -507,8 +531,8 @@ function renderDashboard() {
     .map((m) => `<span class="key"><span class="swatch ${m}"></span>${MODE_LABELS[m]}</span>`)
     .join("") + '<span class="key"><span class="dashed-key"></span>şematik</span>';
 
-  const alternative = payload.alternatives.find((a) => a.label === totals[selectedIndex].label);
-  drawAlternative(alternative, totals);
+  const chosen = totals[selectedIndex];
+  drawAlternative(payload.alternatives.find((a) => a.label === chosen.label), scenario, chosen);
 }
 
 /* ── requests ────────────────────────────────────────────────────────── */
