@@ -1,5 +1,9 @@
-const MODE_COLOURS = { road: "#d97706", sea: "#0e7490", rail: "#15803d" };
+// Slots 1-3 of the dataviz reference palette, checked against a white surface with
+// the skill's validator: lightness band, chroma floor, CVD separation and the
+// normal-vision floor all pass on both the adjacent and the all-pairs list.
+const MODE_COLOURS = { road: "#eb6834", sea: "#2a78d6", rail: "#1baf7a" };
 const MODE_LABELS = { road: "karayolu", sea: "deniz", rail: "demiryolu" };
+const MODE_ORDER = ["road", "sea", "rail"];
 
 const form = document.getElementById("shipment-form");
 const results = document.getElementById("results");
@@ -8,12 +12,21 @@ const submitButton = document.getElementById("submit");
 const factorSelect = document.getElementById("factor-set");
 const scopeSelect = document.getElementById("scope");
 const factorHint = document.getElementById("factor-hint");
+const originInput = document.getElementById("origin");
+const destinationInput = document.getElementById("destination");
+const pickOrigin = document.getElementById("pick-origin");
+const pickDestination = document.getElementById("pick-destination");
+const mapElement = document.getElementById("map");
 
 let factorSets = [];
 let map;
 let drawnLayers = [];
+let endpointMarkers = {};
+let picking = null;
+let latest = null;
 
 const nf = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
 
 function parsePoint(value) {
   const [lon, lat] = value.split(",").map((part) => Number(part.trim()));
@@ -22,18 +35,24 @@ function parsePoint(value) {
   return { lon, lat };
 }
 
+const formatPoint = (lngLat) => `${lngLat.lng.toFixed(4)}, ${lngLat.lat.toFixed(4)}`;
+
+/* ── map ─────────────────────────────────────────────────────────────────── */
+
 /** The map is a nice-to-have. Losing it must not take the calculator down with it. */
 function initMap() {
   if (typeof maplibregl === "undefined") {
-    document.getElementById("map").innerHTML =
+    mapElement.innerHTML =
       '<p class="map-unavailable">Harita kütüphanesi yüklenemedi (çevrimdışı olabilirsiniz). '
-      + "Hesaplama ve sonuç tablosu çalışmaya devam eder.</p>";
+      + "Hesaplama, sonuç tablosu ve rapor indirme çalışmaya devam eder.</p>";
     return;
   }
   map = new maplibregl.Map({
     container: "map",
     style: {
       version: 8,
+      // Symbol layers need a glyph source; without it the terminal labels never render.
+      glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
       sources: {
         osm: {
           type: "raster",
@@ -47,8 +66,55 @@ function initMap() {
     center: [18, 45],
     zoom: 3.6,
   });
-  map.addControl(new maplibregl.NavigationControl(), "top-right");
-  map.on("load", loadTerminals);
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+  map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
+  map.on("load", () => {
+    loadTerminals();
+    placeEndpointMarkers();
+  });
+  map.on("click", onMapClick);
+}
+
+function endpointMarker(kind, lngLat) {
+  const element = document.createElement("div");
+  element.style.cssText =
+    "width:15px;height:15px;border-radius:50%;box-shadow:0 0 0 2px #fff,0 1px 3px rgba(0,0,0,.4);"
+    + `background:${kind === "origin" ? "#14181d" : "#b3261e"}`;
+  const marker = new maplibregl.Marker({ element, draggable: true })
+    .setLngLat(lngLat)
+    .setPopup(new maplibregl.Popup({ offset: 14, closeButton: false })
+      .setText(kind === "origin" ? "Kalkış — sürükleyebilirsiniz" : "Varış — sürükleyebilirsiniz"))
+    .addTo(map);
+  marker.on("dragend", () => {
+    const input = kind === "origin" ? originInput : destinationInput;
+    input.value = formatPoint(marker.getLngLat());
+  });
+  return marker;
+}
+
+function placeEndpointMarkers() {
+  if (!map) return;
+  for (const [kind, input] of [["origin", originInput], ["destination", destinationInput]]) {
+    const point = parsePoint(input.value);
+    if (!point) continue;
+    if (endpointMarkers[kind]) endpointMarkers[kind].setLngLat([point.lon, point.lat]);
+    else endpointMarkers[kind] = endpointMarker(kind, [point.lon, point.lat]);
+  }
+}
+
+function setPicking(kind) {
+  picking = picking === kind ? null : kind;
+  pickOrigin.setAttribute("aria-pressed", String(picking === "origin"));
+  pickDestination.setAttribute("aria-pressed", String(picking === "destination"));
+  mapElement.classList.toggle("picking", picking !== null);
+}
+
+function onMapClick(event) {
+  if (!picking) return;
+  const input = picking === "origin" ? originInput : destinationInput;
+  input.value = formatPoint(event.lngLat);
+  placeEndpointMarkers();
+  setPicking(null);
 }
 
 async function loadTerminals() {
@@ -62,27 +128,50 @@ async function loadTerminals() {
         .map((t) => ({
           type: "Feature",
           geometry: { type: "Point", coordinates: [t.lon, t.lat] },
-          properties: { name: t.name, type: t.type },
+          properties: { name: t.name, type: t.type, country: t.country },
         })),
     },
   });
+  // A 2px surface ring keeps the dot legible where a route line crosses it.
   map.addLayer({
     id: "terminals",
     type: "circle",
     source: "terminals",
     paint: {
-      "circle-radius": 4,
+      "circle-radius": 4.5,
       "circle-color": "#ffffff",
-      "circle-stroke-color": "#5b6470",
-      "circle-stroke-width": 1.5,
+      "circle-stroke-color": "#454d59",
+      "circle-stroke-width": 2,
     },
   });
-  map.on("click", "terminals", (event) => {
-    const { name, type } = event.features[0].properties;
-    new maplibregl.Popup()
-      .setLngLat(event.lngLat)
-      .setText(`${name} (${type})`)
+  map.addLayer({
+    id: "terminal-labels",
+    type: "symbol",
+    source: "terminals",
+    minzoom: 4.6,
+    layout: {
+      "text-field": ["get", "name"],
+      "text-size": 11,
+      "text-offset": [0, 1.1],
+      "text-anchor": "top",
+      // The glyph server above serves Noto, not Open Sans; asking for the wrong
+      // fontstack 404s and the labels silently never appear.
+      "text-font": ["Noto Sans Regular"],
+    },
+    paint: { "text-color": "#454d59", "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
+  });
+
+  const hover = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
+  map.on("mouseenter", "terminals", (event) => {
+    map.getCanvas().style.cursor = "pointer";
+    const { name, type, country } = event.features[0].properties;
+    hover.setLngLat(event.features[0].geometry.coordinates)
+      .setHTML(`<strong>${name}</strong>${type} · ${country}`)
       .addTo(map);
+  });
+  map.on("mouseleave", "terminals", () => {
+    map.getCanvas().style.cursor = picking ? "crosshair" : "";
+    hover.remove();
   });
 }
 
@@ -90,6 +179,7 @@ function clearRoute() {
   if (!map) return;
   drawnLayers.forEach((id) => {
     if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getLayer(`${id}-hit`)) map.removeLayer(`${id}-hit`);
     if (map.getSource(id)) map.removeSource(id);
   });
   drawnLayers = [];
@@ -110,9 +200,10 @@ function drawAlternative(alternative) {
 
   alternative.legs.forEach((leg, index) => {
     let coordinates = leg.geometry;
-    if (!coordinates.length) {
-      // A ferry inside a road leg has no endpoints of its own; the road leg it belongs
-      // to is already drawn, so there is nothing separate to show.
+    const schematic = !coordinates.length;
+    if (schematic) {
+      // A ferry inside a road leg has no endpoints of its own; the road leg it
+      // belongs to is already drawn, so there is nothing separate to show.
       const from = terminalCoordinate(leg.from_name);
       const to = terminalCoordinate(leg.to_name);
       if (!from || !to) return;
@@ -123,22 +214,84 @@ function drawAlternative(alternative) {
     const id = `leg-${index}`;
     map.addSource(id, {
       type: "geojson",
-      data: { type: "Feature", geometry: { type: "LineString", coordinates } },
+      data: {
+        type: "Feature",
+        geometry: { type: "LineString", coordinates },
+        properties: {
+          label: `${leg.from_name} → ${leg.to_name}`,
+          mode: MODE_LABELS[leg.mode] ?? leg.mode,
+          km: nf.format(leg.distance_km),
+          co2: nf.format(leg.co2_kg),
+          factor: `${nf1.format(leg.factor_value)} kg CO2/ton-km`,
+          schematic: schematic ? "1" : "",
+        },
+      },
     });
     map.addLayer({
       id,
       type: "line",
       source: id,
+      layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": MODE_COLOURS[leg.mode] ?? "#666",
-        "line-width": 3.5,
-        "line-dasharray": leg.geometry.length ? [1] : [2, 1.6],
+        "line-color": MODE_COLOURS[leg.mode] ?? "#6b7480",
+        "line-width": 3,
+        "line-dasharray": schematic ? [2, 1.6] : [1],
       },
+    });
+    // An invisible fat line under the thin one: the hit target is bigger than the mark.
+    map.addLayer({
+      id: `${id}-hit`,
+      type: "line",
+      source: id,
+      paint: { "line-color": "#000", "line-opacity": 0, "line-width": 18 },
     });
     drawnLayers.push(id);
   });
 
-  if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 50, duration: 600 });
+  attachLegHover();
+  if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, duration: 600 });
+}
+
+function attachLegHover() {
+  const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+  drawnLayers.forEach((id) => {
+    const hit = `${id}-hit`;
+    map.on("mousemove", hit, (event) => {
+      map.getCanvas().style.cursor = "pointer";
+      const p = event.features[0].properties;
+      popup
+        .setLngLat(event.lngLat)
+        .setHTML(
+          `<strong>${p.label}</strong>${p.mode} · ${p.km} km · ${p.co2} kg CO2<br>`
+          + `<span style="color:#6b7480">faktör ${p.factor}`
+          + `${p.schematic ? " · şematik çizim" : ""}</span>`,
+        )
+        .addTo(map);
+    });
+    map.on("mouseleave", hit, () => {
+      map.getCanvas().style.cursor = picking ? "crosshair" : "";
+      popup.remove();
+    });
+  });
+}
+
+/* ── results ─────────────────────────────────────────────────────────────── */
+
+function modeBar(alternative) {
+  const total = MODE_ORDER.reduce((sum, m) => sum + (alternative.co2_by_mode[m] ?? 0), 0);
+  if (!total) return "";
+  const segments = MODE_ORDER.filter((m) => alternative.co2_by_mode[m])
+    .map((m) => {
+      const share = (alternative.co2_by_mode[m] / total) * 100;
+      return `<span class="${m}" style="flex:0 0 ${share.toFixed(2)}%"
+                title="${MODE_LABELS[m]}: ${nf.format(alternative.co2_by_mode[m])} kg CO2"></span>`;
+    })
+    .join("");
+  return `<div class="mode-bar" role="img"
+            aria-label="Moda göre CO2 dağılımı: ${MODE_ORDER
+              .filter((m) => alternative.co2_by_mode[m])
+              .map((m) => `${MODE_LABELS[m]} ${nf.format(alternative.co2_by_mode[m])} kg`)
+              .join(", ")}">${segments}</div>`;
 }
 
 function verdict(alternative) {
@@ -157,7 +310,7 @@ function renderAlternative(alternative, index) {
   const legRows = alternative.legs
     .map(
       (leg) => `<tr>
-        <td><span class="mode-tag mode-${leg.mode}"></span>${leg.from_name} → ${leg.to_name}</td>
+        <td><span class="leg-mark ${leg.mode}"></span>${leg.from_name} → ${leg.to_name}</td>
         <td class="num">${nf.format(leg.distance_km)}</td>
         <td class="num">${nf.format(leg.co2_kg)}</td>
       </tr>`,
@@ -173,12 +326,19 @@ function renderAlternative(alternative, index) {
 
   return `<article class="alternative${index === 0 ? " selected" : ""}" data-index="${index}"
             tabindex="0" role="button" aria-label="${alternative.label} rotasını haritada göster">
-      <header>
+      <div class="alt-head">
         <h3>${alternative.label}</h3>
         ${alternative.is_all_road ? '<span class="baseline-tag">karşılaştırma temeli</span>' : ""}
-      </header>
-      <p class="hint">${nf.format(alternative.total_distance_km)} km ·
-         <span class="total">${nf.format(alternative.total_co2_kg)} kg CO2</span></p>
+      </div>
+      <p class="headline">
+        <span class="value">${nf.format(alternative.total_co2_kg)}</span>
+        <span class="unit">kg CO2</span>
+      </p>
+      ${modeBar(alternative)}
+      <p class="sub">${nf.format(alternative.total_distance_km)} km ·
+        ${MODE_ORDER.filter((m) => alternative.distance_by_mode[m])
+          .map((m) => `${MODE_LABELS[m]} ${nf.format(alternative.distance_by_mode[m])} km`)
+          .join(" · ")}</p>
       <table>
         <thead><tr><th>Bacak</th><th>km</th><th>kg CO2</th></tr></thead>
         <tbody>${legRows}</tbody>
@@ -189,6 +349,7 @@ function renderAlternative(alternative, index) {
 }
 
 function render(data) {
+  latest = data;
   const warnings = data.warnings.length
     ? `<div class="notice"><strong>Uyarılar</strong><ul>${data.warnings
         .map((w) => `<li>${w}</li>`)
@@ -197,15 +358,17 @@ function render(data) {
 
   results.innerHTML = `
     <div class="legend">
-      <span><span class="mode-tag mode-road"></span>karayolu</span>
-      <span><span class="mode-tag mode-sea"></span>deniz</span>
-      <span><span class="mode-tag mode-rail"></span>demiryolu</span>
-      <span>kesikli çizgi = şematik (gerçek güzergâh değil)</span>
+      ${MODE_ORDER.map(
+        (m) => `<span class="key"><span class="swatch ${m}"></span>${MODE_LABELS[m]}</span>`,
+      ).join("")}
+      <span class="sep"></span>
+      <span class="key"><span class="dashed-key"></span>şematik çizim</span>
     </div>
     ${warnings}
     ${data.alternatives.map(renderAlternative).join("")}
-    <div class="legend">Faktör seti: <strong>${data.factor_set}</strong> ·
-      kapsam <strong>${data.scope}</strong> · ${data.sources.join("; ") || "doğrulanmamış"}</div>`;
+    <p class="provenance">Faktör seti <strong>${data.factor_set}</strong> ·
+      kapsam <strong>${data.scope}</strong> ·
+      ${data.sources.join("; ") || "doğrulanmamış"}</p>`;
 
   results.querySelectorAll(".alternative").forEach((element) => {
     const select = () => {
@@ -224,6 +387,8 @@ function render(data) {
 
   if (data.alternatives.length) drawAlternative(data.alternatives[0]);
 }
+
+/* ── factor sets ─────────────────────────────────────────────────────────── */
 
 function updateScopes() {
   const chosen = factorSets.find((set) => set.name === factorSelect.value);
@@ -249,6 +414,13 @@ async function loadFactorSets() {
   updateScopes();
 }
 
+/* ── wiring ──────────────────────────────────────────────────────────────── */
+
+pickOrigin.addEventListener("click", () => setPicking("origin"));
+pickDestination.addEventListener("click", () => setPicking("destination"));
+[originInput, destinationInput].forEach((input) =>
+  input.addEventListener("change", placeEndpointMarkers),
+);
 factorSelect.addEventListener("change", updateScopes);
 scopeSelect.addEventListener("change", updateScopes);
 
@@ -301,9 +473,6 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-initMap();
-loadFactorSets();
-
 const reportForm = document.getElementById("report-form");
 const reportStatus = document.getElementById("report-status");
 const reportSubmit = document.getElementById("report-submit");
@@ -343,3 +512,6 @@ reportForm.addEventListener("submit", async (event) => {
     reportSubmit.disabled = false;
   }
 });
+
+initMap();
+loadFactorSets();

@@ -8,90 +8,105 @@
 <link href="/static/style.css" rel="stylesheet">
 </head>
 <body>
-<header>
+<header class="site-header">
   <h1>FreightPrint</h1>
   <p>Çok modlu yük taşımacılığı karbon ve rota motoru</p>
 </header>
 
 <main>
-  <section class="panel" aria-label="Sevkiyat bilgileri">
-    <form id="shipment-form">
-      <fieldset>
-        <legend>Sevkiyat</legend>
-        <label>Kalkış <small>lon, lat</small>
-          <input name="origin" value="29.4306, 40.7889" required>
-        </label>
-        <label>Kalkış adı
-          <input name="origin_name" value="Gebze">
-        </label>
-        <label>Varış <small>lon, lat</small>
-          <input name="destination" value="6.7735, 51.2277" required>
-        </label>
-        <label>Varış adı
-          <input name="destination_name" value="Düsseldorf">
-        </label>
-        <label>Tonaj
-          <input name="tonnage" type="number" value="24" min="0.1" step="0.1" required>
-        </label>
-      </fieldset>
+  <div>
+    <section class="panel">
+      <form id="shipment-form">
+        <fieldset>
+          <legend>Sevkiyat</legend>
+          <p class="hint">Haritaya tıklayarak da seçebilirsiniz. İşaretleri sürükleyin.</p>
+          <div class="pick-row">
+            <button type="button" class="secondary" id="pick-origin" aria-pressed="false">
+              Kalkışı haritadan seç
+            </button>
+            <button type="button" class="secondary" id="pick-destination" aria-pressed="false">
+              Varışı haritadan seç
+            </button>
+          </div>
+          <label>Kalkış <small>boylam, enlem</small>
+            <input name="origin" id="origin" value="29.4306, 40.7889" required>
+          </label>
+          <label>Kalkış adı
+            <input name="origin_name" value="Gebze">
+          </label>
+          <label>Varış <small>boylam, enlem</small>
+            <input name="destination" id="destination" value="6.7735, 51.2277" required>
+          </label>
+          <label>Varış adı
+            <input name="destination_name" value="Düsseldorf">
+          </label>
+          <label>Tonaj
+            <input name="tonnage" type="number" value="24" min="0.1" step="0.1" required>
+          </label>
+        </fieldset>
 
-      <fieldset>
-        <legend>Emisyon faktörü</legend>
-        <label>Faktör seti
-          <select name="factor_set" id="factor-set"></select>
-        </label>
-        <p class="hint" id="factor-hint"></p>
-        <label>Kapsam
-          <select name="scope" id="scope"></select>
-        </label>
-        <p class="hint">
-          TTW yalnızca araçtan çıkanı, WTW yakıtın üretimini de sayar.
-          ISO 14083 ve GLEC WTW ister.
-        </p>
-      </fieldset>
+        <fieldset>
+          <legend>Emisyon faktörü</legend>
+          <label>Faktör seti
+            <select name="factor_set" id="factor-set"></select>
+          </label>
+          <p class="hint" id="factor-hint"></p>
+          <label>Kapsam
+            <select name="scope" id="scope"></select>
+          </label>
+          <p class="hint">
+            TTW yalnızca araçtan çıkanı, WTW yakıtın üretimini de sayar.
+            ISO 14083 ve GLEC WTW ister.
+          </p>
+        </fieldset>
 
-      <fieldset>
-        <legend>İşletme varsayımları</legend>
-        <label>Doluluk oranı
-          <input name="load_factor" type="number" min="0.05" max="1" step="0.01"
-                 placeholder="faktörün yayın bazı">
-        </label>
-        <label>Boş dönüş payı
-          <input name="empty_return_share" type="number" min="0" max="1" step="0.01"
-                 placeholder="faktörün yayın bazı">
-        </label>
-        <p class="hint">
-          Boş bırakılırsa her faktör kendi yayınlanmış varsayımını kullanır —
-          kaynağının önerdiği budur.
-        </p>
-      </fieldset>
+        <fieldset>
+          <legend>İşletme varsayımları</legend>
+          <label>Doluluk oranı
+            <input name="load_factor" type="number" min="0.05" max="1" step="0.01"
+                   placeholder="faktörün yayın bazı">
+          </label>
+          <label>Boş dönüş payı
+            <input name="empty_return_share" type="number" min="0" max="1" step="0.01"
+                   placeholder="faktörün yayın bazı">
+          </label>
+          <p class="hint">
+            Boş bırakılırsa her faktör kendi yayınlanmış varsayımını kullanır —
+            kaynağının önerdiği budur.
+          </p>
+        </fieldset>
 
-      <button type="submit" id="submit">Hesapla</button>
-      <p class="hint" id="status" role="status"></p>
-    </form>
+        <button type="submit" id="submit">Hesapla</button>
+        <p class="hint" id="status" role="status"></p>
+      </form>
+    </section>
 
-    <form id="report-form">
-      <fieldset>
-        <legend>Toplu rapor</legend>
-        <p class="hint">
-          CSV yükleyin, aynı faktör seti ve kapsamla hesaplanmış rapor inin.
-          Zorunlu sütunlar: <code>origin_lon, origin_lat, destination_lon,
-          destination_lat</code> · isteğe bağlı: <code>reference, origin_name,
-          destination_name, tonnage</code>
-        </p>
-        <label>Sevkiyat dosyası
-          <input type="file" name="file" accept=".csv,text/csv" required>
-        </label>
-        <button type="submit" id="report-submit">Rapor indir</button>
-        <p class="hint" id="report-status" role="status"></p>
-        <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya indir</a></p>
-      </fieldset>
-    </form>
-  </section>
+    <section class="panel">
+      <form id="report-form">
+        <fieldset>
+          <legend>Toplu rapor</legend>
+          <p class="hint">
+            CSV yükleyin, yukarıdaki faktör seti ve kapsamla hesaplanmış rapor inin.
+            Zorunlu sütunlar: <code>origin_lon, origin_lat, destination_lon,
+            destination_lat</code> · isteğe bağlı: <code>reference, origin_name,
+            destination_name, tonnage</code>
+          </p>
+          <label>Sevkiyat dosyası
+            <input type="file" name="file" accept=".csv,text/csv" required>
+          </label>
+          <button type="submit" id="report-submit">Rapor indir</button>
+          <p class="hint" id="report-status" role="status"></p>
+          <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya indir</a></p>
+        </fieldset>
+      </form>
+    </section>
+  </div>
 
   <section class="map-and-results">
     <div id="map" aria-label="Rota haritası"></div>
-    <div id="results"></div>
+    <div id="results">
+      <p class="empty panel">Sevkiyat bilgilerini girip “Hesapla”ya basın.</p>
+    </div>
   </section>
 </main>
 
