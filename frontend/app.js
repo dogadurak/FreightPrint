@@ -2,6 +2,10 @@
 // skill's validator: lightness band, chroma floor, CVD separation and the normal-vision
 // floor all pass on both the adjacent and all-pairs lists.
 const MODE_COLOURS = { road: "#eb6834", sea: "#2a78d6", rail: "#1baf7a" };
+/** Read the mode colour from the stylesheet so the map follows the active theme. */
+const modeColour = (mode) =>
+  getComputedStyle(document.documentElement).getPropertyValue(`--${mode}`).trim()
+  || MODE_COLOURS[mode] || "#6e7783";
 const MODE_LABELS = { road: "karayolu", sea: "deniz", rail: "demiryolu" };
 const MODE_ORDER = ["road", "sea", "rail"];
 
@@ -103,7 +107,7 @@ function initMap() {
   });
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
   map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
-  map.on("load", () => { loadTerminals(); placeEndpointMarkers(); });
+  map.on("load", () => { loadTerminals(); placeEndpointMarkers(); paintBasemap(currentTheme()); });
   map.on("click", onMapClick);
 }
 
@@ -188,6 +192,7 @@ async function loadTerminals() {
     map.getCanvas().style.cursor = picking ? "crosshair" : "";
     hover.remove();
   });
+  paintBasemap(currentTheme());
 }
 
 function clearRoute() {
@@ -247,7 +252,7 @@ function drawAlternative(alternative, scenario, total) {
       id, type: "line", source: id,
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": MODE_COLOURS[leg.mode] ?? "#6e7783",
+        "line-color": modeColour(leg.mode),
         "line-width": 3,
         "line-dasharray": schematic ? [2, 1.6] : [1],
       },
@@ -330,20 +335,66 @@ function selectScenario(factorSet, scope) {
   const chosen = exact ?? fallback;
   if (!chosen) return;
   scenarioKey = keyOf(chosen);
-  renderDashboard();
+  applyScenario();
 }
 
 /* ── dashboard ───────────────────────────────────────────────────────── */
 
-function renderKpis(scenario) {
+const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * Count an element from its last value to a new one.
+ *
+ * Scenario switches are the product's argument: watching a figure travel from 1,260 to
+ * 6,120 as the ro-ro basis changes says more than replacing the text ever could. The
+ * element remembers its own value so the tween survives re-entry.
+ */
+function tween(element, to, format) {
+  const from = Number(element.dataset.value);
+  element.dataset.value = to;
+  if (!Number.isFinite(from) || from === to || reducedMotion()) {
+    element.textContent = format(to);
+    return;
+  }
+  const started = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - started) / 420);
+    const eased = 1 - (1 - t) ** 3;
+    element.textContent = format(from + (to - from) * eased);
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function flash(element) {
+  if (reducedMotion()) return;
+  element.classList.remove("flash");
+  void element.offsetWidth;
+  element.classList.add("flash");
+}
+
+/** Build the tiles once. Re-creating them on every switch would restart the animations. */
+function buildKpis() {
+  $("kpi-row").innerHTML = [
+    ["route", "Seçilen rota", "kg CO2"],
+    ["delta", "Tam karayoluna fark", "kg CO2"],
+    ["range", "Belirsizlik aralığı", ""],
+    ["sens", "Ro-ro esasına duyarlılık", ""],
+  ].map(([key, label, unit]) => `<article class="kpi" data-kpi="${key}">
+      <p class="kpi-label">${label}</p>
+      <p class="kpi-value"><span data-num></span>${unit ? `<span class="unit">${unit}</span>` : ""}</p>
+      <p class="kpi-sub"></p>
+    </article>`).join("");
+}
+
+function updateKpis(scenario) {
   const totals = scenario.totals;
   const chosen = totals[selectedIndex] ?? totals[0];
   const baseline = totals.find((t) => t.is_all_road);
   const delta = chosen.saving_co2_kg;
 
-  // How far the same route moves across the ro-ro accounting bases. Only the GLEC sets
-  // count: the customer's own set is a different methodology, not a basis choice, and
-  // folding it in would inflate the band into meaninglessness.
+  // Only the GLEC sets count here: the customer's own set is a different methodology,
+  // not a basis choice, and folding it in stretched the band into meaninglessness.
   const acrossBases = payload.scenarios
     .filter((s) => !s.error && s.scope === scenario.scope && s.factor_set.startsWith("glec"))
     .map((s) => s.totals.find((t) => t.label === chosen.label))
@@ -354,124 +405,146 @@ function renderKpis(scenario) {
   const ratio = acrossBases.length > 1 && low ? high / low : null;
 
   const range = chosen.emission_range;
-  // How wide the band is relative to the estimate. A bar that always filled its track
+  // The band's width relative to the estimate. A bar that always filled its track
   // looked like a measure while carrying nothing.
   const bandWidth = range && chosen.total_co2_kg
     ? ((range.high_co2_kg - range.low_co2_kg) / 2 / chosen.total_co2_kg) * 100
     : null;
 
-  const tiles = [
-    `<article class="kpi">
-      <p class="kpi-label">Seçilen rota</p>
-      <p class="kpi-value">${nf.format(chosen.total_co2_kg)}<span class="unit">kg CO2</span></p>
-      <p class="kpi-sub">${chosen.label}</p>
-    </article>`,
+  const tile = (key) => $("kpi-row").querySelector(`[data-kpi="${key}"]`);
+  const set = (key, value, format, sub, tone) => {
+    const element = tile(key);
+    tween(element.querySelector("[data-num]"), value, format);
+    element.querySelector(".kpi-sub").textContent = sub;
+    element.classList.toggle("good", tone === "good");
+    element.classList.toggle("bad", tone === "bad");
+    flash(element.querySelector(".kpi-value"));
+  };
 
-    `<article class="kpi ${delta === null ? "" : delta > 0 ? "good" : delta < 0 ? "bad" : ""}">
-      <p class="kpi-label">Tam karayoluna fark</p>
-      <p class="kpi-value">${delta === null ? "—" : signed(-delta)}<span class="unit">kg CO2</span></p>
-      <p class="kpi-sub">${
-        delta === null ? "temel yok"
-        : delta > 0 ? `%${nf.format((delta / baseline.total_co2_kg) * 100)} daha az`
-        : delta < 0 ? `%${nf.format((-delta / baseline.total_co2_kg) * 100)} daha fazla`
-        : "karşılaştırma temeli"}</p>
-    </article>`,
-
-    `<article class="kpi">
-      <p class="kpi-label">Belirsizlik aralığı</p>
-      <p class="kpi-value">${range ? nf.format(range.low_co2_kg) : "—"}<span class="unit">–
-        ${range ? nf.format(range.high_co2_kg) : ""} kg</span></p>
-      <p class="kpi-sub">${
-        range ? `±%${bandWidth.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} · %${
-          Math.round(range.confidence * 100)} güven · Monte Carlo` : "hesaplanamadı"}</p>
-    </article>`,
-
-    `<article class="kpi">
-      <p class="kpi-label">Ro-ro esasına duyarlılık</p>
-      <p class="kpi-value">${
-        ratio === null ? "—"
-        : `×${ratio.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}</p>
-      <p class="kpi-sub">${
-        ratio === null ? "tek esas"
-        : `${nf.format(low)}–${nf.format(high)} kg · ${acrossBases.length} GLEC esası`}</p>
-    </article>`,
-  ];
-  $("kpi-row").innerHTML = tiles.join("");
+  set("route", chosen.total_co2_kg, (v) => nf.format(v), chosen.label);
+  set("delta", delta === null ? 0 : -delta, (v) => signed(v),
+    delta === null ? "temel yok"
+      : delta > 0 ? `%${nf.format((delta / baseline.total_co2_kg) * 100)} daha az`
+      : delta < 0 ? `%${nf.format((-delta / baseline.total_co2_kg) * 100)} daha fazla`
+      : "karşılaştırma temeli",
+    delta === null || delta === 0 ? "" : delta > 0 ? "good" : "bad");
+  set("range", range ? range.low_co2_kg : 0,
+    (v) => (range ? `${nf.format(v)} – ${nf.format(range.high_co2_kg)} kg` : "—"),
+    range ? `±%${bandWidth.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} · %${
+      Math.round(range.confidence * 100)} güven · Monte Carlo` : "hesaplanamadı");
+  set("sens", ratio ?? 0,
+    (v) => (ratio ? `×${v.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : "—"),
+    ratio === null ? "tek esas" : `${nf.format(low)}–${nf.format(high)} kg · ${acrossBases.length} GLEC esası`);
 }
 
-function renderComparison(scenario) {
-  const totals = scenario.totals;
-  const max = Math.max(...totals.map((t) => t.total_co2_kg), 1);
-
-  const rows = totals.map((total, index) => {
-    const segments = MODE_ORDER.filter((m) => total.co2_by_mode[m])
-      .map((m) => `<span class="${m}" style="flex:0 0 ${
-        (total.co2_by_mode[m] / total.total_co2_kg) * 100
-      }%" title="${MODE_LABELS[m]}: ${nf.format(total.co2_by_mode[m])} kg"></span>`)
-      .join("");
-    const share = (total.total_co2_kg / max) * 100;
-    return `<button type="button" class="bar-row" data-index="${index}"
-        aria-current="${index === selectedIndex}"
-        aria-label="${total.label}: ${nf.format(total.total_co2_kg)} kg CO2">
-        <span class="bar-name">${total.label}${
-          total.is_all_road ? '<span class="baseline-tag">temel</span>' : ""}</span>
-        <span class="bar-track"><span class="bar-stack" style="width:${share}%">${segments}</span></span>
-        <span class="bar-value">${nf.format(total.total_co2_kg)}</span>
-      </button>`;
-  }).join("");
-
-  $("comparison-chart").innerHTML = `<div class="bars">${rows}</div>
+function buildComparison(scenario) {
+  $("comparison-chart").innerHTML = `<div class="bars">${
+    scenario.totals.map((total, index) => `<button type="button" class="bar-row" data-index="${index}">
+      <span class="bar-name">${total.label}${
+        total.is_all_road ? '<span class="baseline-tag">temel</span>' : ""}</span>
+      <span class="bar-track"><span class="bar-stack">${
+        MODE_ORDER.map((m) => `<span class="${m}" data-mode="${m}" style="flex:0 0 0%"></span>`).join("")
+      }</span></span>
+      <span class="bar-value"><span data-num></span></span>
+    </button>`).join("")}</div>
     <div class="legend-row">
       ${MODE_ORDER.map((m) =>
         `<span class="key"><span class="swatch ${m}"></span>${MODE_LABELS[m]}</span>`).join("")}
       <span class="key" style="color:var(--ink-muted)">değerler kg CO2</span>
     </div>`;
 
-  $("comparison-chart").querySelectorAll(".bar-row").forEach((element) =>
-    element.addEventListener("click", () => {
-      selectedIndex = Number(element.dataset.index);
-      renderDashboard();
-    }));
+  const rows = [...$("comparison-chart").querySelectorAll(".bar-row")];
+  rows.forEach((element, index) => {
+    element.addEventListener("click", () => { selectedIndex = index; applyScenario(); });
+    element.addEventListener("keydown", (event) => {
+      const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      rows[(index + step + rows.length) % rows.length].focus();
+    });
+  });
 }
 
-function renderSensitivity(scenario) {
+function updateComparison(scenario) {
+  const totals = scenario.totals;
+  const max = Math.max(...totals.map((t) => t.total_co2_kg), 1);
+
+  $("comparison-chart").querySelectorAll(".bar-row").forEach((element, index) => {
+    const total = totals[index];
+    if (!total) return;
+    element.setAttribute("aria-current", String(index === selectedIndex));
+    element.setAttribute("aria-label",
+      `${total.label}: ${nf.format(total.total_co2_kg)} kg CO2`);
+    element.querySelector(".bar-stack").style.width = `${(total.total_co2_kg / max) * 100}%`;
+    MODE_ORDER.forEach((mode) => {
+      const share = (total.co2_by_mode[mode] ?? 0) / total.total_co2_kg;
+      const segment = element.querySelector(`[data-mode="${mode}"]`);
+      segment.style.flexBasis = `${share * 100}%`;
+      // A zero-width segment still shows its 2px minimum and its gap, so hide it.
+      segment.style.display = share ? "" : "none";
+      segment.title = `${MODE_LABELS[mode]}: ${nf.format(total.co2_by_mode[mode] ?? 0)} kg CO2`;
+    });
+    tween(element.querySelector("[data-num]"), total.total_co2_kg, (v) => nf.format(v));
+  });
+}
+
+function buildSensitivity() {
+  const rows = payload.scenarios.filter((s) => !s.error);
+  if (rows.length < 2) { $("sensitivity").innerHTML = ""; return; }
+  $("sensitivity").innerHTML = rows.map((s) => `<div class="sens-row" data-key="${keyOf(s)}">
+      <span class="sens-name">${SET_LABELS[s.factor_set] ?? s.factor_set} · ${s.scope}</span>
+      <span class="sens-track"><span class="axis"></span>
+        <span class="baseline"></span><span class="dot"></span></span>
+      <span class="sens-value"></span>
+    </div>`).join("")
+    + `<div class="sens-scale"><span data-scale="min"></span><span data-scale="max"></span></div>
+       <div class="legend-row">
+         <span class="key"><span style="width:.6rem;height:.6rem;border-radius:50%;background:var(--good);display:inline-block"></span>karayolundan iyi</span>
+         <span class="key"><span style="width:.6rem;height:.6rem;border-radius:50%;background:var(--bad);display:inline-block"></span>karayolundan kötü</span>
+         <span class="key"><span style="width:2px;height:.8rem;background:var(--ink-muted);display:inline-block"></span>tam karayolu</span>
+       </div>`;
+}
+
+function updateSensitivity(scenario) {
+  const container = $("sensitivity");
+  if (!container.children.length) return;
   const chosen = scenario.totals[selectedIndex] ?? scenario.totals[0];
-  const rows = payload.scenarios
-    .filter((s) => !s.error && s.totals.some((t) => t.label === chosen.label))
-    .map((s) => ({
+
+  const rows = [...container.querySelectorAll(".sens-row")].map((element) => {
+    const s = payload.scenarios.find((x) => keyOf(x) === element.dataset.key);
+    return {
+      element,
       scenario: s,
       total: s.totals.find((t) => t.label === chosen.label),
       baseline: s.totals.find((t) => t.is_all_road),
-    }));
-  if (rows.length < 2) { $("sensitivity").innerHTML = ""; return; }
+    };
+  });
 
-  const values = rows.flatMap((r) => [r.total.total_co2_kg, r.baseline?.total_co2_kg]).filter(Boolean);
+  const values = rows.flatMap((r) => [r.total?.total_co2_kg, r.baseline?.total_co2_kg]).filter(Boolean);
   const min = Math.min(...values) * 0.92;
   const max = Math.max(...values) * 1.04;
   const at = (v) => ((v - min) / (max - min)) * 100;
 
-  $("sensitivity").innerHTML = rows.map((r) => {
-    const isCurrent = keyOf(r.scenario) === scenarioKey;
-    const worse = r.total.saving_co2_kg !== null && r.total.saving_co2_kg < 0;
-    return `<div class="sens-row${isCurrent ? " current" : ""}">
-      <span class="sens-name">${SET_LABELS[r.scenario.factor_set] ?? r.scenario.factor_set}
-        · ${r.scenario.scope}</span>
-      <span class="sens-track">
-        <span class="axis"></span>
-        ${r.baseline ? `<span class="baseline" style="left:${at(r.baseline.total_co2_kg)}%"
-          title="tam karayolu ${nf.format(r.baseline.total_co2_kg)} kg"></span>` : ""}
-        <span class="dot" style="left:${at(r.total.total_co2_kg)}%;background:${
-          worse ? "var(--bad)" : "var(--good)"}"></span>
-      </span>
-      <span class="sens-value">${nf.format(r.total.total_co2_kg)} kg</span>
-    </div>`;
-  }).join("")
-    + `<div class="sens-scale"><span>${nf.format(min)}</span><span>${nf.format(max)} kg CO2</span></div>
-       <div class="legend-row">
-         <span class="key"><span class="dot-key" style="width:.6rem;height:.6rem;border-radius:50%;background:var(--good);display:inline-block"></span>karayolundan iyi</span>
-         <span class="key"><span class="dot-key" style="width:.6rem;height:.6rem;border-radius:50%;background:var(--bad);display:inline-block"></span>karayolundan kötü</span>
-         <span class="key"><span style="width:2px;height:.8rem;background:var(--ink-muted);display:inline-block"></span>tam karayolu</span>
-       </div>`;
+  rows.forEach(({ element, scenario: s, total, baseline }) => {
+    element.hidden = !total;
+    if (!total) return;
+    element.classList.toggle("current", keyOf(s) === scenarioKey);
+    const worse = total.saving_co2_kg !== null && total.saving_co2_kg < 0;
+    element.querySelector(".dot").style.left = `${at(total.total_co2_kg)}%`;
+    element.querySelector(".dot").style.background = worse ? "var(--bad)" : "var(--good)";
+    element.querySelector(".dot").title =
+      `${total.label}: ${nf.format(total.total_co2_kg)} kg CO2`;
+    const line = element.querySelector(".baseline");
+    line.hidden = !baseline;
+    if (baseline) {
+      line.style.left = `${at(baseline.total_co2_kg)}%`;
+      line.title = `tam karayolu ${nf.format(baseline.total_co2_kg)} kg`;
+    }
+    element.querySelector(".sens-value").textContent = `${nf.format(total.total_co2_kg)} kg`;
+  });
+
+  container.querySelector('[data-scale="min"]').textContent = nf.format(min);
+  container.querySelector('[data-scale="max"]').textContent = `${nf.format(max)} kg CO2`;
 }
 
 function renderLegDetail(scenario) {
@@ -514,24 +587,30 @@ function renderNotices(scenario) {
     : "";
 }
 
-function renderDashboard() {
-  const scenario = currentScenario();
-  if (!scenario) return;
-  const totals = scenario.totals;
-  if (selectedIndex >= totals.length) selectedIndex = 0;
-
-  renderScenarioBar();
-  renderKpis(scenario);
-  renderNotices(scenario);
-  renderComparison(scenario);
-  renderSensitivity(scenario);
-  renderLegDetail(scenario);
-
+/** Build the parts whose shape depends on the routes, not on the scenario. */
+function buildDashboard() {
+  buildKpis();
+  buildComparison(currentScenario());
+  buildSensitivity();
   $("map-legend").innerHTML = MODE_ORDER
     .map((m) => `<span class="key"><span class="swatch ${m}"></span>${MODE_LABELS[m]}</span>`)
     .join("") + '<span class="key"><span class="dashed-key"></span>şematik</span>';
+}
 
-  const chosen = totals[selectedIndex];
+/** Update values in place so the bars and dots animate between scenarios. */
+function applyScenario() {
+  const scenario = currentScenario();
+  if (!scenario) return;
+  if (selectedIndex >= scenario.totals.length) selectedIndex = 0;
+
+  renderScenarioBar();
+  updateKpis(scenario);
+  renderNotices(scenario);
+  updateComparison(scenario);
+  updateSensitivity(scenario);
+  renderLegDetail(scenario);
+
+  const chosen = scenario.totals[selectedIndex];
   drawAlternative(payload.alternatives.find((a) => a.label === chosen.label), scenario, chosen);
 }
 
@@ -573,6 +652,7 @@ form.addEventListener("submit", async (event) => {
 
   submitButton.disabled = true;
   statusLine.textContent = "Rotalanıyor — soğuk istek birkaç saniye sürebilir…";
+  showSkeleton();
   try {
     const response = await fetch("/api/routes", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -595,7 +675,8 @@ form.addEventListener("submit", async (event) => {
       `${data.get("origin_name")} → ${data.get("destination_name")} · ${data.get("tonnage")} ton`;
     emptyState.hidden = true; dashboard.hidden = false;
     if (map) map.resize();
-    renderDashboard();
+    buildDashboard();
+    applyScenario();
   } catch (error) {
     emptyState.innerHTML = `<div class="error">Sunucuya ulaşılamadı: ${error.message}</div>`;
     emptyState.hidden = false; dashboard.hidden = true;
@@ -648,6 +729,63 @@ $("pick-origin").addEventListener("click", () => setPicking("origin"));
 $("pick-destination").addEventListener("click", () => setPicking("destination"));
 [originInput, destinationInput].forEach((input) =>
   input.addEventListener("change", placeEndpointMarkers));
+
+/* ── theme ───────────────────────────────────────────────────────────── */
+
+const themeToggle = $("theme-toggle");
+const osPrefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+function currentTheme() {
+  return document.documentElement.dataset.theme
+    ?? (osPrefersDark.matches ? "dark" : "light");
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("freightprint-theme", theme);
+  themeToggle.textContent = theme === "dark" ? "☀︎ Açık tema" : "☾ Koyu tema";
+  paintBasemap(theme);
+  // MapLibre keeps its own canvas, so the route has to be repainted in the new tokens.
+  if (payload) requestAnimationFrame(applyScenario);
+}
+
+/** Dim the basemap only. A CSS filter on the canvas would drag the route lines down
+ *  with it; the raster layer's own paint properties leave the vector marks alone. */
+function paintBasemap(theme) {
+  if (!map || !map.getLayer("osm")) return;
+  const dark = theme === "dark";
+  map.setPaintProperty("osm", "raster-brightness-max", dark ? 0.5 : 1);
+  map.setPaintProperty("osm", "raster-saturation", dark ? -0.35 : 0);
+  map.setPaintProperty("osm", "raster-contrast", dark ? -0.12 : 0);
+  if (map.getLayer("terminal-labels")) {
+    map.setPaintProperty("terminal-labels", "text-color", dark ? "#b9c0ca" : "#414a57");
+    map.setPaintProperty("terminal-labels", "text-halo-color", dark ? "#14171c" : "#ffffff");
+  }
+  if (map.getLayer("terminals")) {
+    map.setPaintProperty("terminals", "circle-color", dark ? "#14171c" : "#ffffff");
+    map.setPaintProperty("terminals", "circle-stroke-color", dark ? "#b9c0ca" : "#414a57");
+  }
+}
+
+const savedTheme = localStorage.getItem("freightprint-theme");
+if (savedTheme) applyTheme(savedTheme);
+else themeToggle.textContent = osPrefersDark.matches ? "☀︎ Açık tema" : "☾ Koyu tema";
+themeToggle.addEventListener("click", () =>
+  applyTheme(currentTheme() === "dark" ? "light" : "dark"));
+
+/* ── loading ─────────────────────────────────────────────────────────── */
+
+/** A shaped placeholder beats a spinner: a cold route takes about six seconds. */
+function showSkeleton() {
+  emptyState.hidden = false;
+  dashboard.hidden = true;
+  emptyState.innerHTML = `<div class="skeleton" aria-busy="true" aria-live="polite">
+      <div class="sk short" style="height:56px"></div>
+      <div class="sk-row">${'<div class="sk tile"></div>'.repeat(4)}</div>
+      <div class="sk wide"></div>
+      <div class="sk short"></div>
+    </div>`;
+}
 
 initMap();
 loadFactorSets();
