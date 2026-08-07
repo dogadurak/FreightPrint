@@ -1,7 +1,13 @@
 factor_set,mode,vehicle_type,fuel_type,scope,value_kg_co2_per_ton_km,source,year,is_verified,notes
 reference,road,truck_24t,diesel,TTW,0.121,Customer carbon footprint report (validation dataset),2024,yes,Scope not stated in the source report; assumed TTW
-reference,sea,roro,hfo,TTW,0.012,Customer carbon footprint report (validation dataset),2024,yes,Scope not stated in the source report; assumed TTW
+reference,sea,roro,hfo,TTW,0.012,Customer carbon footprint report (validation dataset),2024,yes,Scope not stated in the source report; assumed TTW. Close to a container-ship value despite the service being ro-ro
 reference,rail,intermodal,mixed,TTW,0.016,Customer carbon footprint report (validation dataset),2024,yes,Scope not stated in the source report; assumed TTW
+glec,road,artic_truck_40t,diesel_b5,TTW,0.060,GLEC Framework 2019 (Jul 2022) Table 42 - Artic truck up to 40t GVW,2022,yes,Container basis: 72% load factor and 30% empty running already included
+glec,road,artic_truck_40t,diesel_b5,WTW,0.075,GLEC Framework 2019 (Jul 2022) Table 42 - Artic truck up to 40t GVW,2022,yes,Container basis: 72% load factor and 30% empty running already included
+glec,sea,roro_trailer,hfo,TTW,0.063,GLEC Framework 2019 (Jul 2022) Table 45 - Ro-Ro fleet average trailer only,2022,yes,40% load factor and 0% empty running. Freight-only fleet average is lower at 0.042
+glec,sea,roro_trailer,hfo,WTW,0.068,GLEC Framework 2019 (Jul 2022) Table 45 - Ro-Ro fleet average trailer only,2022,yes,40% load factor and 0% empty running. Freight-only fleet average is lower at 0.045
+glec,rail,intermodal_container,diesel,TTW,0.020,GLEC Framework 2019 (Jul 2022) Table 38 - European rail diesel traction,2022,yes,Container basis: 50% load factor and 17% empty running. Diesel is the conservative choice; electric traction on these corridors is 0.0091 WTW (Table 39)
+glec,rail,intermodal_container,diesel,WTW,0.025,GLEC Framework 2019 (Jul 2022) Table 38 - European rail diesel traction,2022,yes,Container basis: 50% load factor and 17% empty running. Diesel is the conservative choice; electric traction on these corridors is 0.0091 WTW (Table 39)
 placeholder,road,truck_24t,hvo,TTW,0.030,PLACEHOLDER,2024,no,Needs a GLEC/ISO 14083 value before use in any report
-placeholder,road,truck_24t,lng,TTW,0.110,PLACEHOLDER,2024,no,Needs a GLEC/ISO 14083 value before use in any report
+placeholder,road,truck_24t,lng,TTW,0.110,PLACEHOLDER,2024,no,GLEC Table 42 gives 0.062 TTW / 0.079 WTW for an artic 40t SI engine on LNG; use the glec set instead
 placeholder,road,truck_24t,electric,TTW,0.000,PLACEHOLDER,2024,no,TTW is zero by definition; the real number is WTW and grid dependent

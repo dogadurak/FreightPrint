@@ -8,6 +8,7 @@ from .core.emissions import (
     calculate_shipment,
     load_emission_factors,
     load_tree_factors,
+    lowest_emission_first,
     tree_equivalent,
 )
 from .core.road import RoadRoutingError
@@ -33,6 +34,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--destination-name", default="destination")
     parser.add_argument("--tonnage", type=float, default=24.0)
     parser.add_argument("--scope", default="TTW", choices=["TTW", "WTW"])
+    parser.add_argument(
+        "--factor-set",
+        default="reference",
+        help="which factor set to price with, e.g. reference or glec",
+    )
     parser.add_argument("--fuel", default=None, help="road fuel type, e.g. diesel, hvo, lng")
     parser.add_argument("--load-factor", type=float, default=1.0, help="0-1 vehicle utilisation")
     parser.add_argument("--empty-return", type=float, default=0.0, help="empty return share, 0-1")
@@ -82,7 +88,6 @@ def main() -> None:
             destination=args.destination,
             origin_name=args.origin_name,
             destination_name=args.destination_name,
-            max_alternatives=args.alternatives,
             compare_computed_distances=args.compare_computed,
         )
     except RoadRoutingError as error:
@@ -100,6 +105,7 @@ def main() -> None:
             tonnage=args.tonnage,
             scope=args.scope,
             road_fuel_type=args.fuel,
+            factor_set=args.factor_set,
             load_factor=expected_load,
             empty_return_share=args.empty_return,
         )
@@ -110,15 +116,18 @@ def main() -> None:
 
     tree_factors = load_tree_factors()
     sources = {
-        f.source for f in load_emission_factors() if f.factor_set == "reference" and f.is_verified
+        f.source
+        for f in load_emission_factors()
+        if f.factor_set == args.factor_set and f.scope == args.scope and f.is_verified
     }
 
     print(f"Sevkiyat: {args.tonnage:g} ton | kapsam: {args.scope} | "
           f"doluluk: {lowest_load:.2f}-{highest_load:.2f} (ortalama {expected_load:.2f}) | "
           f"bos donus: {args.empty_return:g}")
-    print(f"Faktor seti: reference | kaynak: {'; '.join(sorted(sources))}")
+    print(f"Faktor seti: {args.factor_set} | kapsam: {args.scope} | "
+          f"kaynak: {'; '.join(sorted(sources)) or 'DOGRULANMAMIS'}")
 
-    for shipment, route in zip(shipments, routes):
+    for route, shipment in lowest_emission_first(routes, shipments, limit=args.alternatives):
         _print_route(shipment, route, tree_factors)
 
         try:
@@ -127,6 +136,7 @@ def main() -> None:
                 tonnage=args.tonnage,
                 scope=args.scope,
                 road_fuel_type=args.fuel,
+                factor_set=args.factor_set,
                 load_factor=args.load_factor,
                 load_uncertainty=args.load_uncertainty,
                 distance_uncertainty=args.distance_uncertainty,

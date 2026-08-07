@@ -7,6 +7,7 @@ from app.core.emissions import (
     find_factor,
     load_emission_factors,
     load_tree_factors,
+    lowest_emission_first,
     tree_equivalent,
 )
 from app.core.route import Leg, RouteAlternative
@@ -37,6 +38,51 @@ def test_reference_factors_match_the_source_report():
     assert find_factor(factors, "road").value == REFERENCE_ROAD_FACTOR
     assert find_factor(factors, "sea").value == REFERENCE_SEA_FACTOR
     assert find_factor(factors, "rail").value == REFERENCE_RAIL_FACTOR
+
+
+def test_glec_factors_match_the_published_tables():
+    """Pin the primary-source values so an edit cannot quietly restate the standard."""
+    factors = load_emission_factors()
+    glec = lambda mode, scope: find_factor(factors, mode, scope=scope, factor_set="glec").value
+
+    assert glec("road", "TTW") == 0.060 and glec("road", "WTW") == 0.075
+    assert glec("sea", "TTW") == 0.063 and glec("sea", "WTW") == 0.068
+    assert glec("rail", "TTW") == 0.020 and glec("rail", "WTW") == 0.025
+
+
+def test_every_mode_has_a_wtw_factor_for_iso_14083():
+    """ISO 14083 and GLEC report on a well-to-wake basis, so WTW cannot be missing."""
+    factors = load_emission_factors()
+
+    for mode in ("road", "sea", "rail"):
+        assert find_factor(factors, mode, scope="WTW", factor_set="glec").is_verified
+
+
+def test_roro_sea_freight_is_not_cheap_like_container_shipping():
+    """A ro-ro ship carries the trailer's tare too, so it is nothing like a box boat.
+
+    The reference set prices sea near a container-ship value while the services it
+    describes are ro-ro, which is what makes its saving look far larger than it is.
+    """
+    factors = load_emission_factors()
+    reference = find_factor(factors, "sea", factor_set="reference").value
+    glec_roro = find_factor(factors, "sea", factor_set="glec").value
+
+    assert glec_roro > reference * 4
+
+
+def test_glec_pricing_can_turn_a_reported_saving_negative():
+    """On a ro-ro corridor the multimodal option need not win, and must not be forced to."""
+    multimodal = _route("via roro", [_leg("road", 61), _leg("sea", 2500), _leg("rail", 950)])
+    all_road = _route("all-road", [_leg("road", 2515)])
+
+    baseline, alternative = calculate_shipment([all_road, multimodal], 24, factor_set="glec")
+
+    assert alternative.saving_co2_kg < 0
+    assert tree_equivalent(alternative.saving_co2_kg, load_tree_factors()) == {
+        "average_tree": 0.0,
+        "pinus_brutia": 0.0,
+    }
 
 
 def test_every_factor_declares_scope_source_and_year():
@@ -105,6 +151,45 @@ def test_impossible_empty_return_share_is_rejected(empty_return_share):
 
     with pytest.raises(ValueError):
         effective_factor_value(factor, empty_return_share=empty_return_share)
+
+
+def test_lowest_emission_ranks_ahead_of_shorter_distance():
+    """A road-heavy leg can be shorter and still dirtier; emissions decide the order."""
+    short_but_road_heavy = _route("via road", [_leg("road", 540), _leg("sea", 2500)])
+    longer_but_cleaner = _route("via rail", [_leg("rail", 950), _leg("sea", 2500)])
+    routes = [short_but_road_heavy, longer_but_cleaner]
+    shipments = calculate_shipment(routes, tonnage=24)
+
+    ranked = lowest_emission_first(routes, shipments)
+
+    assert short_but_road_heavy.total_distance_km < longer_but_cleaner.total_distance_km
+    assert ranked[0][0] is longer_but_cleaner
+
+
+def test_trimming_keeps_the_cleanest_option_not_the_shortest():
+    """Trimming a distance ranking used to hide the answer the tool exists to give."""
+    routes = [
+        _route("all-road", [_leg("road", 2515)]),
+        _route("shortest", [_leg("road", 540), _leg("sea", 2500)]),
+        _route("cleanest", [_leg("rail", 950), _leg("sea", 2500)]),
+    ]
+    shipments = calculate_shipment(routes, tonnage=24)
+
+    ranked = lowest_emission_first(routes, shipments, limit=1)
+
+    assert len(ranked) == 2
+    assert ranked[0][0].is_all_road
+    assert ranked[1][0].label == "cleanest"
+
+
+def test_all_road_baseline_stays_first_even_when_it_emits_most():
+    routes = [_route("all-road", [_leg("road", 2515)]), _route("via sea", [_leg("sea", 2500)])]
+    shipments = calculate_shipment(routes, tonnage=24)
+
+    ranked = lowest_emission_first(routes, shipments)
+
+    assert ranked[0][0].is_all_road
+    assert ranked[0][1].total_co2_kg > ranked[1][1].total_co2_kg
 
 
 def test_tree_equivalent_uses_the_configured_species_factors():

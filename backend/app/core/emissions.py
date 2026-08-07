@@ -257,6 +257,26 @@ def calculate_shipment(
     return results
 
 
+def lowest_emission_first(
+    routes: list[RouteAlternative],
+    shipments: list[ShipmentEmission],
+    limit: int | None = None,
+) -> list[tuple[RouteAlternative, ShipmentEmission]]:
+    """Order alternatives by emissions, keeping the all-road baseline first.
+
+    Ranking by distance and then trimming hides the answer this tool exists to give:
+    the shortest alternative is regularly not the cleanest, so a trimmed distance
+    ranking can drop the lowest-emission option entirely.
+    """
+    paired = list(zip(routes, shipments))
+    baseline = [pair for pair in paired if pair[0].is_all_road]
+    alternatives = sorted(
+        (pair for pair in paired if not pair[0].is_all_road),
+        key=lambda pair: pair[1].total_co2_kg,
+    )
+    return baseline + (alternatives[:limit] if limit is not None else alternatives)
+
+
 def tree_equivalent(saving_co2_kg: float, species_factors: dict[str, float]) -> dict[str, float]:
     """Trees whose annual uptake matches the saving. Meaningless for a negative saving."""
     if saving_co2_kg <= 0:

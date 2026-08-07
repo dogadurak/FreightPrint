@@ -155,7 +155,6 @@ def find_route_alternatives(
     origin_name: str = "origin",
     destination_name: str = "destination",
     candidate_terminals: int = 3,
-    max_alternatives: int = 3,
     compare_computed_distances: bool = False,
     dominance_tolerance_km: float = 1.0,
 ) -> list[RouteAlternative]:
@@ -164,6 +163,10 @@ def find_route_alternatives(
     The all-road option is always returned first as the comparison baseline. Routes that
     lose to another alternative in every mode (detours that overshoot the destination and
     double back) are dropped rather than shown as choices.
+
+    Every surviving alternative is returned. Trimming the list here would trim it by
+    distance, and distance ranks these badly: a leg 20 km longer can emit a third less
+    by moving the journey off the road. Callers rank and trim on what they care about.
     """
     terminals = load_terminals()
     graph = _build_routing_graph(origin, destination, terminals, candidate_terminals)
@@ -186,7 +189,7 @@ def find_route_alternatives(
         else:
             multimodal.append(route)
 
-    surviving = _drop_dominated(multimodal, dominance_tolerance_km)[:max_alternatives]
+    surviving = _drop_dominated(multimodal, dominance_tolerance_km)
     if compare_computed_distances:
         for route in surviving:
             _add_computed_sea_distances(route, terminals)

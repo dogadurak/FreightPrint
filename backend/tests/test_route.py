@@ -51,7 +51,7 @@ def test_routes_differing_only_within_tolerance_are_not_dropped():
 
 
 def test_all_road_baseline_is_first_and_uses_only_road(offline_road):
-    routes = find_route_alternatives((29.43, 40.78), (13.77, 45.64), max_alternatives=3)
+    routes = find_route_alternatives((29.43, 40.78), (13.77, 45.64))
 
     assert routes[0].is_all_road
     assert routes[0].distance_by_mode.keys() == {"road"}
@@ -71,7 +71,7 @@ def test_alternatives_use_real_service_legs_only(offline_road):
 def test_no_alternative_overshoots_the_destination(offline_road):
     """The Trieste->Lambach->back-to-Trieste style detour must not be offered."""
     destination = (13.77, 45.64)
-    alternatives = find_route_alternatives((29.43, 40.78), destination, max_alternatives=3)[1:]
+    alternatives = find_route_alternatives((29.43, 40.78), destination)[1:]
 
     assert alternatives
     for alternative in alternatives:
@@ -80,11 +80,12 @@ def test_no_alternative_overshoots_the_destination(offline_road):
         assert final_leg.distance_km < 100
 
 
-def test_multimodal_alternatives_are_sorted_by_total_distance(offline_road):
-    alternatives = find_route_alternatives((29.43, 40.78), (13.77, 45.64), max_alternatives=3)[1:]
-    totals = [alternative.total_distance_km for alternative in alternatives]
+def test_every_surviving_alternative_is_returned_for_the_caller_to_rank(offline_road):
+    """Trimming here would trim by distance and could drop the cleanest option."""
+    alternatives = find_route_alternatives((29.43, 40.78), (6.77, 51.22))[1:]
 
-    assert totals == sorted(totals)
+    assert len(alternatives) > 1
+    assert alternatives == route._drop_dominated(alternatives, tolerance_km=1.0)
 
 
 def _fake_osrm_response(monkeypatch, payload):

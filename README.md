@@ -63,6 +63,38 @@ python -m pytest tests/ -q
 Rota arama, kalkış ve varış noktalarını grafa geçici düğüm olarak ekleyip k-en-kısa-yol
 çalıştırır; böylece tam karayolu seçeneği doğal olarak karşılaştırma temeli hâline gelir.
 
+## ⚠️ Deniz faktörü bulgusu — ro-ro, konteyner gemisi değildir
+
+Doğrulama veri setindeki firma deniz bacağı için **0,012 kg CO2/ton-km** kullanmış. Bu bir
+konteyner gemisi büyüklüğünde bir değer — ama raporladığı servisler (Pendik, Yalova, Bari,
+Patras, Sète) **ro-ro**. Ro-ro gemisi treyler taşır: yükün yanında treylerin darasını da
+taşır, doluluk oranı düşüktür (%40) ve daha hızlı seyreder.
+
+GLEC Framework'ün ro-ro değerleri (Tablo 45, g CO2e/ton-km, TTW/WTW):
+
+| Esas | TTW | WTW |
+|---|---|---|
+| Ortalama, sadece yük | 42 | 45 |
+| **Sadece treyler** (bu sistemin varsayılanı) | **63** | **68** |
+| Çekici + treyler | 93 | 100 |
+
+Aynı anda karayolu faktörü de ters yönde sapıyor: rapor 0,121 kullanmış, GLEC'in 40 tonluk
+çekicisi (konteyner esası, doluluk ve boş dönüş dâhil) **0,060**. İki sapma da aynı yöne,
+çok modlu taşımayı olduğundan iyi gösterme yönüne çalışıyor.
+
+Aynı sevkiyat, Pendik–Trieste–Köln (24 ton):
+
+| Faktör seti | Çok modlu | Tam karayolu | Tasarruf |
+|---|---|---|---|
+| `reference` (müşteri raporu) | 1.262 kg | 7.304 kg | %83 |
+| `glec` TTW | 4.324 kg | 3.622 kg | **−%19** |
+| `glec` WTW | 4.760 kg | 4.527 kg | −%5 |
+
+**Sonuç: bu koridorda "çok modlu taşıma karbon kazandırır" iddiası GLEC faktörleriyle
+savunulamıyor.** Demiryolu bacağı hâlâ net kazanç (tren 0,020'ye karşı karayolu 0,060),
+sorun ro-ro deniz bacağında. Sistem bu yüzden hangi faktör setiyle hesap yaptığını her
+çıktıda yazar ve tasarruf negatifse ağaç eşdeğerini sıfır döndürür.
+
 ## Emisyon hesabı
 
 `bacak_emisyonu = mesafe_km × ton × faktör`, faktör doluluk oranı ve boş dönüş payına göre
@@ -70,8 +102,21 @@ düzeltilir. Tam karayolu senaryosu karşılaştırma temelidir; tasarruf bu iki
 
 Faktörler koda gömülü değil — `data/emission_factors.csv` her satırda kaynağını, yılını,
 kapsamını (TTW/WTW) ve **doğrulanmış olup olmadığını** taşır. Doğrulanmamış bir faktör
-kullanıldığında çıktıya uyarı düşer. HVO/LNG/elektrik satırları şu an `PLACEHOLDER`
-kaynaklıdır ve rapora girmeden önce GLEC/ISO 14083 değeriyle değiştirilmelidir.
+kullanıldığında çıktıya uyarı düşer.
+
+İki doğrulanmış faktör seti var:
+
+| Set | Kapsam | Kaynak |
+|---|---|---|
+| `reference` | TTW | Müşteri raporunun kendi değerleri — karşılaştırma için |
+| `glec` | TTW + WTW | GLEC Framework 2019 (Tem 2022), Tablo 38/42/45 |
+
+```bash
+python -m app.cli --origin=... --destination=... --factor-set glec --scope WTW
+```
+
+HVO/LNG/elektrik satırları hâlâ `PLACEHOLDER`. LNG için `glec` setinde gerçek değer var
+(0,062 TTW / 0,079 WTW); diğerleri rapora girmeden önce değiştirilmelidir.
 
 ## Doğrulama
 
@@ -133,6 +178,9 @@ rotası ve mesafe geçer; sevkiyat satırları, müşteri adları ve tonajlar ge
 - **Referans mesafeler kendi aralarında çelişiyor.** `data/service_legs.csv` Pendik–Bari
   için 1755 km diyor, doğrulama veri seti aynı bacak için 1825 km. Hangisinin doğru
   olduğu henüz belirlenmedi.
-- **WTW faktörleri henüz yok.** Tablo kapsamı destekliyor ama yalnızca TTW satırları
-  doğrulanmış durumda; `--scope WTW` şu an faktör bulamaz.
-- **Yakıt tipi faktörleri doğrulanmamış.** Dizel dışındaki her seçenek `PLACEHOLDER`.
+- **`reference` seti WTW desteklemez.** Müşteri raporu yalnızca TTW değerleri verdiği için
+  `--scope WTW` bu setle çalışmaz; `--factor-set glec` kullanın.
+- **Demiryolu için dizel çekiş varsayılıyor.** GLEC'in dizel satırı hem TTW hem WTW verdiği
+  için tutarlı bir çift oluşturuyor. Trieste–Köln gibi elektrikli koridorlarda gerçek değer
+  0,0091 WTW, yani mevcut varsayım muhafazakâr (yüksek) yönde.
+- **Yakıt tipi faktörleri kısmen doğrulanmamış.** HVO ve elektrik hâlâ `PLACEHOLDER`.
