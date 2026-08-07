@@ -1,0 +1,69 @@
+# Self-hosted OSRM. The public demo server is rate limited and unsuitable for anything
+# beyond a handful of manual queries; one route request here costs seven OSRM calls.
+#
+# Run the three preprocessing steps once, then start the service:
+#
+#   docker compose run --rm osrm-extract
+#   docker compose run --rm osrm-partition
+#   docker compose run --rm osrm-customize
+#   docker compose up -d osrm
+#
+# Then point the app at it:  export OSRM_BASE_URL=http://localhost:5000
+#
+# OSRM_REGION selects the Geofabrik extract. Start with `turkey` to verify the setup,
+# then move to `europe` for the full pilot corridor. Sizing, roughly:
+#   turkey  ~120 MB download,  ~2 GB RAM,   minutes to preprocess
+#   europe   ~28 GB download, ~64 GB RAM,   hours to preprocess
+# MLD (partition/customize) is used rather than CH because it needs far less memory.
+
+x-osrm-image: &osrm-image ghcr.io/project-osrm/osrm-backend:v5.27.1
+
+services:
+  # One-off: download the extract if it is not already present.
+  osrm-download:
+    image: curlimages/curl:latest
+    volumes:
+      - ./osrm-data:/data
+    command: >
+      -f -L --create-dirs
+      -o /data/${OSRM_REGION:-turkey}-latest.osm.pbf
+      https://download.geofabrik.de/${OSRM_REGION_PATH:-europe/turkey}-latest.osm.pbf
+
+  osrm-extract:
+    image: *osrm-image
+    volumes:
+      - ./osrm-data:/data
+    command: osrm-extract -p /opt/car.lua /data/${OSRM_REGION:-turkey}-latest.osm.pbf
+
+  osrm-partition:
+    image: *osrm-image
+    volumes:
+      - ./osrm-data:/data
+    command: osrm-partition /data/${OSRM_REGION:-turkey}-latest.osrm
+
+  osrm-customize:
+    image: *osrm-image
+    volumes:
+      - ./osrm-data:/data
+    command: osrm-customize /data/${OSRM_REGION:-turkey}-latest.osrm
+
+  osrm:
+    image: *osrm-image
+    volumes:
+      - ./osrm-data:/data
+    ports:
+      - "5000:5000"
+    command: >
+      osrm-routed --algorithm mld --max-matching-size 1000
+      /data/${OSRM_REGION:-turkey}-latest.osrm
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- 'http://localhost:5000/route/v1/driving/29.0,41.0;29.1,41.1?overview=false'
+          | grep -q '"code":"Ok"'
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

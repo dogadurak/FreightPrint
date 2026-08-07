@@ -31,6 +31,8 @@ from app.core.geocode import geocode_all
 from app.core.network import DATA_DIR, load_terminals
 from app.core.road import road_route
 from app.core.sea import sea_distance
+from app.core.emissions import calculate_shipment, find_factor, load_emission_factors
+from app.core.route import Leg, RouteAlternative
 from app.core.validation import (
     compare_all_road_baseline,
     compare_emissions,
@@ -243,7 +245,67 @@ print(f"Korint geçen bacaklarda MAPE    : %{mean(crossing):.1f}  (n={len(crossi
 # olarak işaretlenir.
 
 # %% [markdown]
-# ## 6. Sonuç
+# ## 6. Faktör kapsamı — raporun deniz faktörü hangi moda ait?
+#
+# Buraya kadar her şey raporun **kendi** faktörleriyle hesaplandı; amaç hesap mantığını
+# doğrulamaktı. Şimdi faktörlerin kendisine bakalım.
+#
+# Rapor deniz için 0,012 kg CO2/ton-km kullanmış. Bu bir konteyner gemisi büyüklüğünde bir
+# değer — ama raporun listelediği servisler ro-ro. Ro-ro gemisi treyler taşır: yükün yanında
+# treylerin darasını da taşır, doluluk oranı düşüktür ve daha hızlı seyreder.
+
+# %%
+factors = load_emission_factors()
+print(f"{'mod':<10}{'rapor':>10}{'GLEC':>10}{'oran':>9}")
+print("-" * 39)
+for mode in ("road", "sea", "rail"):
+    reported = find_factor(factors, mode, factor_set="reference").value
+    glec = find_factor(factors, mode, factor_set="glec").value
+    print(f"{mode:<10}{reported:>10.3f}{glec:>10.3f}{glec / reported:>8.1f}x")
+
+# %% [markdown]
+# İki sapma da **aynı yöne** çalışıyor: deniz olduğundan temiz, karayolu olduğundan kirli
+# görünüyor. İkisi birlikte çok modlu seçeneği belirgin biçimde kayırır.
+#
+# Aynı sevkiyatın iki faktör setiyle sonucu:
+
+# %%
+reported_route = RouteAlternative(
+    legs=[
+        Leg("road", "origin", "port", 20),
+        Leg("sea", "port", "hub", 2500),
+        Leg("rail", "hub", "terminal", 950),
+        Leg("road", "terminal", "destination", 41),
+    ],
+    label="multimodal",
+)
+all_road_route = RouteAlternative(
+    legs=[Leg("road", "origin", "destination", 2515)], label="all-road"
+)
+
+print(f"{'faktör seti':<22}{'çok modlu':>12}{'tam karayolu':>14}{'tasarruf':>11}{'oran':>8}")
+print("-" * 67)
+for factor_set, scope in (("reference", "TTW"), ("glec", "TTW"), ("glec", "WTW")):
+    baseline, alternative = calculate_shipment(
+        [all_road_route, reported_route], tonnage=24, factor_set=factor_set, scope=scope
+    )
+    saving = alternative.saving_co2_kg
+    print(
+        f"{factor_set + ' / ' + scope:<22}{alternative.total_co2_kg:>12,.0f}"
+        f"{baseline.total_co2_kg:>14,.0f}{saving:>11,.0f}{saving / baseline.total_co2_kg:>7.0%}"
+    )
+
+# %% [markdown]
+# **Bu koridorda "çok modlu taşıma karbon kazandırır" iddiası GLEC faktörleriyle
+# savunulamıyor.** Demiryolu bacağı hâlâ net kazanç (0,020'ye karşı 0,060, üç kat temiz);
+# sorun ro-ro deniz bacağında.
+#
+# Bu bir denetim iddiası değildir — hangi ro-ro esasının doğru olduğu bir muhasebe
+# tercihidir ve GLEC üç farklı satır verir (42, 63, 93 g/ton-km). Sistem en özgün eşleşmeyi
+# (sadece treyler, 63) varsayılan alır ve hangi setle hesap yaptığını her çıktıda yazar.
+
+# %% [markdown]
+# ## 7. Sonuç
 #
 # | Ölçüt | Hedef | Sonuç |
 # |---|---|---|
@@ -251,6 +313,7 @@ print(f"Korint geçen bacaklarda MAPE    : %{mean(crossing):.1f}  (n={len(crossi
 # | Emisyon tutarlılığı (çok modlu) | fark < %1 | **19/22 satır**, eşleşenlerde hata = 0 |
 # | Karayolu mesafe sapması | raporlanabilir | MAPE **%1,9**; 30/30 satır %10 içinde |
 # | Deniz mesafe sapması | raporlanabilir | temiz bacak %4,2 — Korint geçen %21,9 (n=1'e karşı n=5) |
+# | Faktör kapsamı | — | raporun deniz faktörü ro-ro değil, konteyner gemisi düzeyinde |
 #
 # **Bölüm 9.3'ün emisyon eşiği (fark < %1) 22 satırın 19'unda karşılanmıştır.**
 # Kalan 3 satır, kendi bildirdiği km sütunlarının ürettiğinden daha düşük bir CO2

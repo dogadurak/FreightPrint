@@ -12,6 +12,32 @@ python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt   # Linux/macOS: .venv/bin/pip
 ```
 
+### Karayolu rotalama (OSRM)
+
+Varsayılan olarak public OSRM demo sunucusu kullanılır. **Bu yalnızca elle birkaç sorgu
+içindir**: tek bir rota isteği yedi OSRM çağrısı yapar ve demo sunucusu hız sınırlıdır.
+Kendi sunucunuz için `docker-compose.yml` hazır:
+
+```bash
+export OSRM_REGION=turkey OSRM_REGION_PATH=europe/turkey   # once kucukle dogrulayin
+docker compose run --rm osrm-download
+docker compose run --rm osrm-extract
+docker compose run --rm osrm-partition
+docker compose run --rm osrm-customize
+docker compose up -d osrm
+
+export OSRM_BASE_URL=http://localhost:5000
+```
+
+Tüm pilot koridor için `OSRM_REGION=europe OSRM_REGION_PATH=europe` kullanın — yaklaşık
+28 GB indirme ve ~64 GB RAM gerektirir. Türkiye bölgesi doğrulama için yeterlidir.
+
+> Bu yapılandırma bu makinede **çalıştırılarak doğrulanmadı** (Docker kurulu değil).
+> Uygulamanın `OSRM_BASE_URL` değişkenini doğru kullandığı test edildi.
+
+Rota yanıtları `data/route_cache.sqlite` içinde saklanır, süreç yeniden başlasa bile
+korunur (soğuk istek ~6 sn, önbellekten ~0,01 sn).
+
 ## Kullanım
 
 Kalkış ve varış noktası `lon,lat` olarak verilir. Negatif boylamda `--origin=...`
@@ -56,6 +82,7 @@ python -m pytest tests/ -q
 | `backend/app/core/route.py` | İki nokta → çok modlu rota alternatifleri |
 | `backend/app/core/emissions.py` | Faktör uygulama, tam karayolu karşılaştırması, ağaç eşdeğeri |
 | `backend/app/core/uncertainty.py` | Monte Carlo belirsizlik aralığı |
+| `backend/app/core/cache.py` | SQLite disk önbelleği — süreç yeniden başlasa da korunur |
 | `backend/app/core/geocode.py` | Nominatim sarmalayıcı, ülke adı normalleştirme, disk önbelleği |
 | `backend/app/core/validation.py` | Doğrulama veri setini okuma ve referansla karşılaştırma |
 | `notebooks/validation_analysis.py` | Faz 3 analizi (defterin kaynağı) |

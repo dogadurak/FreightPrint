@@ -1,8 +1,10 @@
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import lru_cache
 
 import requests
+
+from .cache import DiskCache
 
 # Public demo server is rate limited; point at a self-hosted OSRM for real workloads.
 OSRM_BASE_URL = os.environ.get("OSRM_BASE_URL", "https://router.project-osrm.org")
@@ -28,9 +30,29 @@ class RoadRoute:
         return self.distance_km - self.ferry_km
 
 
+_disk_cache: DiskCache | None = None
+
+
+def _cache() -> DiskCache:
+    global _disk_cache
+    if _disk_cache is None:
+        _disk_cache = DiskCache()
+    return _disk_cache
+
+
 @lru_cache(maxsize=2048)
 def road_route(origin: tuple[float, float], destination: tuple[float, float]) -> RoadRoute:
     """Route two (lon, lat) points by road, separating any ferry distance.
+
+    Answers are cached on disk as well as in process, so a restart does not replay
+    every OSRM call and hand the next caller another cold wait.
+    """
+    key = f"road|{OSRM_BASE_URL}|{origin[0]},{origin[1]}|{destination[0]},{destination[1]}"
+    return RoadRoute(**_cache().get_or_compute(key, lambda: asdict(_query_osrm(origin, destination))))
+
+
+def _query_osrm(origin: tuple[float, float], destination: tuple[float, float]) -> RoadRoute:
+    """Ask OSRM for a driving route, separating any ferry distance from the road distance.
 
     OSRM's driving profile routes over ferries, so an all-road baseline that counted
     them as road would apply a road factor to a sea crossing and overstate the saving.
