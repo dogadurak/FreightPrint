@@ -24,6 +24,9 @@ class RoadRoute:
     distance_km: float
     duration_h: float
     ferry_km: float = 0.0
+    # Simplified [lon, lat] pairs, kept so a map can draw the road actually taken
+    # rather than a straight line that crosses whatever lies between.
+    geometry: tuple[tuple[float, float], ...] = ()
 
     @property
     def driving_km(self) -> float:
@@ -47,8 +50,10 @@ def road_route(origin: tuple[float, float], destination: tuple[float, float]) ->
     Answers are cached on disk as well as in process, so a restart does not replay
     every OSRM call and hand the next caller another cold wait.
     """
-    key = f"road|{OSRM_BASE_URL}|{origin[0]},{origin[1]}|{destination[0]},{destination[1]}"
-    return RoadRoute(**_cache().get_or_compute(key, lambda: asdict(_query_osrm(origin, destination))))
+    # The version prefix retires cached entries whose shape predates the geometry field.
+    key = f"road2|{OSRM_BASE_URL}|{origin[0]},{origin[1]}|{destination[0]},{destination[1]}"
+    cached = _cache().get_or_compute(key, lambda: asdict(_query_osrm(origin, destination)))
+    return RoadRoute(**{**cached, "geometry": tuple(map(tuple, cached.get("geometry", ())))})
 
 
 def _query_osrm(origin: tuple[float, float], destination: tuple[float, float]) -> RoadRoute:
@@ -61,7 +66,9 @@ def _query_osrm(origin: tuple[float, float], destination: tuple[float, float]) -
     url = f"{OSRM_BASE_URL}/route/v1/driving/{coords}"
 
     response = requests.get(
-        url, params={"overview": "false", "steps": "true"}, timeout=REQUEST_TIMEOUT_S
+        url,
+        params={"overview": "simplified", "geometries": "geojson", "steps": "true"},
+        timeout=REQUEST_TIMEOUT_S,
     )
     response.raise_for_status()
     payload = response.json()
@@ -85,8 +92,10 @@ def _query_osrm(origin: tuple[float, float], destination: tuple[float, float]) -
         for step in leg["steps"]
         if step.get("mode") == "ferry"
     )
+    coordinates = route.get("geometry", {}).get("coordinates", [])
     return RoadRoute(
         distance_km=route["distance"] / 1000.0,
         duration_h=route["duration"] / 3600.0,
         ferry_km=ferry_m / 1000.0,
+        geometry=tuple((point[0], point[1]) for point in coordinates),
     )

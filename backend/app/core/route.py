@@ -24,6 +24,7 @@ class Leg:
     ref_distance_km: float | None = None
     computed_distance_km: float | None = None
     ferry_km: float = 0.0
+    geometry: tuple[tuple[float, float], ...] = ()
     notes: list[str] = field(default_factory=list)
 
 
@@ -73,6 +74,7 @@ def _build_routing_graph(
         distance_km=direct.distance_km,
         duration_h=direct.duration_h,
         ferry_km=direct.ferry_km,
+        geometry=direct.geometry,
     )
 
     for endpoint_node, point in ((ORIGIN_NODE, origin), (DESTINATION_NODE, destination)):
@@ -85,6 +87,7 @@ def _build_routing_graph(
                 distance_km=leg.distance_km,
                 duration_h=leg.duration_h,
                 ferry_km=leg.ferry_km,
+                geometry=leg.geometry,
             )
     return graph
 
@@ -112,6 +115,7 @@ def _leg_from_edge(
         ref_distance_km=edge.get("ref_distance_km"),
         computed_distance_km=edge["distance_km"] if edge["mode"] == "road" else None,
         ferry_km=edge.get("ferry_km", 0.0),
+        geometry=edge.get("geometry", ()),
     )
 
 

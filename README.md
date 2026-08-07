@@ -3,7 +3,7 @@
 Çok modlu yük taşımacılığı karbon ve rota analiz motoru.
 Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
-**Durum:** Faz 3 — doğrulama tamamlandı.
+**Durum:** Faz 4 — web arayüzü çalışıyor.
 
 ## Kurulum
 
@@ -38,7 +38,27 @@ Tüm pilot koridor için `OSRM_REGION=europe OSRM_REGION_PATH=europe` kullanın 
 Rota yanıtları `data/route_cache.sqlite` içinde saklanır, süreç yeniden başlasa bile
 korunur (soğuk istek ~6 sn, önbellekten ~0,01 sn).
 
-## Kullanım
+## Kullanım — web arayüzü
+
+```bash
+cd backend
+python -m uvicorn app.main:app --reload
+```
+
+Tarayıcıda `http://127.0.0.1:8000`. Form kalkış/varış koordinatı, tonaj, faktör seti ve
+kapsam alır; sonuç panelinde alternatifler **emisyona göre sıralı** listelenir, harita
+seçilen rotayı çizer. API dokümantasyonu `/docs` altında.
+
+| Uç | İşlev |
+|---|---|
+| `GET /api/terminals` | Terminal listesi; servise bağlı olmayanlar işaretli |
+| `GET /api/factor-sets` | Seçilebilir faktör setleri ve her birinin deniz esası |
+| `POST /api/routes` | Sevkiyat → alternatifler, emisyon, tasarruf, belirsizlik |
+
+Haritada karayolu bacakları **gerçek OSRM güzergâhı**, deniz ve demiryolu bacakları
+**kesikli düz çizgi** olarak çizilir — bunlar şematiktir, ölçülmüş güzergâh değildir.
+
+## Kullanım — komut satırı
 
 Kalkış ve varış noktası `lon,lat` olarak verilir. Negatif boylamda `--origin=...`
 biçimini kullanın (aksi hâlde argparse bunu parametre sanır).
@@ -82,6 +102,9 @@ python -m pytest tests/ -q
 | `backend/app/core/route.py` | İki nokta → çok modlu rota alternatifleri |
 | `backend/app/core/emissions.py` | Faktör uygulama, tam karayolu karşılaştırması, ağaç eşdeğeri |
 | `backend/app/core/uncertainty.py` | Monte Carlo belirsizlik aralığı |
+| `backend/app/main.py` | FastAPI girişi, arayüzü statik olarak sunar |
+| `backend/app/api/` | Pydantic şemaları ve REST uçları |
+| `frontend/` | Tek sayfa arayüz (MapLibre + vanilla JS, derleme adımı yok) |
 | `backend/app/core/cache.py` | SQLite disk önbelleği — süreç yeniden başlasa da korunur |
 | `backend/app/core/geocode.py` | Nominatim sarmalayıcı, ülke adı normalleştirme, disk önbelleği |
 | `backend/app/core/validation.py` | Doğrulama veri setini okuma ve referansla karşılaştırma |

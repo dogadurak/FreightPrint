@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FreightPrint</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+<header>
+  <h1>FreightPrint</h1>
+  <p>Çok modlu yük taşımacılığı karbon ve rota motoru</p>
+</header>
+
+<main>
+  <section class="panel" aria-label="Sevkiyat bilgileri">
+    <form id="shipment-form">
+      <fieldset>
+        <legend>Sevkiyat</legend>
+        <label>Kalkış <small>lon, lat</small>
+          <input name="origin" value="29.4306, 40.7889" required>
+        </label>
+        <label>Kalkış adı
+          <input name="origin_name" value="Gebze">
+        </label>
+        <label>Varış <small>lon, lat</small>
+          <input name="destination" value="6.7735, 51.2277" required>
+        </label>
+        <label>Varış adı
+          <input name="destination_name" value="Düsseldorf">
+        </label>
+        <label>Tonaj
+          <input name="tonnage" type="number" value="24" min="0.1" step="0.1" required>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Emisyon faktörü</legend>
+        <label>Faktör seti
+          <select name="factor_set" id="factor-set"></select>
+        </label>
+        <p class="hint" id="factor-hint"></p>
+        <label>Kapsam
+          <select name="scope" id="scope"></select>
+        </label>
+        <p class="hint">
+          TTW yalnızca araçtan çıkanı, WTW yakıtın üretimini de sayar.
+          ISO 14083 ve GLEC WTW ister.
+        </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>İşletme varsayımları</legend>
+        <label>Doluluk oranı
+          <input name="load_factor" type="number" min="0.05" max="1" step="0.01"
+                 placeholder="faktörün yayın bazı">
+        </label>
+        <label>Boş dönüş payı
+          <input name="empty_return_share" type="number" min="0" max="1" step="0.01"
+                 placeholder="faktörün yayın bazı">
+        </label>
+        <p class="hint">
+          Boş bırakılırsa her faktör kendi yayınlanmış varsayımını kullanır —
+          kaynağının önerdiği budur.
+        </p>
+      </fieldset>
+
+      <button type="submit" id="submit">Hesapla</button>
+      <p class="hint" id="status" role="status"></p>
+    </form>
+  </section>
+
+  <section class="map-and-results">
+    <div id="map" aria-label="Rota haritası"></div>
+    <div id="results"></div>
+  </section>
+</main>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
