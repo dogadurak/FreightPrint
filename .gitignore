@@ -4,5 +4,6 @@ __pycache__/
 .pytest_cache/
 
 dogrulama_veriseti.csv
+data/geocode_cache.json
 CARBON FOOTPRINT REPORT COLGATE_2026 (1).xlsx
 CARBON FOOTPRINT REPORT_NESTLE (1).xlsx

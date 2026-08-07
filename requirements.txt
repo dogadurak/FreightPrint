@@ -3,3 +3,8 @@ searoute>=1.6
 shapely>=2.0
 requests>=2.31
 pytest>=8.0
+
+# Faz 3 doğrulama defteri için
+matplotlib>=3.8
+jupyter>=1.0
+nbconvert>=7.0

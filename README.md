@@ -3,7 +3,7 @@
 Çok modlu yük taşımacılığı karbon ve rota analiz motoru.
 Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
-**Durum:** Faz 2 — emisyon motoru.
+**Durum:** Faz 3 — doğrulama tamamlandı.
 
 ## Kurulum
 
@@ -56,6 +56,9 @@ python -m pytest tests/ -q
 | `backend/app/core/route.py` | İki nokta → çok modlu rota alternatifleri |
 | `backend/app/core/emissions.py` | Faktör uygulama, tam karayolu karşılaştırması, ağaç eşdeğeri |
 | `backend/app/core/uncertainty.py` | Monte Carlo belirsizlik aralığı |
+| `backend/app/core/geocode.py` | Nominatim sarmalayıcı, ülke adı normalleştirme, disk önbelleği |
+| `backend/app/core/validation.py` | Doğrulama veri setini okuma ve referansla karşılaştırma |
+| `notebooks/validation_analysis.py` | Faz 3 analizi (defterin kaynağı) |
 
 Rota arama, kalkış ve varış noktalarını grafa geçici düğüm olarak ekleyip k-en-kısa-yol
 çalıştırır; böylece tam karayolu seçeneği doğal olarak karşılaştırma temeli hâline gelir.
@@ -69,6 +72,34 @@ Faktörler koda gömülü değil — `data/emission_factors.csv` her satırda ka
 kapsamını (TTW/WTW) ve **doğrulanmış olup olmadığını** taşır. Doğrulanmamış bir faktör
 kullanıldığında çıktıya uyarı düşer. HVO/LNG/elektrik satırları şu an `PLACEHOLDER`
 kaynaklıdır ve rapora girmeden önce GLEC/ISO 14083 değeriyle değiştirilmelidir.
+
+## Doğrulama
+
+Sistem, gerçek bir lojistik firmasının iki müşteri için hazırladığı karbon raporlarındaki
+34 sevkiyatla karşılaştırıldı. Veri seti gerçek müşteri bilgisi içerdiği için depoda
+**yoktur**; doğrulama testleri veri yoksa kendini atlar.
+
+| Ölçüt | Hedef | Sonuç |
+|---|---|---|
+| Emisyon tutarlılığı — tam karayolu | fark < %1 | **34/34 satır**, hata ≈ 0 |
+| Emisyon tutarlılığı — çok modlu | fark < %1 | **19/22 satır**, hata = 0 |
+| Eşleşmeyen 3 satır | açıklanabilir | kaynak verinin **kendi içindeki** tutarsızlık |
+| Karayolu mesafe sapması | raporlanabilir | MAPE **%2,4**, 33/33 satır %10 içinde |
+| Deniz mesafe sapması | raporlanabilir | temiz bacak %4,2 — Korint geçen %21,9 |
+
+Eşleşmeyen üç satırda sapma tamamen karayolu mesafesinde çözülüyor: rapor, kendi
+listelediği km'den daha kısa bir mesafe ima eden bir CO2 değeri bildiriyor. Deniz ve
+demiryolu bacakları birebir tutuyor.
+
+Analizi yeniden üretmek için:
+
+```bash
+python notebooks/build_notebook.py   # betikten defteri üret
+jupyter notebook notebooks/validation_analysis.ipynb
+```
+
+Defter **çıktısız** işlenir; çalıştırıldığında grafikleri yerelde üretir ama depoya
+müşteri rotası, şehir adı veya tonaj hiç girmez.
 
 ## Bilinen sınırlar
 
