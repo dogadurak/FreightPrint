@@ -87,7 +87,13 @@ button {
 button:disabled { background: var(--muted); cursor: progress; }
 
 .map-and-results { display: grid; gap: 1rem; }
-#map { height: 48vh; min-height: 320px; border: 1px solid var(--border); border-radius: 8px; }
+#map {
+  height: 48vh; min-height: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px;
+  display: grid; place-items: center;
+}
+.map-unavailable { max-width: 34ch; margin: 0; padding: 1rem; text-align: center; color: var(--muted); }
 
 #results { display: grid; gap: 0.75rem; }
 

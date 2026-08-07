@@ -136,3 +136,65 @@ def test_the_page_and_its_assets_are_served(client):
     assert client.get("/").status_code == 200
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/static/style.css").status_code == 200
+
+
+SHIPMENT_CSV = (
+    "reference,origin_lon,origin_lat,destination_lon,destination_lat,tonnage\n"
+    "SEV-1,29.4306,40.7889,6.7735,51.2277,24\n"
+    "SEV-2,29.4306,40.7889,16.3738,48.2082,18\n"
+)
+
+
+def _upload(client, content=SHIPMENT_CSV, **fields):
+    return client.post(
+        "/api/report",
+        files={"file": ("shipments.csv", content, "text/csv")},
+        data={"scope": "TTW", "factor_set": "reference"} | fields,
+    )
+
+
+def test_report_returns_a_downloadable_csv(client):
+    response = _upload(client)
+
+    assert response.status_code == 200
+    assert "text/csv" in response.headers["content-type"]
+    assert "attachment" in response.headers["content-disposition"]
+    assert response.text.count("SEV-") == 2
+
+
+def test_report_states_the_factor_set_it_priced_with(client):
+    response = _upload(client, factor_set="glec", scope="WTW")
+
+    assert "factor set: glec" in response.text
+    assert "GLEC Framework" in response.text
+
+
+def test_report_rejects_a_file_missing_required_columns(client):
+    response = _upload(client, content="origin_lon,origin_lat\n29.43,40.78\n")
+
+    assert response.status_code == 422
+    assert "missing column" in response.json()["detail"]
+
+
+def test_report_rejects_a_factor_set_that_cannot_price_any_row(client):
+    response = _upload(client, factor_set="reference", scope="WTW")
+
+    assert response.status_code == 422
+    assert "no WTW factor" in response.json()["detail"]
+
+
+def test_report_rejects_a_non_utf8_upload(client):
+    response = client.post(
+        "/api/report",
+        files={"file": ("shipments.csv", b"\xff\xfe\x00bad", "text/csv")},
+        data={"scope": "TTW", "factor_set": "reference"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_the_sample_shipment_file_is_served_and_parses(client):
+    response = client.get("/static/ornek_sevkiyatlar.csv")
+
+    assert response.status_code == 200
+    assert _upload(client, content=response.text).status_code == 200

@@ -69,6 +69,24 @@
       <button type="submit" id="submit">Hesapla</button>
       <p class="hint" id="status" role="status"></p>
     </form>
+
+    <form id="report-form">
+      <fieldset>
+        <legend>Toplu rapor</legend>
+        <p class="hint">
+          CSV yükleyin, aynı faktör seti ve kapsamla hesaplanmış rapor inin.
+          Zorunlu sütunlar: <code>origin_lon, origin_lat, destination_lon,
+          destination_lat</code> · isteğe bağlı: <code>reference, origin_name,
+          destination_name, tonnage</code>
+        </p>
+        <label>Sevkiyat dosyası
+          <input type="file" name="file" accept=".csv,text/csv" required>
+        </label>
+        <button type="submit" id="report-submit">Rapor indir</button>
+        <p class="hint" id="report-status" role="status"></p>
+        <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya indir</a></p>
+      </fieldset>
+    </form>
   </section>
 
   <section class="map-and-results">

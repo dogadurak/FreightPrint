@@ -1,0 +1,6 @@
+reference,origin_name,origin_lon,origin_lat,destination_name,destination_lon,destination_lat,tonnage
+SEV-001,Gebze,29.4306,40.7889,Duesseldorf,6.7735,51.2277,24
+SEV-002,Gebze,29.4306,40.7889,Wien,16.3738,48.2082,18
+SEV-003,Gebze,29.4306,40.7889,Praha,14.4378,50.0755,24
+SEV-004,Izmir,27.1428,38.4237,Milano,9.1900,45.4642,22
+SEV-005,Mersin,34.6415,36.7951,Muenchen,11.5820,48.1351,24

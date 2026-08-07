@@ -54,6 +54,18 @@ seçilen rotayı çizer. API dokümantasyonu `/docs` altında.
 | `GET /api/terminals` | Terminal listesi; servise bağlı olmayanlar işaretli |
 | `GET /api/factor-sets` | Seçilebilir faktör setleri ve her birinin deniz esası |
 | `POST /api/routes` | Sevkiyat → alternatifler, emisyon, tasarruf, belirsizlik |
+| `POST /api/report` | Toplu CSV → indirilebilir rapor |
+
+### Toplu rapor
+
+Arayüzdeki "Toplu rapor" bölümünden CSV yükleyip rapor indirebilirsiniz. Zorunlu sütunlar
+`origin_lon, origin_lat, destination_lon, destination_lat`; isteğe bağlı `reference,
+origin_name, destination_name, tonnage`. Örnek dosya arayüzden indirilebilir.
+
+Her sevkiyat için **en düşük emisyonlu** seçenek raporlanır — bu tam karayolu da olabilir.
+Rotalanamayan bir sevkiyat kendi satırında hatasıyla görünür, diğerlerini düşürmez.
+Rapor dosyasının başında hangi faktör seti ve kapsamla üretildiği yazar; kaynağı
+belirtilmeyen bir karbon rakamı alıcı tarafından denetlenemez.
 
 Haritada karayolu bacakları **gerçek OSRM güzergâhı**, deniz ve demiryolu bacakları
 **kesikli düz çizgi** olarak çizilir — bunlar şematiktir, ölçülmüş güzergâh değildir.
@@ -104,6 +116,8 @@ python -m pytest tests/ -q
 | `backend/app/core/uncertainty.py` | Monte Carlo belirsizlik aralığı |
 | `backend/app/main.py` | FastAPI girişi, arayüzü statik olarak sunar |
 | `backend/app/api/` | Pydantic şemaları ve REST uçları |
+| `backend/app/core/report.py` | Toplu sevkiyat dosyası → rapor |
+| `scripts/check_privacy.py` | Commit'e müşteri verisi sızmasını engelleyen kontrol |
 | `frontend/` | Tek sayfa arayüz (MapLibre + vanilla JS, derleme adımı yok) |
 | `backend/app/core/cache.py` | SQLite disk önbelleği — süreç yeniden başlasa da korunur |
 | `backend/app/core/geocode.py` | Nominatim sarmalayıcı, ülke adı normalleştirme, disk önbelleği |

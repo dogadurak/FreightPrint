@@ -32,6 +32,14 @@ ALLOWED = {
 
 MINIMUM_LENGTH = 4
 
+# Place names and report tags identify a customer. Postal codes in the same columns are
+# bare numbers that collide with timeouts and port numbers, and a digit string on its own
+# identifies nobody, so they are not searched for.
+NAME_COLUMNS = ("yukleme_sehir", "bosaltma_sehir", "kaynak_rapor", "servis_rotasi")
+
+# The reported figures are distinctive to two decimal places and would be a real leak.
+FIGURE_COLUMNS = ("toplam_co2_kg", "tam_karayolu_co2_kg", "tasarruf_co2_kg")
+
 
 def dataset_values() -> set[str]:
     if not DATASET.exists():
@@ -41,10 +49,15 @@ def dataset_values() -> set[str]:
 
     values = set()
     for row in rows:
-        for column in ("yukleme_sehir", "bosaltma_sehir", "kaynak_rapor", "servis_rotasi"):
+        for column in NAME_COLUMNS:
             value = row.get(column, "").strip().upper()
-            if len(value) >= MINIMUM_LENGTH and value not in ALLOWED:
+            if len(value) >= MINIMUM_LENGTH and value not in ALLOWED and not value.isdigit():
                 values.add(value)
+        for column in FIGURE_COLUMNS:
+            figure = row.get(column, "").strip()
+            # Only figures carrying decimals; a round number is not distinctive.
+            if "." in figure and float(figure) != 0:
+                values.add(figure)
     return values
 
 

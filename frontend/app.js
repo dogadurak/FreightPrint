@@ -22,7 +22,14 @@ function parsePoint(value) {
   return { lon, lat };
 }
 
+/** The map is a nice-to-have. Losing it must not take the calculator down with it. */
 function initMap() {
+  if (typeof maplibregl === "undefined") {
+    document.getElementById("map").innerHTML =
+      '<p class="map-unavailable">Harita kütüphanesi yüklenemedi (çevrimdışı olabilirsiniz). '
+      + "Hesaplama ve sonuç tablosu çalışmaya devam eder.</p>";
+    return;
+  }
   map = new maplibregl.Map({
     container: "map",
     style: {
@@ -80,6 +87,7 @@ async function loadTerminals() {
 }
 
 function clearRoute() {
+  if (!map) return;
   drawnLayers.forEach((id) => {
     if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource(id)) map.removeSource(id);
@@ -88,7 +96,7 @@ function clearRoute() {
 }
 
 function terminalCoordinate(name) {
-  const source = map.getSource("terminals");
+  const source = map && map.getSource("terminals");
   if (!source) return null;
   const match = source._data.features.find((f) => f.properties.name === name);
   return match ? match.geometry.coordinates : null;
@@ -96,13 +104,16 @@ function terminalCoordinate(name) {
 
 /** Draw one alternative. Legs without geometry are dashed: schematic, not surveyed. */
 function drawAlternative(alternative) {
+  if (!map) return;
   clearRoute();
   const bounds = new maplibregl.LngLatBounds();
 
   alternative.legs.forEach((leg, index) => {
     let coordinates = leg.geometry;
     if (!coordinates.length) {
-      const from = terminalCoordinate(leg.from_name.replace(" (ferry)", ""));
+      // A ferry inside a road leg has no endpoints of its own; the road leg it belongs
+      // to is already drawn, so there is nothing separate to show.
+      const from = terminalCoordinate(leg.from_name);
       const to = terminalCoordinate(leg.to_name);
       if (!from || !to) return;
       coordinates = [from, to];
@@ -227,7 +238,10 @@ function updateScopes() {
 }
 
 async function loadFactorSets() {
-  factorSets = await fetch("/api/factor-sets").then((r) => r.json());
+  const all = await fetch("/api/factor-sets").then((r) => r.json());
+  // A set without a factor for every mode can only ever answer with an error, so it is
+  // not offered as a choice.
+  factorSets = all.filter((set) => Object.keys(set.sea_factor_by_scope).length > 0);
   factorSelect.innerHTML = factorSets
     .map((set) => `<option value="${set.name}">${set.name}</option>`)
     .join("");
@@ -289,3 +303,43 @@ form.addEventListener("submit", async (event) => {
 
 initMap();
 loadFactorSets();
+
+const reportForm = document.getElementById("report-form");
+const reportStatus = document.getElementById("report-status");
+const reportSubmit = document.getElementById("report-submit");
+
+reportForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const body = new FormData(reportForm);
+  // The report is priced with whatever the panel above is set to, so one screen
+  // cannot hand back two different answers for the same shipment.
+  body.set("scope", scopeSelect.value);
+  body.set("factor_set", factorSelect.value);
+  const loadFactor = new FormData(form).get("load_factor");
+  const emptyReturn = new FormData(form).get("empty_return_share");
+  if (loadFactor) body.set("load_factor", loadFactor);
+  if (emptyReturn) body.set("empty_return_share", emptyReturn);
+
+  reportSubmit.disabled = true;
+  reportStatus.textContent = "Rapor hazırlanıyor — her sevkiyat ayrı rotalanıyor…";
+  try {
+    const response = await fetch("/api/report", { method: "POST", body });
+    if (!response.ok) {
+      const problem = await response.json().catch(() => ({}));
+      reportStatus.textContent = problem.detail ?? `İstek başarısız (${response.status}).`;
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "freightprint-rapor.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    reportStatus.textContent = "Rapor indirildi.";
+  } catch (error) {
+    reportStatus.textContent = `Sunucuya ulaşılamadı: ${error.message}`;
+  } finally {
+    reportSubmit.disabled = false;
+  }
+});

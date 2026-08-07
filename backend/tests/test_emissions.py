@@ -114,6 +114,24 @@ def test_saving_is_all_road_minus_multimodal():
     assert alternative.saving_co2_kg > 0
 
 
+def test_a_ferry_split_does_not_hand_its_figures_to_the_real_sea_leg():
+    """One route leg becoming two priced legs must not shuffle durations between them."""
+    route = _route(
+        "with ferry",
+        [
+            Leg("road", "A", "B", 200, ferry_km=40, duration_h=3.0),
+            Leg("sea", "B", "C", 2500, duration_h=60.0),
+        ],
+    )
+
+    legs = calculate_route_emission(route, tonnage=24).legs
+    by_distance = {round(leg.distance_km): leg for leg in legs}
+
+    assert by_distance[160].duration_h == 3.0
+    assert by_distance[40].duration_h is None
+    assert by_distance[2500].duration_h == 60.0
+
+
 def test_ferry_km_inside_a_road_leg_is_charged_at_the_sea_factor():
     route = _route("crete", [_leg("road", 643, ferry_km=137)])
     shipment = calculate_route_emission(route, tonnage=24)
@@ -229,10 +247,11 @@ def test_all_road_baseline_stays_first_even_when_it_emits_most():
 
 def test_tree_equivalent_uses_the_configured_species_factors():
     species = load_tree_factors()
-    trees = tree_equivalent(7717.68, species)
+    saving_kg = 5000.0
+    trees = tree_equivalent(saving_kg, species)
 
-    assert trees["average_tree"] == pytest.approx(7717.68 / 22.5)
-    assert trees["pinus_brutia"] == pytest.approx(7717.68 / 411.4)
+    assert trees["average_tree"] == pytest.approx(saving_kg / 22.5)
+    assert trees["pinus_brutia"] == pytest.approx(saving_kg / 411.4)
 
 
 def test_tree_equivalent_is_zero_when_the_alternative_emits_more():

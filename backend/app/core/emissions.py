@@ -42,13 +42,20 @@ class EmissionFactor:
 
 @dataclass(frozen=True)
 class ResolvedLeg:
-    """A route leg after ferry distance has been split out of its road distance."""
+    """A route leg after ferry distance has been split out of its road distance.
+
+    Duration and geometry travel with the leg rather than being matched back to the
+    route afterwards: a ferry split makes two priced legs from one route leg, and
+    pairing them up again by mode hands the ferry the sea leg's figures.
+    """
 
     mode: str
     distance_km: float
     from_name: str
     to_name: str
     is_ferry: bool = False
+    duration_h: float | None = None
+    geometry: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass
@@ -60,6 +67,8 @@ class LegEmission:
     tonnage: float
     factor: EmissionFactor
     co2_kg: float
+    duration_h: float | None = None
+    geometry: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass
@@ -161,14 +170,38 @@ def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
     resolved = []
     for leg in route.legs:
         if leg.mode == "road" and leg.ferry_km > 0:
+            # The road portion keeps the geometry and duration: OSRM reports them for the
+            # leg as a whole, and splitting them across the crossing would be invention.
             resolved.append(
-                ResolvedLeg("road", leg.distance_km - leg.ferry_km, leg.from_name, leg.to_name)
+                ResolvedLeg(
+                    mode="road",
+                    distance_km=leg.distance_km - leg.ferry_km,
+                    from_name=leg.from_name,
+                    to_name=leg.to_name,
+                    duration_h=leg.duration_h,
+                    geometry=leg.geometry,
+                )
             )
             resolved.append(
-                ResolvedLeg("sea", leg.ferry_km, f"{leg.from_name} (ferry)", leg.to_name, True)
+                ResolvedLeg(
+                    mode="sea",
+                    distance_km=leg.ferry_km,
+                    from_name=f"feribot ({leg.from_name}",
+                    to_name=f"{leg.to_name} icinde)",
+                    is_ferry=True,
+                )
             )
         else:
-            resolved.append(ResolvedLeg(leg.mode, leg.distance_km, leg.from_name, leg.to_name))
+            resolved.append(
+                ResolvedLeg(
+                    mode=leg.mode,
+                    distance_km=leg.distance_km,
+                    from_name=leg.from_name,
+                    to_name=leg.to_name,
+                    duration_h=leg.duration_h,
+                    geometry=leg.geometry,
+                )
+            )
     return resolved
 
 
@@ -225,7 +258,7 @@ def calculate_route_emission(
             warnings.append(f"unverified factor used: {factor.label} - {factor.notes}")
         if resolved.is_ferry:
             warnings.append(
-                f"{resolved.to_name} leg includes {resolved.distance_km:,.0f} km of ferry, "
+                f"{resolved.distance_km:,.0f} km of this road leg is a ferry crossing, "
                 "charged at the sea factor"
             )
 
@@ -239,6 +272,8 @@ def calculate_route_emission(
                 tonnage=tonnage,
                 factor=factor,
                 co2_kg=resolved.distance_km * tonnage * value,
+                duration_h=resolved.duration_h,
+                geometry=resolved.geometry,
             )
         )
 

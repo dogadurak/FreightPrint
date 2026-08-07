@@ -1,5 +1,6 @@
 import requests
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import PlainTextResponse
 
 from ..core.emissions import (
     FactorNotFoundError,
@@ -10,6 +11,7 @@ from ..core.emissions import (
     tree_equivalent,
 )
 from ..core.network import build_network, load_terminals
+from ..core.report import ReportInputError, build_report, parse_shipments, report_to_csv
 from ..core.road import RoadRoutingError
 from ..core.route import find_route_alternatives
 from ..core.uncertainty import load_band, round_to_significant, simulate_emission_range
@@ -75,33 +77,21 @@ def list_factor_sets() -> list[FactorSetOut]:
     return sets
 
 
-def _leg_out(leg_emission, route_leg) -> LegOut:
+def _leg_out(leg) -> LegOut:
+    """Duration and geometry come straight off the priced leg, not matched back to the
+    route: a ferry split makes two priced legs from one route leg, and re-pairing them
+    by mode handed the ferry the sea leg's figures."""
     return LegOut(
-        mode=leg_emission.mode,
-        from_name=leg_emission.from_name,
-        to_name=leg_emission.to_name,
-        distance_km=round(leg_emission.distance_km, 1),
-        co2_kg=round_to_significant(leg_emission.co2_kg),
-        duration_h=round(route_leg.duration_h, 2) if route_leg and route_leg.duration_h else None,
-        factor_value=leg_emission.factor.value,
-        factor_source=leg_emission.factor.source,
-        geometry=[list(point) for point in (route_leg.geometry if route_leg else ())],
+        mode=leg.mode,
+        from_name=leg.from_name,
+        to_name=leg.to_name,
+        distance_km=round(leg.distance_km, 1),
+        co2_kg=round_to_significant(leg.co2_kg),
+        duration_h=round(leg.duration_h, 2) if leg.duration_h else None,
+        factor_value=leg.factor.value,
+        factor_source=leg.factor.source,
+        geometry=[list(point) for point in leg.geometry],
     )
-
-
-def _match_route_leg(route, leg_emission, used: set[int]):
-    """Pair a priced leg back to the route leg it came from.
-
-    A road leg carrying a ferry becomes two priced legs, so the pairing is by name and
-    mode rather than position, and each route leg is only claimed once.
-    """
-    for index, leg in enumerate(route.legs):
-        if index in used:
-            continue
-        if leg.mode == leg_emission.mode or (leg.mode == "road" and leg.ferry_km > 0):
-            used.add(index)
-            return leg
-    return None
 
 
 @router.post("/routes", response_model=RouteResponse)
@@ -145,8 +135,7 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
 
     alternatives = []
     for route, shipment in ranked:
-        used: set[int] = set()
-        legs = [_leg_out(leg, _match_route_leg(route, leg, used)) for leg in shipment.legs]
+        legs = [_leg_out(leg) for leg in shipment.legs]
 
         emission_range = None
         try:
@@ -214,4 +203,57 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
         sources=sources,
         alternatives=alternatives,
         warnings=warnings,
+    )
+
+
+MAX_UPLOAD_BYTES = 2_000_000
+
+
+@router.post("/report", response_class=PlainTextResponse)
+def bulk_report(
+    file: UploadFile = File(..., description="CSV of shipments"),
+    scope: str = Form("TTW"),
+    factor_set: str = Form("reference"),
+    road_fuel_type: str | None = Form(None),
+    load_factor: float | None = Form(None),
+    empty_return_share: float | None = Form(None),
+) -> PlainTextResponse:
+    """Price a file of shipments and hand back the report as a downloadable CSV."""
+    if scope not in {"TTW", "WTW"}:
+        raise HTTPException(status_code=422, detail=f"scope must be TTW or WTW, got {scope!r}")
+
+    raw = file.file.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"file exceeds {MAX_UPLOAD_BYTES} bytes")
+    try:
+        content = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise HTTPException(status_code=422, detail=f"file must be UTF-8 text: {error}") from error
+
+    try:
+        shipments = parse_shipments(content)
+    except ReportInputError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    try:
+        report = build_report(
+            shipments,
+            scope=scope,
+            factor_set=factor_set,
+            road_fuel_type=road_fuel_type,
+            load_factor=load_factor,
+            empty_return_share=empty_return_share,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    # Every shipment failing means the settings are wrong, not the data.
+    if shipments and not report.calculated:
+        detail = report.rows[0].status if report.rows else "no shipment could be calculated"
+        raise HTTPException(status_code=422, detail=detail)
+
+    return PlainTextResponse(
+        content=report_to_csv(report),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="freightprint-report.csv"'},
     )
