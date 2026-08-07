@@ -5,7 +5,7 @@ import networkx as nx
 
 from .network import Terminal, build_network, load_terminals, nearest_terminals
 from .road import road_route
-from .sea import sea_distance
+from .sea import SeaRoutingError, sea_route
 
 ORIGIN_NODE = "__origin__"
 DESTINATION_NODE = "__destination__"
@@ -25,6 +25,8 @@ class Leg:
     computed_distance_km: float | None = None
     ferry_km: float = 0.0
     geometry: tuple[tuple[float, float], ...] = ()
+    # Chokepoints a sea leg transits, from searoute's own edge labels.
+    passages: tuple[str, ...] = ()
     notes: list[str] = field(default_factory=list)
 
 
@@ -140,16 +142,34 @@ def _drop_dominated(routes: list[RouteAlternative], tolerance_km: float) -> list
     ]
 
 
-def _add_computed_sea_distances(route: RouteAlternative, terminals: dict[str, Terminal]) -> None:
+def _add_sea_tracks(
+    route: RouteAlternative, terminals: dict[str, Terminal], compare_distances: bool
+) -> None:
+    """Attach each sea leg's track and the chokepoints it crosses.
+
+    The distance stays the reference one — searoute's is unusable wherever it cuts the
+    Corinth Canal. The track is still worth keeping: it is what the map draws and what
+    risk zones are intersected against, and an approximate line is enough for both.
+    """
     for leg in route.legs:
-        if leg.mode != "sea":
+        if leg.mode != "sea" or not leg.from_id or not leg.to_id:
             continue
-        computed = sea_distance(terminals[leg.from_id].coords, terminals[leg.to_id].coords)
-        leg.computed_distance_km = computed.distance_km
+        try:
+            computed = sea_route(terminals[leg.from_id].coords, terminals[leg.to_id].coords)
+        except SeaRoutingError as error:
+            # A leg without a track still has its reference distance, so the alternative
+            # stays usable; only the map line and the risk check are lost.
+            leg.notes.append(f"sea track unavailable for {leg.from_name}->{leg.to_name}: {error}")
+            continue
+
+        leg.geometry = tuple((point[0], point[1]) for point in computed.geometry)
+        leg.passages = tuple(computed.passages)
+        if compare_distances:
+            leg.computed_distance_km = computed.distance_km
         if not computed.is_realistic:
             leg.notes.append(
                 f"searoute route {leg.from_name}->{leg.to_name} crosses the Corinth Canal; "
-                "computed distance is not usable"
+                "its distance is not usable and the drawn track is indicative only"
             )
 
 
@@ -160,6 +180,7 @@ def find_route_alternatives(
     destination_name: str = "destination",
     candidate_terminals: int = 3,
     compare_computed_distances: bool = False,
+    with_sea_tracks: bool = True,
     dominance_tolerance_km: float = 1.0,
 ) -> list[RouteAlternative]:
     """Find multimodal alternatives between two arbitrary (lon, lat) points.
@@ -194,8 +215,8 @@ def find_route_alternatives(
             multimodal.append(route)
 
     surviving = _drop_dominated(multimodal, dominance_tolerance_km)
-    if compare_computed_distances:
+    if with_sea_tracks or compare_computed_distances:
         for route in surviving:
-            _add_computed_sea_distances(route, terminals)
+            _add_sea_tracks(route, terminals, compare_computed_distances)
 
     return ([all_road] if all_road else []) + surviving

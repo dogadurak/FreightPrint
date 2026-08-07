@@ -1,0 +1,71 @@
+{
+  "type": "FeatureCollection",
+  "name": "risk_zones",
+  "note": "Hand-digitised from the Joint War Committee Hull War, Piracy, Terrorism and Related Perils Listed Areas (JWLA-033, 3 March 2026), published as a PDF with coordinates; the JWC issues no machine-readable version. Boundaries here are simplified rectangles that capture each area's extent, not its exact legal outline: they are for showing whether a route enters a listed area, never for underwriting. Re-digitise when a new JWLA is issued.",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "southern_red_sea",
+        "name": "Güney Kızıldeniz ve Aden Körfezi",
+        "zone_type": "war_risk",
+        "source": "JWC Listed Areas JWLA-033",
+        "valid_from": "2026-03-03",
+        "valid_to": null,
+        "chokepoints": ["babalmandab", "suez"]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[32.0, 12.0], [52.0, 12.0], [52.0, 20.0], [32.0, 20.0], [32.0, 12.0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "gulf_of_aden_indian_ocean",
+        "name": "Aden Körfezi ve Kuzeybatı Hint Okyanusu",
+        "zone_type": "war_risk",
+        "source": "JWC Listed Areas JWLA-033",
+        "valid_from": "2026-03-03",
+        "valid_to": null,
+        "chokepoints": ["babalmandab"]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[43.0, -2.0], [65.0, -2.0], [65.0, 15.0], [43.0, 15.0], [43.0, -2.0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "persian_gulf_hormuz",
+        "name": "Basra Körfezi ve Hürmüz Boğazı",
+        "zone_type": "war_risk",
+        "source": "JWC Listed Areas JWLA-033",
+        "valid_from": "2026-03-03",
+        "valid_to": null,
+        "chokepoints": ["ormuz"]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[47.0, 23.0], [60.0, 23.0], [60.0, 30.5], [47.0, 30.5], [47.0, 23.0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "black_sea_ukraine",
+        "name": "Karadeniz — Ukrayna ve Romanya suları",
+        "zone_type": "war_risk",
+        "source": "JWC Listed Areas JWLA-033",
+        "valid_from": "2026-03-03",
+        "valid_to": null,
+        "chokepoints": ["bosporus"]
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[29.5, 43.3], [41.0, 43.3], [41.0, 47.0], [29.5, 47.0], [29.5, 43.3]]]
+      }
+    }
+  ]
+}

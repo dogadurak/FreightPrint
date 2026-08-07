@@ -83,13 +83,14 @@ def test_a_negative_saving_is_reported_rather_than_hidden(client):
             assert set(alternative["tree_equivalent"].values()) == {0}
 
 
-def test_road_legs_carry_geometry_and_other_modes_do_not(client):
-    """The map draws real geometry where it exists and a schematic line where it does not."""
+def test_road_and_sea_legs_carry_geometry_but_rail_does_not(client):
+    """Sea tracks come from searoute; rail has no computed geometry, so it stays schematic."""
     payload = _post(client).json()
     legs = [leg for a in payload["alternatives"] for leg in a["legs"]]
 
     assert any(leg["mode"] == "road" and leg["geometry"] for leg in legs)
-    assert all(not leg["geometry"] for leg in legs if leg["mode"] in {"sea", "rail"})
+    assert any(leg["mode"] == "sea" and leg["geometry"] for leg in legs)
+    assert all(not leg["geometry"] for leg in legs if leg["mode"] == "rail")
 
 
 def test_max_alternatives_trims_after_ranking_by_emissions(client):
