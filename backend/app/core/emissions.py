@@ -25,6 +25,15 @@ class EmissionFactor:
     year: int
     is_verified: bool
     notes: str
+    # Utilisation the published value already accounts for. Without these the same
+    # correction gets applied twice: once by whoever published the factor, once by us.
+    basis_load_factor: float = 1.0
+    basis_empty_share: float = 0.0
+
+    @property
+    def value_at_full_load(self) -> float:
+        """The factor with the publisher's own utilisation assumptions removed."""
+        return self.value * self.basis_load_factor / (1 + self.basis_empty_share)
 
     @property
     def label(self) -> str:
@@ -96,6 +105,8 @@ def load_emission_factors(path: Path | None = None) -> list[EmissionFactor]:
                 year=int(row["year"]),
                 is_verified=row["is_verified"].strip().lower() == "yes",
                 notes=row["notes"],
+                basis_load_factor=float(row["basis_load_factor"]),
+                basis_empty_share=float(row["basis_empty_share"]),
             )
             for row in csv.DictReader(f)
         ]
@@ -114,19 +125,31 @@ def find_factor(
     fuel_type: str | None = None,
     factor_set: str = DEFAULT_FACTOR_SET,
 ) -> EmissionFactor:
-    """Look up a factor, falling back to other factor sets only when fuel is requested."""
-    matches = [f for f in factors if f.mode == mode and f.scope == scope]
+    """Look up exactly one factor within the requested set.
+
+    A miss is an error, never a quiet fall back to another set: a report that says it
+    priced with GLEC while a leg came from somewhere else misstates its own source, and
+    that is the one thing a standards claim cannot survive. Ambiguity is refused for the
+    same reason — silently taking the first of several matches is a guess, not a lookup.
+    """
+    in_set = [f for f in factors if f.factor_set == factor_set and f.mode == mode]
+    matches = [f for f in in_set if f.scope == scope]
     if fuel_type is not None:
         matches = [f for f in matches if f.fuel_type == fuel_type]
-    else:
-        matches = [f for f in matches if f.factor_set == factor_set]
 
     if not matches:
+        available = sorted({f.fuel_type for f in in_set if f.scope == scope})
+        detail = f"; {mode} fuels in this set: {', '.join(available)}" if available else ""
         raise FactorNotFoundError(
-            f"no {scope} factor for mode={mode} fuel={fuel_type} in set={factor_set}"
+            f"no {scope} factor for mode={mode} fuel={fuel_type} in set={factor_set}{detail}"
         )
-    preferred = [f for f in matches if f.factor_set == factor_set]
-    return (preferred or matches)[0]
+    if len(matches) > 1:
+        options = ", ".join(sorted(f"{f.vehicle_type}/{f.fuel_type}" for f in matches))
+        raise FactorNotFoundError(
+            f"{len(matches)} {scope} factors match mode={mode} in set={factor_set}: {options}. "
+            "Pass a fuel type to choose one."
+        )
+    return matches[0]
 
 
 def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
@@ -150,19 +173,30 @@ def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
 
 
 def effective_factor_value(
-    factor: EmissionFactor, load_factor: float = 1.0, empty_return_share: float = 0.0
+    factor: EmissionFactor,
+    load_factor: float | None = None,
+    empty_return_share: float | None = None,
 ) -> float:
-    """Adjust a published per-ton-km factor for utilisation and empty running.
+    """Reprice a published factor for utilisation the caller knows better than its publisher.
 
-    A half-loaded vehicle burns nearly the same fuel while carrying half the cargo, so
-    its emissions per ton-km roughly double. Empty return distance is allocated to the
-    loaded trip, which is why it scales the factor rather than the payload.
+    A half-loaded vehicle burns nearly the same fuel while carrying half the cargo, so its
+    emissions per ton-km roughly double. Empty return distance is allocated to the loaded
+    trip, which is why it scales the factor rather than the payload.
+
+    Published factors already assume some utilisation, so the publisher's assumption is
+    removed before the caller's is applied. Passing neither returns the factor as
+    published, which is what its source recommends for a default.
     """
-    if not 0 < load_factor <= 1:
+    if load_factor is None and empty_return_share is None:
+        return factor.value
+    if load_factor is not None and not 0 < load_factor <= 1:
         raise ValueError(f"load_factor must be in (0, 1], got {load_factor}")
-    if not 0 <= empty_return_share <= 1:
+    if empty_return_share is not None and not 0 <= empty_return_share <= 1:
         raise ValueError(f"empty_return_share must be in [0, 1], got {empty_return_share}")
-    return factor.value / load_factor * (1 + empty_return_share)
+
+    load = load_factor if load_factor is not None else factor.basis_load_factor
+    empty = empty_return_share if empty_return_share is not None else factor.basis_empty_share
+    return factor.value_at_full_load / load * (1 + empty)
 
 
 def calculate_route_emission(
@@ -171,8 +205,8 @@ def calculate_route_emission(
     scope: str = DEFAULT_SCOPE,
     road_fuel_type: str | None = None,
     factor_set: str = DEFAULT_FACTOR_SET,
-    load_factor: float = 1.0,
-    empty_return_share: float = 0.0,
+    load_factor: float | None = None,
+    empty_return_share: float | None = None,
     factors: list[EmissionFactor] | None = None,
 ) -> ShipmentEmission:
     factors = factors if factors is not None else load_emission_factors()
@@ -224,8 +258,8 @@ def calculate_shipment(
     scope: str = DEFAULT_SCOPE,
     road_fuel_type: str | None = None,
     factor_set: str = DEFAULT_FACTOR_SET,
-    load_factor: float = 1.0,
-    empty_return_share: float = 0.0,
+    load_factor: float | None = None,
+    empty_return_share: float | None = None,
 ) -> list[ShipmentEmission]:
     """Emissions for every alternative, each compared against the all-road baseline."""
     factors = load_emission_factors()

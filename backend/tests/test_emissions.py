@@ -1,6 +1,7 @@
 import pytest
 
 from app.core.emissions import (
+    FactorNotFoundError,
     calculate_route_emission,
     calculate_shipment,
     effective_factor_value,
@@ -125,9 +126,43 @@ def test_ferry_km_inside_a_road_leg_is_charged_at_the_sea_factor():
 
 def test_unverified_factor_raises_a_warning_instead_of_passing_silently():
     route = _route("hvo", [_leg("road", 100)])
-    shipment = calculate_route_emission(route, tonnage=24, road_fuel_type="hvo")
+    shipment = calculate_route_emission(
+        route, tonnage=24, road_fuel_type="hvo", factor_set="placeholder"
+    )
 
     assert any("unverified factor" in warning for warning in shipment.warnings)
+
+
+def test_a_fuel_missing_from_the_requested_set_is_an_error_not_another_set():
+    """Falling back would price a leg from a set the report does not name."""
+    with pytest.raises(FactorNotFoundError, match="diesel_b5"):
+        calculate_route_emission(
+            _route("x", [_leg("road", 100)]), tonnage=24, road_fuel_type="hvo", factor_set="glec"
+        )
+
+
+def test_an_ambiguous_lookup_is_refused_rather_than_guessed():
+    """Two rows matching means the caller has not said enough to pick one."""
+    factors = load_emission_factors()
+
+    with pytest.raises(FactorNotFoundError, match="Pass a fuel type"):
+        find_factor(factors, "road", factor_set="placeholder")
+
+
+def test_published_utilisation_is_not_applied_twice():
+    """GLEC road already assumes 72% load and 30% empty; restating it must not double it."""
+    factor = find_factor(load_emission_factors(), "road", factor_set="glec")
+
+    assert effective_factor_value(factor) == factor.value
+    assert effective_factor_value(factor, load_factor=0.72, empty_return_share=0.30) == (
+        pytest.approx(factor.value)
+    )
+
+
+def test_a_fuller_load_than_the_publisher_assumed_lowers_the_factor():
+    factor = find_factor(load_emission_factors(), "road", factor_set="glec")
+
+    assert effective_factor_value(factor, load_factor=1.0, empty_return_share=0.0) < factor.value
 
 
 def test_partial_load_raises_emissions_per_ton_km():
@@ -224,10 +259,18 @@ def test_range_brackets_the_point_estimate_priced_at_the_same_band(load_uncertai
     ).total_co2_kg
 
     result = simulate_emission_range(
-        route, tonnage=24, load_uncertainty=load_uncertainty, seed=0
+        route, tonnage=24, load_factor=1.0, load_uncertainty=load_uncertainty, seed=0
     )
 
     assert result.low_co2_kg <= point <= result.high_co2_kg
+
+
+def test_load_uncertainty_without_a_load_factor_is_refused():
+    """Each factor carries its own published basis, so there is no single band to vary."""
+    route = _route("via sea", [_leg("sea", 2500)])
+
+    with pytest.raises(ValueError, match="explicit load_factor"):
+        simulate_emission_range(route, tonnage=24, load_uncertainty=0.2)
 
 
 def test_load_band_is_clipped_at_full_capacity():

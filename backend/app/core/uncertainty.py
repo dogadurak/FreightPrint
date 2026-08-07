@@ -56,7 +56,7 @@ def simulate_emission_range(
     route: RouteAlternative,
     tonnage: float,
     distance_uncertainty: float = 0.05,
-    load_factor: float = 1.0,
+    load_factor: float | None = None,
     load_uncertainty: float = 0.0,
     empty_return_share: float = 0.0,
     scope: str = DEFAULT_SCOPE,
@@ -76,7 +76,12 @@ def simulate_emission_range(
         raise ValueError(f"confidence must be in (0, 1), got {confidence}")
     if not 0 <= distance_uncertainty < 1:
         raise ValueError(f"distance_uncertainty must be in [0, 1), got {distance_uncertainty}")
-    lowest_load, highest_load = load_band(load_factor, load_uncertainty)
+    if load_factor is None and load_uncertainty:
+        raise ValueError("load_uncertainty needs an explicit load_factor to vary around")
+
+    # Without an explicit load factor each leg keeps its own published basis, and there
+    # is no single utilisation to sample: only distance varies.
+    band = load_band(load_factor, load_uncertainty) if load_factor is not None else None
 
     factors = factors if factors is not None else load_emission_factors()
     leg_inputs = [
@@ -96,7 +101,7 @@ def simulate_emission_range(
     rng = random.Random(seed)
     totals = []
     for _ in range(samples):
-        sampled_load = rng.uniform(lowest_load, highest_load)
+        sampled_load = rng.uniform(*band) if band is not None else None
         total = 0.0
         for distance_km, factor in leg_inputs:
             sampled_km = rng.triangular(

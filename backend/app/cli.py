@@ -40,8 +40,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="which factor set to price with, e.g. reference or glec",
     )
     parser.add_argument("--fuel", default=None, help="road fuel type, e.g. diesel, hvo, lng")
-    parser.add_argument("--load-factor", type=float, default=1.0, help="0-1 vehicle utilisation")
-    parser.add_argument("--empty-return", type=float, default=0.0, help="empty return share, 0-1")
+    parser.add_argument(
+        "--load-factor",
+        type=float,
+        default=None,
+        help="0-1 vehicle utilisation; defaults to each factor's published basis",
+    )
+    parser.add_argument(
+        "--empty-return",
+        type=float,
+        default=None,
+        help="empty return share 0-1; defaults to each factor's published basis",
+    )
     parser.add_argument(
         "--load-uncertainty",
         type=float,
@@ -97,8 +107,8 @@ def main() -> None:
 
     try:
         # Price the point estimate at the middle of the same band the range explores.
-        lowest_load, highest_load = load_band(args.load_factor, args.load_uncertainty)
-        expected_load = (lowest_load + highest_load) / 2
+        band = load_band(args.load_factor, args.load_uncertainty) if args.load_factor else None
+        expected_load = sum(band) / 2 if band else None
 
         shipments = calculate_shipment(
             routes,
@@ -121,9 +131,9 @@ def main() -> None:
         if f.factor_set == args.factor_set and f.scope == args.scope and f.is_verified
     }
 
-    print(f"Sevkiyat: {args.tonnage:g} ton | kapsam: {args.scope} | "
-          f"doluluk: {lowest_load:.2f}-{highest_load:.2f} (ortalama {expected_load:.2f}) | "
-          f"bos donus: {args.empty_return:g}")
+    doluluk = f"{band[0]:.2f}-{band[1]:.2f}" if band else "fakt. yayin bazi"
+    bos = f"{args.empty_return:g}" if args.empty_return is not None else "fakt. yayin bazi"
+    print(f"Sevkiyat: {args.tonnage:g} ton | doluluk: {doluluk} | bos donus: {bos}")
     print(f"Faktor seti: {args.factor_set} | kapsam: {args.scope} | "
           f"kaynak: {'; '.join(sorted(sources)) or 'DOGRULANMAMIS'}")
 

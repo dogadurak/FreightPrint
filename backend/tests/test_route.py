@@ -1,7 +1,7 @@
 import pytest
 
 from app.core import road, route
-from app.core.network import haversine_km, load_terminals
+from app.core.network import build_network, haversine_km, load_terminals
 from app.core.road import RoadRoute
 from app.core.route import Leg, RouteAlternative, find_route_alternatives
 
@@ -48,6 +48,27 @@ def test_routes_differing_only_within_tolerance_are_not_dropped():
     second = _route("b", sea=2500, road=20.5)
 
     assert len(route._drop_dominated([first, second], tolerance_km=1.0)) == 2
+
+
+def test_terminals_without_a_service_are_named_rather_than_silently_ignored():
+    """A terminal no service reaches can never be routed through, so it is dead data.
+
+    Ambarli is listed in the brief but has no service leg, and routing quietly skips it.
+    This keeps that visible: connect it or drop it, do not let it look supported.
+    """
+    terminals = load_terminals()
+    graph = build_network(terminals)
+    unconnected = {terminals[node].name for node in graph.nodes if graph.degree(node) == 0}
+
+    assert unconnected == {"Ambarli"}
+
+
+def test_a_destination_off_the_network_still_gets_the_all_road_baseline(offline_road):
+    """No multimodal option is an answer, not an error: the baseline always stands."""
+    routes = find_route_alternatives((29.43, 40.78), (-9.14, 38.72))
+
+    assert routes
+    assert routes[0].is_all_road
 
 
 def test_all_road_baseline_is_first_and_uses_only_road(offline_road):

@@ -131,19 +131,34 @@ Faktörler koda gömülü değil — `data/emission_factors.csv` her satırda ka
 kapsamını (TTW/WTW) ve **doğrulanmış olup olmadığını** taşır. Doğrulanmamış bir faktör
 kullanıldığında çıktıya uyarı düşer.
 
-İki doğrulanmış faktör seti var:
+Doğrulanmış faktör setleri:
 
-| Set | Kapsam | Kaynak |
-|---|---|---|
-| `reference` | TTW | Müşteri raporunun kendi değerleri — karşılaştırma için |
-| `glec` | TTW + WTW | GLEC Framework 2019 (Tem 2022), Tablo 38/42/45 |
+| Set | Kapsam | Deniz esası | Kaynak |
+|---|---|---|---|
+| `reference` | TTW | 0,012 | Müşteri raporunun kendi değerleri — karşılaştırma için |
+| `glec` | TTW + WTW | 0,063 refakatsiz | GLEC Framework 2019 (Tem 2022), Tablo 38/42/45 |
+| `glec_accompanied` | TTW + WTW | 0,093 refakatli | Çekici ve şoför de gemide |
+| `glec_freight_average` | TTW + WTW | 0,042 filo ort. | Clean Shipping Index ölçümü |
 
 ```bash
 python -m app.cli --origin=... --destination=... --factor-set glec --scope WTW
 ```
 
-HVO/LNG/elektrik satırları hâlâ `PLACEHOLDER`. LNG için `glec` setinde gerçek değer var
-(0,062 TTW / 0,079 WTW); diğerleri rapora girmeden önce değiştirilmelidir.
+**Refakatli/refakatsiz seçimi sonucun işaretini değiştirir** — bu yüzden gizli bir varsayım
+değil, ayrı bir faktör seti olarak açıkta duruyor.
+
+Bir faktör istenen sette yoksa sistem **hata verir**, başka sete düşmez. Çıktının "GLEC ile
+hesaplandı" deyip bir bacağı başka yerden alması, standart iddiası taşıyan bir üründe
+kabul edilemez.
+
+### Doluluk oranı ve çift sayım
+
+Yayınlanmış faktörler kendi doluluk varsayımlarını zaten içerir — GLEC karayolu satırı %72
+doluluk ve %30 boş dönüş varsayıyor. Bu değerler `basis_load_factor` ve `basis_empty_share`
+sütunlarında tutulur; `--load-factor` verdiğinizde önce yayıncının varsayımı **çıkarılır**,
+sonra sizinki uygulanır. İkisi birden uygulanırsa faktör 1,8 katına çıkardı.
+
+Hiçbir şey vermezseniz faktör yayınlandığı hâliyle kullanılır — kaynağının önerdiği budur.
 
 ## Doğrulama
 
@@ -204,7 +219,14 @@ rotası ve mesafe geçer; sevkiyat satırları, müşteri adları ve tonajlar ge
   yoluna dâhil edilmedi.
 - **Referans mesafeler kendi aralarında çelişiyor.** `data/service_legs.csv` Pendik–Bari
   için 1755 km diyor, doğrulama veri seti aynı bacak için 1825 km. Hangisinin doğru
-  olduğu henüz belirlenmedi.
+  olduğu henüz belirlenmedi — kendi deniz mesafemizi hesaplamadan hakem yok.
+- **Ambarlı hiçbir servise bağlı değil.** Brifingde terminal olarak listeli ama servis
+  bacağı yok, dolayısıyla rotalamaya hiç girmiyor. Bir test bunu görünür tutuyor.
+- **Süre ve servis sıklığı veri modelinde yok.** `service_legs.csv` yalnızca mesafe
+  taşıyor; deniz ve demiryolu bacaklarının transit süresi hesaplanmıyor, bu yüzden
+  "en hızlı rota" sorusu henüz cevaplanamıyor.
+- **Belirsizlik her moda aynı bandı uyguluyor.** Karayolu sapması %1,9 ölçüldü ama deniz
+  sapması %12–43; ikisine de aynı %5 verilmesi en belirsiz bacakta sahte güven üretiyor.
 - **`reference` seti WTW desteklemez.** Müşteri raporu yalnızca TTW değerleri verdiği için
   `--scope WTW` bu setle çalışmaz; `--factor-set glec` kullanın.
 - **Demiryolu için dizel çekiş varsayılıyor.** GLEC'in dizel satırı hem TTW hem WTW verdiği
