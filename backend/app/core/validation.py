@@ -85,7 +85,8 @@ class EmissionComparison:
 
     def implied_road_km(self, road_factor: float) -> float:
         """Road km the reported CO2 implies, holding sea and rail at their stated values."""
-        non_road_kg = self.recalculated_co2_kg - self.record.road_km * self.record.tonnage * road_factor
+        road_kg = self.record.road_km * self.record.tonnage * road_factor
+        non_road_kg = self.recalculated_co2_kg - road_kg
         return (self.reported_co2_kg - non_road_kg) / (self.record.tonnage * road_factor)
 
 
@@ -162,5 +163,14 @@ def compare_all_road_baseline(records: list[ShipmentRecord]) -> list[EmissionCom
 
 
 def mean_absolute_percentage_error(comparisons: list[EmissionComparison]) -> float:
-    differences = [abs(c.relative_difference) for c in comparisons if c.relative_difference]
-    return mean(differences) if differences else 0.0
+    """Mean absolute relative error. Exact matches count as the zeros they are.
+
+    Dropping zero-error rows would report the error of the worst rows alone, and an
+    empty input would report a perfect score, so both are refused instead.
+    """
+    differences = [
+        abs(c.relative_difference) for c in comparisons if c.relative_difference is not None
+    ]
+    if not differences:
+        raise ValueError("no comparison carried a reported value to measure against")
+    return mean(differences)

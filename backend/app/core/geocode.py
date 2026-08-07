@@ -31,6 +31,11 @@ COUNTRY_ALIASES = {
 }
 
 
+# Upper-casing a Turkish dotted capital leaves it distinct from a plain I, which would
+# file the same city under two cache keys.
+CASE_FOLD = str.maketrans({"İ": "I", "ı": "i", "Ş": "S", "ş": "s", "Ğ": "G", "ğ": "g"})
+
+
 class GeocodingError(RuntimeError):
     pass
 
@@ -38,7 +43,26 @@ class GeocodingError(RuntimeError):
 def normalise_country(value: str) -> str:
     """Map the dataset's mixed country spellings onto ISO 3166-1 alpha-2 codes."""
     cleaned = value.strip()
-    return COUNTRY_ALIASES.get(cleaned.lower(), cleaned.upper())
+    if alias := COUNTRY_ALIASES.get(cleaned.lower()):
+        return alias
+    if len(cleaned) != 2:
+        raise GeocodingError(
+            f"unknown country {value!r}; add it to COUNTRY_ALIASES rather than guessing"
+        )
+    return cleaned.upper()
+
+
+def _cache_key(place: str, country_code: str) -> str:
+    return f"{country_code}|{place.strip().translate(CASE_FOLD).upper()}"
+
+
+def looks_like_postal_code(place: str) -> bool:
+    """Postal codes must go to Nominatim's `postalcode` field, not its free-text search.
+
+    Free-text search happily returns a same-named village hundreds of kilometres from
+    the town a postal code actually denotes, and does so without any error.
+    """
+    return any(character.isdigit() for character in place)
 
 
 def _load_cache() -> dict[str, list[float] | None]:
@@ -60,7 +84,7 @@ def geocode(place: str, country: str, cache: dict | None = None) -> tuple[float,
     public service for places it already knows are unresolvable.
     """
     country_code = normalise_country(country)
-    key = f"{country_code}|{place.strip().upper()}"
+    key = _cache_key(place, country_code)
 
     owns_cache = cache is None
     cache = _load_cache() if owns_cache else cache
@@ -68,9 +92,15 @@ def geocode(place: str, country: str, cache: dict | None = None) -> tuple[float,
         hit = cache[key]
         return tuple(hit) if hit else None
 
+    query = {"postalcode" if looks_like_postal_code(place) else "q": place.strip()}
     response = requests.get(
         NOMINATIM_URL,
-        params={"q": place, "countrycodes": country_code.lower(), "format": "json", "limit": 1},
+        params={
+            **query,
+            "countrycodes": country_code.lower(),
+            "format": "json",
+            "limit": 1,
+        },
         headers={"User-Agent": USER_AGENT},
         timeout=REQUEST_TIMEOUT_S,
     )

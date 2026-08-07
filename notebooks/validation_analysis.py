@@ -181,6 +181,18 @@ plt.show()
 # Sapma dar bir bantta ve sıfır etrafında toplanıyor. Kalan fark iki bilinen sebepten
 # geliyor: şehir merkezine coğrafi kodlama (rapor tesis adresini kullanmış olabilir) ve
 # rota tercihi farkları (ücretli yol, kamyon kısıtları).
+#
+# **Bu metriğin iki sınırı var:**
+#
+# 1. Dört satır karşılaştırmaya girmiyor, çünkü varış posta kodu kaynak veride eksik
+#    ya da hatalı yazılmış: biri ülkesinin gerektirdiği hane sayısından kısa, biri
+#    zorunlu harf ekini taşımıyor, biri de bir CEDEX (kurumsal dağıtım) kodu.
+#    Bunlar yanlış bir konuma zorlanmak yerine çözümsüz bırakıldı — hatalı bir
+#    koordinat, sessizce MAPE'yi bozardı.
+# 2. Bir varış noktasının adı ülkesinde birden fazla yerleşime karşılık geliyor.
+#    Nominatim'in seçtiği aday −%3,3 sapma verirken, otoyol üzerindeki lojistik
+#    merkezi olan diğer aday −%10,3 verir ve "hepsi %10 içinde" ifadesini kırar.
+#    Hangisinin kastedildiği kaynak veriden anlaşılmıyor.
 
 # %% [markdown]
 # ## 5. Deniz mesafeleri — searoute'un Korint Kanalı sorunu
@@ -214,9 +226,17 @@ print(f"Korint geçmeyen bacaklarda MAPE : %{mean(clean):.1f}  (n={len(clean)})"
 print(f"Korint geçen bacaklarda MAPE    : %{mean(crossing):.1f}  (n={len(crossing)})")
 
 # %% [markdown]
-# Kanaldan geçmeyen tek bacak **%4,2**, geçenler **%21,9** sapıyor — beş kat fark.
-# Bu, hatanın searoute'un genel yanlışlığından değil, spesifik olarak bu kısayoldan
-# kaynaklandığını gösterir.
+# Kanaldan geçmeyen tek bacak **%4,2**, geçenler **%21,9** sapıyor.
+#
+# **Bu sonuç dikkatle okunmalı.** Kontrol grubu tek bir bacaktan (n=1) ibaret ve o bacak
+# (Trieste–Patras) ağdaki tek Adriyatik-içi bağlantı. Yani "Korint'ten geçiyor" ile
+# "Marmara/Doğu Akdeniz çıkışlı" değişkenleri tamamen çakışık — bu veriyle ikisi
+# birbirinden ayrılamaz. Ayrıca %21,9'un büyük kısmını tek bir uç değer taşıyor
+# (Pendik–Patras, −%42,8).
+#
+# Dolayısıyla bu tablo Korint kısayolunun sorunlu olduğuna **işaret eder**, ama tek
+# başına kanıtlamaz. Kanıt Faz 0'daki doğrudan gözlemdir: rota koordinatları kanalın
+# üzerinden geçiyor ve searoute'un `restrictions` parametresi bu geçişi engellemiyor.
 #
 # Sistem bu yüzden servis bacaklarında referans mesafeyi esas alır; searoute değeri
 # yalnızca karşılaştırma için hesaplanır ve kanaldan geçen rotalar "kullanılamaz"
@@ -227,17 +247,27 @@ print(f"Korint geçen bacaklarda MAPE    : %{mean(crossing):.1f}  (n={len(crossi
 #
 # | Ölçüt | Hedef | Sonuç |
 # |---|---|---|
-# | Emisyon tutarlılığı (tam karayolu) | fark < %1 | **34/34 satır, hata ≈ 0** |
-# | Emisyon tutarlılığı (çok modlu) | fark < %1 | **19/22 satır, hata = 0** |
-# | Eşleşmeyen satırların kaynağı | açıklanabilir | **kaynak verinin kendi içindeki tutarsızlık** |
-# | Karayolu mesafe sapması | raporlanabilir | **MAPE %2,4; 33/33 satır %10 içinde** |
-# | Deniz mesafe sapması | raporlanabilir | **temiz bacak %4,2; Korint geçen %21,9** |
+# | Emisyon tutarlılığı (tam karayolu) | fark < %1 | **34/34 satır**, hata ≈ 0 |
+# | Emisyon tutarlılığı (çok modlu) | fark < %1 | **19/22 satır**, eşleşenlerde hata = 0 |
+# | Karayolu mesafe sapması | raporlanabilir | MAPE **%1,9**; 30/30 satır %10 içinde |
+# | Deniz mesafe sapması | raporlanabilir | temiz bacak %4,2 — Korint geçen %21,9 (n=1'e karşı n=5) |
 #
-# Dokümanın Faz 3 için koyduğu başarı eşiği karşılanmıştır. Sistemin hesap mantığı
-# doğrulanmış, sapmaların kaynağı ayrıştırılmış ve açıklanmıştır.
+# **Bölüm 9.3'ün emisyon eşiği (fark < %1) 22 satırın 19'unda karşılanmıştır.**
+# Kalan 3 satır, kendi bildirdiği km sütunlarının ürettiğinden daha düşük bir CO2
+# raporluyor. Bu farkın karayolu bacağından geldiği yorumu tutarlıdır ama yalnız bu
+# veriyle kanıtlanamaz; kesin olan, kaynak raporun kendi içinde tutarsız olduğudur.
+#
+# **Bu analizin kabul edilmiş sınırları:**
+# - Karayolu metriği 34 satırın 30'unu kapsıyor; 4'ü kaynak verideki hatalı posta
+#   kodları yüzünden coğrafi kodlanamadı.
+# - Korint karşılaştırmasının kontrol grubu tek bacak; sonuç işaret eder, kanıtlamaz.
+# - Bir varış adı çok anlamlı; alternatif okuma %10 eşiğini kırar.
 #
 # **Kapatılması gereken açıklar:**
 # - Deniz mesafesi için searoute'a doğrudan güvenilemez; kanal kısıtlı bir ağ ya da
 #   kalibrasyon gerekiyor.
 # - Demiryolu mesafesi hiç hesaplanmıyor; TEN-T/OpenRailwayMap entegrasyonu yok.
 # - Terminal ağı, veri setindeki varış noktalarının bir kısmını kapsamıyor.
+# - `data/service_legs.csv` Pendik–Bari için 1755 km diyor, doğrulama veri seti aynı
+#   bacak için 1825 km. İki referans birbiriyle çelişiyor, hangisinin doğru olduğu
+#   belirlenmedi.

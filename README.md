@@ -79,17 +79,30 @@ Sistem, gerçek bir lojistik firmasının iki müşteri için hazırladığı ka
 34 sevkiyatla karşılaştırıldı. Veri seti gerçek müşteri bilgisi içerdiği için depoda
 **yoktur**; doğrulama testleri veri yoksa kendini atlar.
 
-| Ölçüt | Hedef | Sonuç |
-|---|---|---|
-| Emisyon tutarlılığı — tam karayolu | fark < %1 | **34/34 satır**, hata ≈ 0 |
-| Emisyon tutarlılığı — çok modlu | fark < %1 | **19/22 satır**, hata = 0 |
-| Eşleşmeyen 3 satır | açıklanabilir | kaynak verinin **kendi içindeki** tutarsızlık |
-| Karayolu mesafe sapması | raporlanabilir | MAPE **%2,4**, 33/33 satır %10 içinde |
-| Deniz mesafe sapması | raporlanabilir | temiz bacak %4,2 — Korint geçen %21,9 |
+| Ölçüt | Hedef | Sonuç | Kapsam |
+|---|---|---|---|
+| Emisyon tutarlılığı — tam karayolu | fark < %1 | **34/34 satır**, hata ≈ 0 | 34/34 |
+| Emisyon tutarlılığı — çok modlu | fark < %1 | **19/22 satır**, eşleşenlerde hata = 0 | 22/22 |
+| Karayolu mesafe sapması | raporlanabilir | MAPE **%1,9**, 30/30 satır %10 içinde | 30/34 |
+| Deniz mesafe sapması | raporlanabilir | temiz %4,2 — Korint geçen %21,9 | n=1 / n=5 |
 
-Eşleşmeyen üç satırda sapma tamamen karayolu mesafesinde çözülüyor: rapor, kendi
-listelediği km'den daha kısa bir mesafe ima eden bir CO2 değeri bildiriyor. Deniz ve
-demiryolu bacakları birebir tutuyor.
+Eşleşmeyen üç satır, kendi bildirdiği km sütunlarının ürettiğinden **daha düşük** bir CO2
+raporluyor. Farkın karayolu bacağından geldiği yorumu tutarlıdır ama yalnız bu veriyle
+kanıtlanamaz; kesin olan, kaynak raporun kendi içinde tutarsız olduğudur.
+
+**Bu sonuçların kabul edilmiş sınırları:**
+
+- Karayolu metriği 34 satırın 30'unu kapsıyor. Dört varış noktası coğrafi kodlanamadı,
+  çünkü posta kodları kaynak veride eksik ya da hatalı yazılmış (biri gereken hane
+  sayısından kısa, biri harf eki eksik, biri CEDEX kodu). Yanlış bir konuma zorlamak
+  yerine çözümsüz bırakıldı.
+- Bir varış noktasının adı ülkesinde birden fazla yerleşime karşılık geliyor. Seçilen
+  aday −%3,3 sapma verir; diğer aday −%10,3 verir ve %10 ifadesini kırar. Hangisinin
+  kastedildiği kaynak veriden anlaşılmıyor.
+- Korint karşılaştırmasının kontrol grubu **tek bacak**. O bacak aynı zamanda ağdaki tek
+  Adriyatik-içi bağlantı olduğundan "kanaldan geçiyor" ile "Doğu Akdeniz çıkışlı"
+  değişkenleri ayrılamıyor. Tablo işaret eder, kanıtlamaz — kanıt Faz 0'daki doğrudan
+  gözlemdir (rota koordinatları kanalın üzerinden geçiyor).
 
 Analizi yeniden üretmek için:
 
@@ -98,8 +111,9 @@ python notebooks/build_notebook.py   # betikten defteri üret
 jupyter notebook notebooks/validation_analysis.ipynb
 ```
 
-Defter **çıktısız** işlenir; çalıştırıldığında grafikleri yerelde üretir ama depoya
-müşteri rotası, şehir adı veya tonaj hiç girmez.
+Defter **çıktısız** işlenir: çalıştırıldığında grafikleri ve sayıları yerelde üretir,
+ama sonuçlar depoya yazılmaz. Defterin metninde açıklama amaçlı birkaç örnek servis
+rotası ve mesafe geçer; sevkiyat satırları, müşteri adları ve tonajlar geçmez.
 
 ## Bilinen sınırlar
 
@@ -112,7 +126,13 @@ müşteri rotası, şehir adı veya tonaj hiç girmez.
   entegrasyonu henüz yok, bu yüzden demiryolu bacağı hesaplanmıyor.
 - **Karayolu için public OSRM demo sunucusu kullanılıyor.** Hız sınırlı; prodüksiyon
   için `OSRM_BASE_URL` ortam değişkeniyle kendi OSRM örneğinizi gösterin.
-- **Geocoding yok.** Şehir adı değil, koordinat girilmesi gerekiyor.
+- **CLI geocoding kullanmaz.** Şehir adı değil, koordinat girilmesi gerekiyor.
+  `geocode.py` yalnızca doğrulama analizinde kullanılıyor; birden fazla yerleşimin
+  aynı adı taşıdığı durumlarda sessizce yanlış eşleşme üretebildiği için hesap
+  yoluna dâhil edilmedi.
+- **Referans mesafeler kendi aralarında çelişiyor.** `data/service_legs.csv` Pendik–Bari
+  için 1755 km diyor, doğrulama veri seti aynı bacak için 1825 km. Hangisinin doğru
+  olduğu henüz belirlenmedi.
 - **WTW faktörleri henüz yok.** Tablo kapsamı destekliyor ama yalnızca TTW satırları
   doğrulanmış durumda; `--scope WTW` şu an faktör bulamaz.
 - **Yakıt tipi faktörleri doğrulanmamış.** Dizel dışındaki her seçenek `PLACEHOLDER`.
