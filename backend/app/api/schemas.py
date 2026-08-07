@@ -48,10 +48,48 @@ class RouteRequest(BaseModel):
     load_uncertainty: float = Field(default=0.0, ge=0, lt=1)
     distance_uncertainty: float = Field(default=0.05, ge=0, lt=1)
     max_alternatives: int | None = Field(default=None, ge=1, le=20)
+    carbon_price_eur: float = Field(default=80.0, ge=0, le=10_000)
+    ets_year: int = Field(default=2026, ge=2024, le=2100)
     # Extra pricings of the same routes. Routing costs seconds and several OSRM calls;
     # pricing costs nothing, so every scenario the dashboard offers is computed once
     # here and switched client-side without another round trip.
     scenarios: list[Scenario] = Field(default_factory=list, max_length=12)
+
+
+class ZoneCrossingOut(BaseModel):
+    id: str
+    name: str
+    source: str
+    distance_km: float
+
+
+class RouteRiskOut(BaseModel):
+    """Route-level, not scenario-level: exposure follows the track, not the factor set."""
+
+    is_exposed: bool
+    distance_in_zones_km: float
+    zones: list[ZoneCrossingOut] = []
+    passages: list[str] = []
+    # Sea distance with no track to test. Reported so a clear result cannot be mistaken
+    # for a checked one.
+    untracked_sea_km: float = 0.0
+
+
+class EtsLegOut(BaseModel):
+    from_name: str
+    to_name: str
+    co2_kg: float
+    coverage_share: float
+    cost_eur: float
+
+
+class EtsCostOut(BaseModel):
+    carbon_price_eur: float
+    year: int
+    covered_tonnes: float
+    cost_eur: float
+    legs: list[EtsLegOut] = []
+    notes: list[str] = []
 
 
 class LegOut(BaseModel):
@@ -86,6 +124,7 @@ class AlternativeOut(BaseModel):
     tree_equivalent: dict[str, float] = {}
     legs: list[LegOut]
     emission_range: RangeOut | None = None
+    risk: RouteRiskOut | None = None
     notes: list[str] = []
 
 
@@ -99,6 +138,7 @@ class ScenarioTotalOut(BaseModel):
     co2_by_mode: dict[str, float]
     saving_co2_kg: float | None = None
     emission_range: RangeOut | None = None
+    ets: EtsCostOut | None = None
 
 
 class ScenarioOut(BaseModel):
@@ -119,3 +159,57 @@ class RouteResponse(BaseModel):
     alternatives: list[AlternativeOut]
     warnings: list[str] = []
     scenarios: list[ScenarioOut] = []
+
+
+class CompareRequest(BaseModel):
+    """Two sailings of the same voyage: one direct, one avoiding a chokepoint.
+
+    This is the Red Sea question the sea-freight interview raised, asked in the general
+    form — any blockable passage, any port pair, so the layer does not depend on the
+    pilot corridor.
+    """
+
+    origin: Point
+    destination: Point
+    origin_name: str = "origin"
+    destination_name: str = "destination"
+    origin_country: str | None = None
+    destination_country: str | None = None
+    tonnage: float = Field(default=24.0, gt=0, le=100_000)
+    scope: str = Field(default="TTW", pattern="^(TTW|WTW)$")
+    factor_set: str = "glec"
+    avoid: list[str] = Field(default_factory=lambda: ["suez", "babalmandab"], max_length=6)
+    carbon_price_eur: float = Field(default=80.0, ge=0, le=10_000)
+    ets_year: int = Field(default=2026, ge=2024, le=2100)
+    # What the carrier actually charged for the diversion. Nothing here derives it:
+    # premiums are negotiated against hull value and never published.
+    surcharge_eur: float = Field(default=0.0, ge=0)
+
+
+class SailingOut(BaseModel):
+    label: str
+    distance_km: float
+    duration_h: float | None
+    co2_kg: float
+    ets_eur: float
+    risk: RouteRiskOut
+    geometry: list[list[float]] = []
+    unreachable: str | None = None
+
+
+class CompareResponse(BaseModel):
+    factor_set: str
+    scope: str
+    tonnage: float
+    avoided: list[str]
+    direct: SailingOut
+    diverted: SailingOut
+    # None when the diversion is impossible: there is no second sailing to subtract, and
+    # a zero would read as "the reroute is free" rather than "there is no reroute".
+    extra_distance_km: float | None = None
+    extra_duration_h: float | None = None
+    extra_co2_kg: float | None = None
+    extra_ets_eur: float | None = None
+    surcharge_eur: float = 0.0
+    total_extra_eur: float | None = None
+    avoided_zone_km: float | None = None

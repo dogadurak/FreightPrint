@@ -4,27 +4,38 @@ from fastapi.responses import PlainTextResponse
 
 from ..core.emissions import (
     FactorNotFoundError,
+    calculate_route_emission,
     calculate_shipment,
     load_emission_factors,
     load_tree_factors,
     lowest_emission_first,
     tree_equivalent,
 )
+from ..core.cost import CostInputError, calculate_ets, compare_reroute
 from ..core.network import build_network, load_terminals
 from ..core.report import ReportInputError, build_report, parse_shipments, report_to_csv
+from ..core.risk import assess_route
 from ..core.road import RoadRoutingError
-from ..core.route import find_route_alternatives
+from ..core.route import Leg, RouteAlternative, find_route_alternatives
+from ..core.sea import BLOCKABLE_PASSAGES, DEFAULT_RESTRICTIONS, SeaRoutingError, sea_route
 from ..core.uncertainty import load_band, round_to_significant, simulate_emission_range
 from .schemas import (
     AlternativeOut,
+    CompareRequest,
+    CompareResponse,
+    EtsCostOut,
+    EtsLegOut,
     FactorSetOut,
     LegOut,
     RangeOut,
     RouteRequest,
     RouteResponse,
+    RouteRiskOut,
+    SailingOut,
     ScenarioOut,
     ScenarioTotalOut,
     TerminalOut,
+    ZoneCrossingOut,
 )
 
 router = APIRouter(prefix="/api")
@@ -96,7 +107,70 @@ def _leg_out(leg) -> LegOut:
     )
 
 
-def _price_scenario(routes, request: RouteRequest, scenario, factors) -> ScenarioOut:
+def _risk_out(route) -> RouteRiskOut:
+    risk = assess_route(route)
+    return RouteRiskOut(
+        is_exposed=risk.is_exposed,
+        distance_in_zones_km=round(risk.distance_in_zones_km, 1),
+        zones=[
+            ZoneCrossingOut(
+                id=crossing.zone.id,
+                name=crossing.zone.name,
+                source=crossing.zone.source,
+                distance_km=round(crossing.distance_km, 1),
+            )
+            for crossing in risk.crossings
+        ],
+        passages=risk.passages,
+        untracked_sea_km=round(risk.untracked_sea_km, 1),
+    )
+
+
+def _leg_countries(route, terminals) -> list[tuple[str | None, str | None]]:
+    """Country pair per priced leg, in the order `expand_route_legs` produces them.
+
+    A ferry inside a road leg becomes a second, sea-mode leg, so the list is built the
+    same way the pricing is rather than from `route.legs` directly.
+    """
+    pairs: list[tuple[str | None, str | None]] = []
+    country = lambda node: terminals[node].country if node in terminals else None
+    for leg in route.legs:
+        if leg.mode == "road" and leg.ferry_km > 0:
+            pairs.append((country(leg.from_id), country(leg.to_id)))
+        pairs.append((country(leg.from_id), country(leg.to_id)))
+    return pairs
+
+
+def _ets_out(shipment, route, terminals, request: RouteRequest) -> EtsCostOut | None:
+    try:
+        cost = calculate_ets(
+            shipment,
+            _leg_countries(route, terminals),
+            carbon_price_eur=request.carbon_price_eur,
+            year=request.ets_year,
+        )
+    except CostInputError:
+        return None
+    return EtsCostOut(
+        carbon_price_eur=cost.carbon_price_eur,
+        year=cost.year,
+        covered_tonnes=round(cost.covered_tonnes, 3),
+        cost_eur=round(cost.cost_eur, 2),
+        legs=[
+            EtsLegOut(
+                from_name=leg.from_name,
+                to_name=leg.to_name,
+                co2_kg=round_to_significant(leg.co2_kg),
+                coverage_share=leg.coverage_share,
+                cost_eur=round(leg.cost_eur, 2),
+            )
+            for leg in cost.legs
+        ],
+        notes=cost.notes,
+    )
+
+
+def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals) -> ScenarioOut:
     """Reprice already-routed alternatives. No OSRM call, so this is effectively free.
 
     A scenario that cannot be priced is returned carrying its error rather than
@@ -165,6 +239,9 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors) -> Scenari
                     else None
                 ),
                 emission_range=emission_range,
+                # Allowance cost follows the emissions, so it belongs to the scenario;
+                # risk follows the track and is reported once on the alternative.
+                ets=_ets_out(shipment, route, terminals, request),
             )
         )
 
@@ -215,6 +292,7 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
     tree_factors = load_tree_factors()
+    terminals = load_terminals()
     ranked = lowest_emission_first(routes, shipments, limit=request.max_alternatives)
 
     alternatives = []
@@ -266,6 +344,7 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
                 ),
                 legs=legs,
                 emission_range=emission_range,
+                risk=_risk_out(route),
                 notes=route.notes,
             )
         )
@@ -287,7 +366,9 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
         sources=sources,
         alternatives=alternatives,
         warnings=warnings,
-        scenarios=[_price_scenario(routes, request, s, factors) for s in request.scenarios],
+        scenarios=[
+            _price_scenario(routes, request, s, factors, terminals) for s in request.scenarios
+        ],
     )
 
 
@@ -341,4 +422,130 @@ def bulk_report(
         content=report_to_csv(report),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="freightprint-report.csv"'},
+    )
+
+
+def _sail(
+    label: str,
+    request: CompareRequest,
+    restrictions: tuple[str, ...],
+    factors,
+) -> SailingOut:
+    """Price one sailing of the voyage under a set of blocked passages."""
+    try:
+        track = sea_route(
+            request.origin.as_tuple(), request.destination.as_tuple(), restrictions=restrictions
+        )
+    except SeaRoutingError as error:
+        empty = RouteRiskOut(is_exposed=False, distance_in_zones_km=0.0)
+        return SailingOut(
+            label=label, distance_km=0, duration_h=None, co2_kg=0, ets_eur=0,
+            risk=empty, unreachable=str(error),
+        )
+
+    leg = Leg(
+        mode="sea",
+        from_name=request.origin_name,
+        to_name=request.destination_name,
+        distance_km=track.distance_km,
+        duration_h=track.duration_h,
+        geometry=tuple((point[0], point[1]) for point in track.geometry),
+        passages=tuple(track.passages),
+    )
+    route = RouteAlternative(legs=[leg], label=label)
+    shipment = calculate_route_emission(
+        route,
+        tonnage=request.tonnage,
+        scope=request.scope,
+        factor_set=request.factor_set,
+        factors=factors,
+    )
+    ets = calculate_ets(
+        shipment,
+        [(request.origin_country, request.destination_country)],
+        carbon_price_eur=request.carbon_price_eur,
+        year=request.ets_year,
+    )
+    return SailingOut(
+        label=label,
+        distance_km=round(track.distance_km, 1),
+        duration_h=round(track.duration_h, 1) if track.duration_h else None,
+        co2_kg=round_to_significant(shipment.total_co2_kg),
+        ets_eur=round(ets.cost_eur, 2),
+        risk=_risk_out(route),
+        geometry=[list(point) for point in track.geometry],
+    )
+
+
+@router.post("/compare", response_model=CompareResponse)
+def compare_sailings(request: CompareRequest) -> CompareResponse:
+    """Compare a direct sailing with one that avoids a chokepoint.
+
+    The surcharge is echoed back rather than derived: what this adds beside it is the
+    diversion's cost in distance, time, CO2 and allowances, so the carrier's line item
+    has something to be checked against.
+    """
+    unknown = [p for p in request.avoid if p not in BLOCKABLE_PASSAGES]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"cannot avoid {unknown}; blockable passages: {sorted(BLOCKABLE_PASSAGES)}",
+        )
+
+    factors = load_emission_factors()
+    try:
+        direct = _sail("doğrudan", request, DEFAULT_RESTRICTIONS, factors)
+        diverted = _sail(
+            "sapma", request, tuple(DEFAULT_RESTRICTIONS) + tuple(request.avoid), factors
+        )
+    except FactorNotFoundError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except CostInputError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    if direct.unreachable:
+        raise HTTPException(status_code=422, detail=direct.unreachable)
+
+    # Some voyages cannot avoid the passage at all — the Black Sea needs the Bosporus.
+    # That is an answer, not a failure, so it is returned with the differences left unset.
+    if diverted.unreachable:
+        return CompareResponse(
+            factor_set=request.factor_set,
+            scope=request.scope,
+            tonnage=request.tonnage,
+            avoided=request.avoid,
+            direct=direct,
+            diverted=diverted,
+            surcharge_eur=request.surcharge_eur,
+        )
+
+    reroute = compare_reroute(
+        direct_distance_km=direct.distance_km,
+        direct_duration_h=direct.duration_h,
+        direct_co2_kg=direct.co2_kg,
+        direct_ets_eur=direct.ets_eur,
+        diverted_distance_km=diverted.distance_km,
+        diverted_duration_h=diverted.duration_h,
+        diverted_co2_kg=diverted.co2_kg,
+        diverted_ets_eur=diverted.ets_eur,
+        surcharge_eur=request.surcharge_eur,
+    )
+    return CompareResponse(
+        factor_set=request.factor_set,
+        scope=request.scope,
+        tonnage=request.tonnage,
+        avoided=request.avoid,
+        direct=direct,
+        diverted=diverted,
+        extra_distance_km=round(reroute.extra_distance_km, 1),
+        extra_duration_h=(
+            round(reroute.extra_duration_h, 1) if reroute.extra_duration_h is not None else None
+        ),
+        extra_co2_kg=round_to_significant(reroute.extra_co2_kg),
+        extra_ets_eur=round(reroute.extra_ets_eur, 2),
+        surcharge_eur=request.surcharge_eur,
+        total_extra_eur=round(reroute.total_eur, 2),
+        avoided_zone_km=round(
+            direct.risk.distance_in_zones_km - diverted.risk.distance_in_zones_km, 1
+        ),
     )

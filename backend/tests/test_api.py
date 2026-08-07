@@ -267,3 +267,89 @@ def test_scenario_totals_omit_geometry_that_alternatives_already_carry(client):
 
 def test_a_request_without_scenarios_still_answers(client):
     assert _post(client).json()["scenarios"] == []
+
+
+SHANGHAI = {"lon": 121.80, "lat": 31.23}
+ROTTERDAM = {"lon": 4.13, "lat": 51.95}
+
+
+def _compare(client, **overrides):
+    body = {
+        "origin": SHANGHAI,
+        "destination": ROTTERDAM,
+        "origin_country": "CN",
+        "destination_country": "NL",
+        "factor_set": "glec",
+        "scope": "WTW",
+    } | overrides
+    return client.post("/api/compare", json=body)
+
+
+def test_alternatives_report_whether_they_enter_a_listed_area(client):
+    alternatives = _post(client).json()["alternatives"]
+
+    for alternative in alternatives:
+        risk = alternative["risk"]
+        assert risk is not None
+        # The pilot corridor's sea legs are tracked, so a clear result is a checked one.
+        assert risk["untracked_sea_km"] == 0
+
+
+def test_a_turkey_to_eu_sea_leg_is_billed_at_half_through_the_api(client):
+    payload = _post(client, factor_set="glec", carbon_price_eur=80,
+                    scenarios=[{"factor_set": "glec", "scope": "TTW"}]).json()
+    totals = payload["scenarios"][0]["totals"]
+    multimodal = next(t for t in totals if not t["is_all_road"])
+
+    sea_leg = next(leg for leg in multimodal["ets"]["legs"])
+    assert sea_leg["coverage_share"] == 0.5
+    assert multimodal["ets"]["cost_eur"] > 0
+
+
+def test_an_all_road_alternative_owes_no_allowances(client):
+    payload = _post(client, scenarios=[{"factor_set": "glec", "scope": "TTW"}]).json()
+    baseline = next(t for t in payload["scenarios"][0]["totals"] if t["is_all_road"])
+
+    assert baseline["ets"]["cost_eur"] == 0
+    assert baseline["ets"]["legs"] == []
+
+
+def test_avoiding_suez_costs_distance_and_buys_out_of_the_listed_area(client):
+    payload = _compare(client, avoid=["suez", "babalmandab", "panama"], surcharge_eur=4000).json()
+
+    assert payload["direct"]["risk"]["is_exposed"]
+    assert not payload["diverted"]["risk"]["is_exposed"]
+    assert payload["extra_distance_km"] > 5000
+    assert payload["extra_co2_kg"] > 0
+    assert payload["avoided_zone_km"] > 1000
+
+
+def test_the_surcharge_is_echoed_not_derived(client):
+    """Premiums are negotiated against hull value; nothing here can compute one."""
+    without = _compare(client).json()
+    with_charge = _compare(client, surcharge_eur=4000).json()
+
+    assert without["surcharge_eur"] == 0
+    assert with_charge["total_extra_eur"] == pytest.approx(without["total_extra_eur"] + 4000)
+
+
+def test_an_unblockable_passage_is_refused_with_the_list(client):
+    response = _compare(client, avoid=["corinth"])
+
+    assert response.status_code == 422
+    assert "suez" in response.json()["detail"]
+
+
+def test_a_diversion_that_cannot_be_sailed_says_so_instead_of_reporting_zero(client):
+    """The Black Sea needs the Bosporus. Zero extras would read as a free reroute."""
+    payload = _compare(
+        client,
+        destination={"lon": 28.65, "lat": 44.17},
+        destination_country="RO",
+        avoid=["gibraltar", "bosporus"],
+    ).json()
+
+    assert payload["direct"]["distance_km"] > 0
+    assert "no sea route" in payload["diverted"]["unreachable"]
+    assert payload["extra_distance_km"] is None
+    assert payload["total_extra_eur"] is None
