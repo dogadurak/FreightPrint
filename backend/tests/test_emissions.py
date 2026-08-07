@@ -10,7 +10,7 @@ from app.core.emissions import (
     tree_equivalent,
 )
 from app.core.route import Leg, RouteAlternative
-from app.core.uncertainty import round_to_significant, simulate_emission_range
+from app.core.uncertainty import load_band, round_to_significant, simulate_emission_range
 
 REFERENCE_ROAD_FACTOR = 0.121
 REFERENCE_SEA_FACTOR = 0.012
@@ -99,6 +99,14 @@ def test_impossible_load_factor_is_rejected(load_factor):
         effective_factor_value(factor, load_factor=load_factor)
 
 
+@pytest.mark.parametrize("empty_return_share", [-0.1, 1.5, 5])
+def test_impossible_empty_return_share_is_rejected(empty_return_share):
+    factor = find_factor(load_emission_factors(), "road")
+
+    with pytest.raises(ValueError):
+        effective_factor_value(factor, empty_return_share=empty_return_share)
+
+
 def test_tree_equivalent_uses_the_configured_species_factors():
     species = load_tree_factors()
     trees = tree_equivalent(7717.68, species)
@@ -121,15 +129,35 @@ def test_uncertainty_range_brackets_the_point_estimate():
     assert result.low_co2_kg < point < result.high_co2_kg
 
 
-def test_load_uncertainty_widens_the_range_upwards_only():
-    """Load factor cannot exceed capacity, so the band can only add emissions."""
-    route = _route("via sea", [_leg("road", 60), _leg("sea", 2500)])
+@pytest.mark.parametrize("load_uncertainty", [0.0, 0.1, 0.3])
+def test_range_brackets_the_point_estimate_priced_at_the_same_band(load_uncertainty):
+    """The headline number is priced at the band midpoint, so it must sit inside the band."""
+    route = _route("via sea", [_leg("road", 60), _leg("sea", 2500), _leg("rail", 990)])
+    low_load, high_load = load_band(1.0, load_uncertainty)
+    point = calculate_route_emission(
+        route, tonnage=24, load_factor=(low_load + high_load) / 2
+    ).total_co2_kg
+
+    result = simulate_emission_range(
+        route, tonnage=24, load_uncertainty=load_uncertainty, seed=0
+    )
+
+    assert result.low_co2_kg <= point <= result.high_co2_kg
+
+
+def test_load_band_is_clipped_at_full_capacity():
+    assert load_band(1.0, 0.2) == (0.8, 1.0)
+    assert load_band(0.9, 0.1) == pytest.approx((0.81, 0.99))
+
+
+def test_uncertainty_and_point_estimate_agree_on_ferry_distance():
+    """Both paths must read the route through the same ferry split, or they disagree."""
+    route = _route("crete", [_leg("road", 643, ferry_km=137)])
     point = calculate_route_emission(route, tonnage=24).total_co2_kg
 
-    result = simulate_emission_range(route, tonnage=24, load_uncertainty=0.2, seed=0)
+    result = simulate_emission_range(route, tonnage=24, seed=0)
 
-    assert result.high_co2_kg > point
-    assert result.median_co2_kg > point
+    assert result.low_co2_kg <= point <= result.high_co2_kg
 
 
 def test_uncertainty_range_is_reproducible_with_a_seed():

@@ -31,6 +31,17 @@ class EmissionFactor:
         return f"{self.mode}/{self.fuel_type} {self.value} kg CO2/t-km ({self.scope}, {self.source})"
 
 
+@dataclass(frozen=True)
+class ResolvedLeg:
+    """A route leg after ferry distance has been split out of its road distance."""
+
+    mode: str
+    distance_km: float
+    from_name: str
+    to_name: str
+    is_ferry: bool = False
+
+
 @dataclass
 class LegEmission:
     mode: str
@@ -118,6 +129,26 @@ def find_factor(
     return (preferred or matches)[0]
 
 
+def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
+    """Split ferry distance out of road legs so every consumer charges it as sea.
+
+    Both the point estimate and the Monte Carlo range read the route through here; if
+    only one of them did, the two would disagree on the same shipment.
+    """
+    resolved = []
+    for leg in route.legs:
+        if leg.mode == "road" and leg.ferry_km > 0:
+            resolved.append(
+                ResolvedLeg("road", leg.distance_km - leg.ferry_km, leg.from_name, leg.to_name)
+            )
+            resolved.append(
+                ResolvedLeg("sea", leg.ferry_km, f"{leg.from_name} (ferry)", leg.to_name, True)
+            )
+        else:
+            resolved.append(ResolvedLeg(leg.mode, leg.distance_km, leg.from_name, leg.to_name))
+    return resolved
+
+
 def effective_factor_value(
     factor: EmissionFactor, load_factor: float = 1.0, empty_return_share: float = 0.0
 ) -> float:
@@ -129,8 +160,8 @@ def effective_factor_value(
     """
     if not 0 < load_factor <= 1:
         raise ValueError(f"load_factor must be in (0, 1], got {load_factor}")
-    if empty_return_share < 0:
-        raise ValueError(f"empty_return_share must be >= 0, got {empty_return_share}")
+    if not 0 <= empty_return_share <= 1:
+        raise ValueError(f"empty_return_share must be in [0, 1], got {empty_return_share}")
     return factor.value / load_factor * (1 + empty_return_share)
 
 
@@ -148,42 +179,34 @@ def calculate_route_emission(
     warnings: list[str] = []
     legs = []
 
-    def add_leg(mode: str, distance_km: float, from_name: str, to_name: str) -> None:
+    for resolved in expand_route_legs(route):
         factor = find_factor(
             factors,
-            mode=mode,
+            mode=resolved.mode,
             scope=scope,
-            fuel_type=road_fuel_type if mode == "road" else None,
+            fuel_type=road_fuel_type if resolved.mode == "road" else None,
             factor_set=factor_set,
         )
         if not factor.is_verified:
-            warnings.append(f"unverified factor used: {factor.label} — {factor.notes}")
+            warnings.append(f"unverified factor used: {factor.label} - {factor.notes}")
+        if resolved.is_ferry:
+            warnings.append(
+                f"{resolved.to_name} leg includes {resolved.distance_km:,.0f} km of ferry, "
+                "charged at the sea factor"
+            )
 
         value = effective_factor_value(factor, load_factor, empty_return_share)
         legs.append(
             LegEmission(
-                mode=mode,
-                from_name=from_name,
-                to_name=to_name,
-                distance_km=distance_km,
+                mode=resolved.mode,
+                from_name=resolved.from_name,
+                to_name=resolved.to_name,
+                distance_km=resolved.distance_km,
                 tonnage=tonnage,
                 factor=factor,
-                co2_kg=distance_km * tonnage * value,
+                co2_kg=resolved.distance_km * tonnage * value,
             )
         )
-
-    for leg in route.legs:
-        # A road leg routed over a ferry is a sea crossing; charging it the road factor
-        # would inflate the all-road baseline and with it the reported saving.
-        if leg.mode == "road" and leg.ferry_km > 0:
-            add_leg("road", leg.distance_km - leg.ferry_km, leg.from_name, leg.to_name)
-            add_leg("sea", leg.ferry_km, f"{leg.from_name} (ferry)", leg.to_name)
-            warnings.append(
-                f"{leg.from_name}->{leg.to_name} includes {leg.ferry_km:,.0f} km of ferry, "
-                "charged at the sea factor"
-            )
-        else:
-            add_leg(leg.mode, leg.distance_km, leg.from_name, leg.to_name)
 
     return ShipmentEmission(
         label=route.label,

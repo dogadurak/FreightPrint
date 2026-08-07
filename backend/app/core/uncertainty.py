@@ -7,6 +7,7 @@ from .emissions import (
     DEFAULT_SCOPE,
     EmissionFactor,
     effective_factor_value,
+    expand_route_legs,
     find_factor,
     load_emission_factors,
 )
@@ -37,6 +38,20 @@ def round_to_significant(value: float, digits: int = 3) -> float:
     return round(value, -int(floor(log10(abs(value)))) + (digits - 1))
 
 
+def load_band(load_factor: float, load_uncertainty: float) -> tuple[float, float]:
+    """The utilisation range to explore, clipped at full capacity.
+
+    Callers should price the point estimate at this band's midpoint. Quoting the number
+    at `load_factor` while the band is clipped below it puts the headline figure outside
+    its own range, which reads as a bug even though both numbers are right.
+    """
+    if not 0 < load_factor <= 1:
+        raise ValueError(f"load_factor must be in (0, 1], got {load_factor}")
+    if not 0 <= load_uncertainty < 1:
+        raise ValueError(f"load_uncertainty must be in [0, 1), got {load_uncertainty}")
+    return (load_factor * (1 - load_uncertainty), min(1.0, load_factor * (1 + load_uncertainty)))
+
+
 def simulate_emission_range(
     route: RouteAlternative,
     tonnage: float,
@@ -54,13 +69,14 @@ def simulate_emission_range(
 ) -> EmissionRange:
     """Turn distance and load-factor uncertainty into a range instead of one exact number.
 
-    `load_uncertainty` only widens downwards: a vehicle cannot be loaded past capacity, so
-    the reported band is skewed upwards from the point estimate rather than centred on it.
+    The load band is centred on `load_factor` and clipped at full capacity, so the range
+    brackets the point estimate rather than sitting entirely above it.
     """
     if not 0 < confidence < 1:
         raise ValueError(f"confidence must be in (0, 1), got {confidence}")
-    if not 0 <= load_uncertainty < 1:
-        raise ValueError(f"load_uncertainty must be in [0, 1), got {load_uncertainty}")
+    if not 0 <= distance_uncertainty < 1:
+        raise ValueError(f"distance_uncertainty must be in [0, 1), got {distance_uncertainty}")
+    lowest_load, highest_load = load_band(load_factor, load_uncertainty)
 
     factors = factors if factors is not None else load_emission_factors()
     leg_inputs = [
@@ -74,14 +90,13 @@ def simulate_emission_range(
                 factor_set=factor_set,
             ),
         )
-        for leg in route.legs
+        for leg in expand_route_legs(route)
     ]
 
     rng = random.Random(seed)
-    lowest_load = load_factor * (1 - load_uncertainty)
     totals = []
     for _ in range(samples):
-        sampled_load = rng.uniform(lowest_load, load_factor)
+        sampled_load = rng.uniform(lowest_load, highest_load)
         total = 0.0
         for distance_km, factor in leg_inputs:
             sampled_km = rng.triangular(

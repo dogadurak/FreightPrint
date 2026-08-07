@@ -3,10 +3,16 @@ import sys
 
 import requests
 
-from .core.emissions import calculate_shipment, load_tree_factors, tree_equivalent
+from .core.emissions import (
+    FactorNotFoundError,
+    calculate_shipment,
+    load_emission_factors,
+    load_tree_factors,
+    tree_equivalent,
+)
 from .core.road import RoadRoutingError
 from .core.route import find_route_alternatives
-from .core.uncertainty import round_to_significant, simulate_emission_range
+from .core.uncertainty import load_band, round_to_significant, simulate_emission_range
 
 
 def _parse_point(value: str) -> tuple[float, float]:
@@ -55,12 +61,14 @@ def _print_route(shipment, route, tree_factors) -> None:
         connection = f"{leg.mode:<5} {leg.from_name} -> {leg.to_name}"
         print(f"    {connection:<44} {leg.distance_km:>8,.0f} km {leg.co2_kg:>10,.0f} kg CO2")
 
-    print(f"    {'TOPLAM':<44} {route.total_distance_km:>8,.0f} km "
-          f"{shipment.total_co2_kg:>10,.0f} kg CO2")
+    total = round_to_significant(shipment.total_co2_kg)
+    print(f"    {'TOPLAM':<44} {route.total_distance_km:>8,.0f} km {total:>10,.0f} kg CO2")
 
     if shipment.saving_co2_kg is not None and not route.is_all_road:
-        print(f"    {'tam karayolu senaryosu':<44} {'':>11} {shipment.all_road_co2_kg:>10,.0f} kg CO2")
-        print(f"    {'tasarruf':<44} {'':>11} {shipment.saving_co2_kg:>10,.0f} kg CO2")
+        baseline = round_to_significant(shipment.all_road_co2_kg)
+        saving = round_to_significant(shipment.saving_co2_kg)
+        print(f"    {'tam karayolu senaryosu':<44} {'':>11} {baseline:>10,.0f} kg CO2")
+        print(f"    {'tasarruf':<44} {'':>11} {saving:>10,.0f} kg CO2")
         for species, count in tree_equivalent(shipment.saving_co2_kg, tree_factors).items():
             print(f"      {species:<42} {'':>11} {count:>10,.0f} agac/yil")
 
@@ -82,33 +90,52 @@ def main() -> None:
     except requests.RequestException as error:
         sys.exit(f"Karayolu rotalama servisine ulasilamadi: {error}")
 
-    shipments = calculate_shipment(
-        routes,
-        tonnage=args.tonnage,
-        scope=args.scope,
-        road_fuel_type=args.fuel,
-        load_factor=args.load_factor,
-        empty_return_share=args.empty_return,
-    )
+    try:
+        # Price the point estimate at the middle of the same band the range explores.
+        lowest_load, highest_load = load_band(args.load_factor, args.load_uncertainty)
+        expected_load = (lowest_load + highest_load) / 2
+
+        shipments = calculate_shipment(
+            routes,
+            tonnage=args.tonnage,
+            scope=args.scope,
+            road_fuel_type=args.fuel,
+            load_factor=expected_load,
+            empty_return_share=args.empty_return,
+        )
+    except FactorNotFoundError as error:
+        sys.exit(f"Emisyon faktoru bulunamadi: {error}")
+    except ValueError as error:
+        sys.exit(f"Gecersiz parametre: {error}")
+
     tree_factors = load_tree_factors()
+    sources = {
+        f.source for f in load_emission_factors() if f.factor_set == "reference" and f.is_verified
+    }
 
     print(f"Sevkiyat: {args.tonnage:g} ton | kapsam: {args.scope} | "
-          f"doluluk: {args.load_factor:g} | bos donus: {args.empty_return:g}")
+          f"doluluk: {lowest_load:.2f}-{highest_load:.2f} (ortalama {expected_load:.2f}) | "
+          f"bos donus: {args.empty_return:g}")
+    print(f"Faktor seti: reference | kaynak: {'; '.join(sorted(sources))}")
 
     for shipment, route in zip(shipments, routes):
         _print_route(shipment, route, tree_factors)
 
-        emission_range = simulate_emission_range(
-            route,
-            tonnage=args.tonnage,
-            scope=args.scope,
-            road_fuel_type=args.fuel,
-            load_factor=args.load_factor,
-            load_uncertainty=args.load_uncertainty,
-            distance_uncertainty=args.distance_uncertainty,
-            empty_return_share=args.empty_return,
-            seed=0,
-        )
+        try:
+            emission_range = simulate_emission_range(
+                route,
+                tonnage=args.tonnage,
+                scope=args.scope,
+                road_fuel_type=args.fuel,
+                load_factor=args.load_factor,
+                load_uncertainty=args.load_uncertainty,
+                distance_uncertainty=args.distance_uncertainty,
+                empty_return_share=args.empty_return,
+                seed=0,
+            )
+        except ValueError as error:
+            sys.exit(f"Gecersiz parametre: {error}")
+
         low, high = emission_range.rounded()
         confidence = f"%{emission_range.confidence * 100:g} guven"
         print(f"    belirsizlik araligi ({confidence}): {low:,.0f} - {high:,.0f} kg CO2")
