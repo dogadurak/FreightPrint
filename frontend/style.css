@@ -387,3 +387,21 @@ body { transition: background-color .25s ease, color .25s ease; }
 
 a { color: var(--accent); }
 a:hover { color: var(--accent-ink); }
+
+/* ── risk & cost ─────────────────────────────────────────────────────── */
+.risk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.4rem; }
+.sub-title {
+  margin: 0 0 0.55rem; font-size: 0.78rem; font-weight: 650;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted);
+}
+.risk-flag {
+  padding: 0.5rem 0.7rem; border-radius: var(--r-sm); font-size: 0.87rem; margin-bottom: 0.5rem;
+}
+.risk-flag.good { background: var(--good-wash); color: var(--good); }
+.risk-flag.bad { background: var(--bad-wash); color: var(--bad); }
+.risk-flag strong { font-variant-numeric: tabular-nums; }
+td.src { font-size: 0.75rem; color: var(--ink-muted); text-align: left; }
+td.exposed { color: var(--bad); font-weight: 620; }
+.cost-split { margin-top: 0.7rem; }
+.cost-split td small { color: var(--ink-muted); font-weight: 400; }
+.cost-split tr.total td { font-weight: 660; border-top: 2px solid var(--border-strong); }

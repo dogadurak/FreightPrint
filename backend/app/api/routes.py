@@ -104,6 +104,7 @@ def _leg_out(leg) -> LegOut:
         factor_value=leg.factor.value,
         factor_source=leg.factor.source,
         geometry=[list(point) for point in leg.geometry],
+        track_is_indicative=leg.track_is_indicative,
     )
 
 

@@ -70,6 +70,50 @@
     </section>
 
     <section class="card">
+      <h2 class="card-title">Sapma senaryosu</h2>
+      <form id="compare-form">
+        <p class="hint">
+          Bir boğazdan kaçınmanın bedelini ölçer: mesafe, süre, CO2 ve ETS farkı.
+          Armatörün istediği ek ücreti girerseniz neyin karşılığı olduğunu görürsünüz.
+        </p>
+        <div class="field-grid">
+          <label>Yükleme limanı <small>boylam, enlem</small>
+            <input name="origin" value="121.80, 31.23" required>
+          </label>
+          <label>Adı
+            <input name="origin_name" value="Shanghai">
+          </label>
+          <label>Ülkesi <small>ISO kodu, ETS kapsamı için</small>
+            <input name="origin_country" value="CN" maxlength="2" placeholder="—">
+          </label>
+          <label>Boşaltma limanı <small>boylam, enlem</small>
+            <input name="destination" value="4.13, 51.95" required>
+          </label>
+          <label>Adı
+            <input name="destination_name" value="Rotterdam">
+          </label>
+          <label>Ülkesi <small>ISO kodu, ETS kapsamı için</small>
+            <input name="destination_country" value="NL" maxlength="2" placeholder="—">
+          </label>
+          <label>Kaçınılacak geçitler
+            <select name="avoid" id="avoid-preset">
+              <option value="suez,babalmandab,panama">Süveyş + Bab-el-Mendeb (Ümit Burnu)</option>
+              <option value="suez,babalmandab">Süveyş + Bab-el-Mendeb (serbest)</option>
+              <option value="ormuz">Hürmüz Boğazı</option>
+              <option value="bosporus">İstanbul Boğazı</option>
+              <option value="panama">Panama Kanalı</option>
+            </select>
+          </label>
+          <label>Ek ücret <small>€, armatörün faturası</small>
+            <input name="surcharge_eur" type="number" min="0" step="100" value="4000">
+          </label>
+        </div>
+        <button type="submit" class="ghost" id="compare-submit">Sapmayı hesapla</button>
+        <p class="hint" id="compare-status" role="status"></p>
+      </form>
+    </section>
+
+    <section class="card">
       <h2 class="card-title">Toplu rapor</h2>
       <form id="report-form">
         <p class="hint">
@@ -123,6 +167,15 @@
         </div>
         <div id="comparison-chart"></div>
       </div>
+    </section>
+
+    <!-- Risk ve maliyet -->
+    <section class="card">
+      <div class="card-head">
+        <h2 class="card-title">Risk ve maliyet</h2>
+        <span class="card-note" id="risk-note"></span>
+      </div>
+      <div id="risk-cost"></div>
     </section>
 
     <!-- Faktör esası duyarlılığı -->

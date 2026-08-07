@@ -319,3 +319,18 @@ def test_reported_range_drops_digits_the_inputs_do_not_justify():
     assert round_to_significant(502.67999999) == 503.0
     assert round_to_significant(1283.4, digits=3) == 1280.0
     assert round_to_significant(0.0) == 0.0
+
+
+def test_an_unsailable_track_stays_flagged_through_pricing():
+    """The flag is set on the route leg and read off the priced one; a gap between the
+    two left the map drawing a Corinth shortcut as though it were the route taken."""
+    route = _route(
+        "via corinth",
+        [Leg("sea", "Pendik", "Patras", 1450, geometry=((29.2, 40.8), (21.7, 38.2)),
+             track_is_indicative=True)],
+    )
+
+    leg = calculate_route_emission(route, tonnage=24).legs[0]
+
+    assert leg.track_is_indicative
+    assert leg.geometry

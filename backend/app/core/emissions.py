@@ -56,6 +56,7 @@ class ResolvedLeg:
     is_ferry: bool = False
     duration_h: float | None = None
     geometry: tuple[tuple[float, float], ...] = ()
+    track_is_indicative: bool = False
 
 
 @dataclass
@@ -69,6 +70,7 @@ class LegEmission:
     co2_kg: float
     duration_h: float | None = None
     geometry: tuple[tuple[float, float], ...] = ()
+    track_is_indicative: bool = False
 
 
 @dataclass
@@ -200,6 +202,7 @@ def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
                     to_name=leg.to_name,
                     duration_h=leg.duration_h,
                     geometry=leg.geometry,
+                    track_is_indicative=leg.track_is_indicative,
                 )
             )
     return resolved
@@ -274,6 +277,7 @@ def calculate_route_emission(
                 co2_kg=resolved.distance_km * tonnage * value,
                 duration_h=resolved.duration_h,
                 geometry=resolved.geometry,
+                track_is_indicative=resolved.track_is_indicative,
             )
         )
 

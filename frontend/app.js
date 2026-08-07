@@ -221,7 +221,9 @@ function drawAlternative(alternative, scenario, total) {
 
   priced.forEach((leg, index) => {
     let coordinates = leg.geometry;
-    const schematic = !coordinates.length;
+    // A track that cannot be sailed is drawn like one that was never computed: solid
+    // would claim this is the route taken.
+    const schematic = !coordinates.length || leg.track_is_indicative;
     if (schematic) {
       // A ferry inside a road leg has no endpoints of its own; the road leg it
       // belongs to is already drawn, so there is nothing separate to show.
@@ -244,7 +246,9 @@ function drawAlternative(alternative, scenario, total) {
           km: nf.format(leg.distance_km),
           co2: nf.format(leg.co2_kg),
           factor: `${nf3.format(leg.factor_value)} kg CO2/ton-km`,
-          schematic: schematic ? "1" : "",
+          schematic: schematic
+            ? (leg.track_is_indicative ? "göstergesel iz" : "şematik çizim")
+            : "",
         },
       },
     });
@@ -577,7 +581,10 @@ function renderLegDetail(scenario) {
 }
 
 function renderNotices(scenario) {
-  const messages = [...scenario.warnings];
+  const chosen = scenario.totals[selectedIndex] ?? scenario.totals[0];
+  const alternative = payload.alternatives.find((a) => a.label === chosen.label);
+  // Route notes are computed per leg and were reaching the browser unread.
+  const messages = [...(alternative?.notes ?? []), ...scenario.warnings];
   if (!scenario.is_verified) {
     messages.unshift("Bu faktör seti doğrulanmamış değer içeriyor — rapora girmemeli.");
   }
@@ -608,6 +615,7 @@ function applyScenario() {
   renderNotices(scenario);
   updateComparison(scenario);
   updateSensitivity(scenario);
+  renderRiskCost(scenario);
   renderLegDetail(scenario);
 
   const chosen = scenario.totals[selectedIndex];
@@ -789,3 +797,173 @@ function showSkeleton() {
 
 initMap();
 loadFactorSets();
+
+/* ── risk & cost ─────────────────────────────────────────────────────── */
+
+const eur = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
+
+/** Risk belongs to the alternative and the allowance bill to the scenario, so this
+ *  panel reads from both. */
+function renderRiskCost(scenario) {
+  const total = scenario.totals[selectedIndex] ?? scenario.totals[0];
+  const alternative = payload.alternatives.find((a) => a.label === total.label);
+  const risk = alternative?.risk;
+  const ets = total.ets;
+
+  const zoneRows = (risk?.zones ?? []).map((z) => `<tr>
+      <td>${z.name}</td><td class="num">${nf.format(z.distance_km)}</td>
+      <td class="src">${z.source}</td>
+    </tr>`).join("");
+
+  const riskBlock = !risk
+    ? ""
+    : risk.is_exposed
+      ? `<div class="risk-flag bad">
+           <strong>${nf.format(risk.distance_in_zones_km)} km</strong> ilan edilmiş
+           savaş riski bölgesi içinde
+         </div>
+         <table><thead><tr><th>Bölge</th><th>km</th><th>kaynak</th></tr></thead>
+           <tbody>${zoneRows}</tbody></table>`
+      : `<div class="risk-flag good">İlan edilmiş savaş riski bölgesiyle kesişim yok</div>`;
+
+  const untracked = risk?.untracked_sea_km
+    ? `<p class="hint">${nf.format(risk.untracked_sea_km)} km deniz bacağının izi yok —
+       bu kısım <em>kontrol edilmedi</em>, temiz olduğu anlamına gelmez.</p>`
+    : "";
+
+  const passages = risk?.passages?.length
+    ? `<p class="hint">Geçilen boğazlar: ${risk.passages.join(", ")}</p>`
+    : "";
+
+  const etsBlock = !ets || !ets.legs.length
+    ? `<p class="hint">Bu rotanın deniz bacağı yok; ETS yükümlülüğü doğmuyor.
+         Karayolu ETS2 kapsamında, ayrı bir şema.</p>`
+    : `<table>
+        <thead><tr><th>Deniz bacağı</th><th>kg CO2</th><th>kapsam</th><th>€</th></tr></thead>
+        <tbody>${ets.legs.map((l) => `<tr>
+          <td>${l.from_name} → ${l.to_name}</td>
+          <td class="num">${nf.format(l.co2_kg)}</td>
+          <td class="num">%${Math.round(l.coverage_share * 100)}</td>
+          <td class="num">${eur.format(l.cost_eur)}</td>
+        </tr>`).join("")}</tbody>
+        <tfoot><tr>
+          <td>Toplam · ${eur.format(ets.carbon_price_eur)} €/ton · ${ets.year}</td>
+          <td class="num">${nf.format(ets.covered_tonnes * 1000)}</td>
+          <td></td>
+          <td class="num">${eur.format(ets.cost_eur)}</td>
+        </tr></tfoot>
+      </table>
+      ${ets.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
+
+  $("risk-cost").innerHTML = `<div class="risk-grid">
+      <section><h3 class="sub-title">Güzergâh riski</h3>${riskBlock}${passages}${untracked}</section>
+      <section><h3 class="sub-title">ETS yükümlülüğü</h3>${etsBlock}</section>
+    </div>`;
+
+  $("risk-note").textContent = risk?.is_exposed
+    ? "seçilen rota ilan edilmiş bölgeden geçiyor"
+    : "seçilen rota · ETS senaryoya bağlı";
+}
+
+/* ── diversion scenario ──────────────────────────────────────────────── */
+
+const compareForm = $("compare-form");
+const compareStatus = $("compare-status");
+const compareSubmit = $("compare-submit");
+
+function renderCompare(data) {
+  const row = (s) => `<tr>
+      <td>${s.label}</td>
+      <td class="num">${nf.format(s.distance_km)}</td>
+      <td class="num">${s.duration_h ? nf.format(s.duration_h / 24) : "—"}</td>
+      <td class="num">${nf.format(s.co2_kg)}</td>
+      <td class="num">${eur.format(s.ets_eur)}</td>
+      <td class="num ${s.risk.is_exposed ? "exposed" : ""}">${
+        nf.format(s.risk.distance_in_zones_km)}</td>
+    </tr>`;
+
+  const impossible = data.extra_distance_km === null;
+  const verdict = impossible
+    ? `<p class="verdict bad">Bu sefer seçilen geçitlerden kaçınamıyor —
+         ${data.diverted.unreachable}</p>`
+    : `<p class="verdict ${data.avoided_zone_km > 0 ? "good" : "bad"}">
+         Sapma <strong>${nf.format(data.avoided_zone_km)} km</strong> riskli bölgeden
+         çıkarıyor; bedeli <strong>+${nf.format(data.extra_distance_km)} km</strong>,
+         <strong>+${nf.format(data.extra_duration_h / 24)} gün</strong> ve
+         <strong>+${nf.format(data.extra_co2_kg)} kg CO2</strong>.
+       </p>
+       <table class="cost-split">
+         <tbody>
+           <tr><td>Ek ETS yükümlülüğü</td><td class="num">${eur.format(data.extra_ets_eur)} €</td></tr>
+           <tr><td>Armatörün ek ücreti <small>girdiğiniz</small></td>
+               <td class="num">${eur.format(data.surcharge_eur)} €</td></tr>
+           <tr class="total"><td>Toplam ek maliyet</td>
+               <td class="num">${eur.format(data.total_extra_eur)} €</td></tr>
+         </tbody>
+       </table>
+       <p class="hint">Sistem ek ücreti hesaplamaz — prim tekne değeri üzerinden
+         pazarlıkla belirlenir ve yayımlanmaz. Yaptığı, o ücretin neyin karşılığı
+         olduğunu ölçmek.</p>`;
+
+  $("risk-cost").innerHTML = `<div class="card-head">
+      <h3 class="sub-title">Sapma senaryosu — kaçınılan: ${data.avoided.join(", ")}</h3>
+    </div>
+    <table>
+      <thead><tr><th>Sefer</th><th>km</th><th>gün</th><th>kg CO2</th><th>ETS €</th>
+        <th>riskli km</th></tr></thead>
+      <tbody>${row(data.direct)}${impossible ? "" : row(data.diverted)}</tbody>
+    </table>
+    ${verdict}`;
+  $("risk-note").textContent = `${data.factor_set} · ${data.scope} · ${data.tonnage} ton`;
+  $("risk-cost").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+compareForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const data = new FormData(compareForm);
+  const origin = parsePoint(data.get("origin"));
+  const destination = parsePoint(data.get("destination"));
+  if (!origin || !destination) {
+    compareStatus.textContent = "Limanlar 'boylam, enlem' biçiminde olmalı.";
+    return;
+  }
+  if (!payload) {
+    compareStatus.textContent = "Önce bir sevkiyat hesaplayın.";
+    return;
+  }
+
+  const scenario = currentScenario();
+  const body = {
+    origin, destination,
+    origin_name: data.get("origin_name") || "yükleme",
+    destination_name: data.get("destination_name") || "boşaltma",
+    // ETS coverage depends on whether each end is in the EEA, and a coordinate does not
+    // say which country it is in. Left blank, the port counts as outside.
+    origin_country: (data.get("origin_country") || "").trim().toUpperCase() || null,
+    destination_country: (data.get("destination_country") || "").trim().toUpperCase() || null,
+    tonnage: Number(new FormData(form).get("tonnage")),
+    factor_set: scenario?.factor_set ?? "glec",
+    scope: scenario?.scope ?? "TTW",
+    avoid: data.get("avoid").split(","),
+    surcharge_eur: Number(data.get("surcharge_eur")) || 0,
+  };
+
+  compareSubmit.disabled = true;
+  compareStatus.textContent = "İki sefer de rotalanıyor…";
+  try {
+    const response = await fetch("/api/compare", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      compareStatus.textContent = result.detail ?? "İstek başarısız.";
+      return;
+    }
+    renderCompare(result);
+    compareStatus.textContent = "";
+  } catch (error) {
+    compareStatus.textContent = `Sunucuya ulaşılamadı: ${error.message}`;
+  } finally {
+    compareSubmit.disabled = false;
+  }
+});

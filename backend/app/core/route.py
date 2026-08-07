@@ -27,6 +27,9 @@ class Leg:
     geometry: tuple[tuple[float, float], ...] = ()
     # Chokepoints a sea leg transits, from searoute's own edge labels.
     passages: tuple[str, ...] = ()
+    # True when the track is drawable but not to be trusted as the route taken —
+    # searoute's Corinth shortcut, which no ro-ro or container ship can sail.
+    track_is_indicative: bool = False
     notes: list[str] = field(default_factory=list)
 
 
@@ -167,9 +170,11 @@ def _add_sea_tracks(
         if compare_distances:
             leg.computed_distance_km = computed.distance_km
         if not computed.is_realistic:
+            leg.track_is_indicative = True
             leg.notes.append(
-                f"searoute route {leg.from_name}->{leg.to_name} crosses the Corinth Canal; "
-                "its distance is not usable and the drawn track is indicative only"
+                f"{leg.from_name}->{leg.to_name}: hesaplanan deniz izi Korint Kanalı'ndan "
+                "geçiyor; gerçek gemiler geçemez, bu yüzden çizim göstergeseldir "
+                "(mesafe referans tablodan alınır)"
             )
 
 

@@ -101,9 +101,10 @@ class LegOut(BaseModel):
     duration_h: float | None = None
     factor_value: float
     factor_source: str
-    # Empty for sea and rail, which have no computed geometry yet; the map draws those
-    # as straight lines and says so rather than implying a surveyed track.
+    # Empty where no track was computed; the map draws those as straight schematic
+    # lines. A track that is drawable but not sailable is flagged instead of hidden.
     geometry: list[list[float]] = []
+    track_is_indicative: bool = False
 
 
 class RangeOut(BaseModel):
