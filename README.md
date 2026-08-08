@@ -93,8 +93,10 @@ Yükleme **arka plan işi** olarak çalışır: soğuk bir sevkiyat ~6 saniye ve
 çağrısı sürdüğü için 500 satırlık bir dosya hiçbir istek zaman aşımına sığmaz. Dosya
 gönderilir, iş kimliği döner, arayüz ilerlemeyi sorar (`4/25 sevkiyat (%16)`), bitince
 indirir. Satırlar birbirinden bağımsız olduğu için dörder dörder işlenir — ölçüldü,
-100 satırda 36,6 sn yerine 9,4 sn. Eşzamanlılık kasten düşük: public OSRM demo sunucusu
-hız sınırlıyor, kendi sunucunuzda artırılabilir.
+100 satırda 36,6 sn yerine 9,4 sn. Sınır **OSRM istemcisinde**, çağıranda değil:
+`OSRM_MAX_CONCURRENCY` (varsayılan 4) kaç isteğin aynı anda uçtuğunu kapatır. Bu sınır
+çağıran başına olsaydı, dört işlik havuz içinde dörder satır demo sunucusuna aynı anda
+**16 istek** bindirirdi — ölçüldü ve test edildi. Kendi OSRM'inizde artırılabilir.
 
 > İşler **süreç belleğinde** tutulur. Bu, brifingin stateless tercihine uygun ve
 > kullanıcının birkaç dakika izlediği bir şey için veritabanı gereksiz. Ama işler yeniden

@@ -243,3 +243,40 @@ def test_handling_and_waiting_are_counted_not_folded_into_transit():
     assert kinds["dwell"] > 0
     assert kinds["wait"] > 0
     assert kinds["transit"] > kinds["dwell"] + kinds["wait"]
+
+
+def test_osrm_requests_are_capped_across_every_caller():
+    """A batch job pool wrapping a per-row pool was measured putting sixteen requests on
+    the demo server at once. The cap belongs to the client, not to whoever calls it."""
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.core import road
+
+    peak = {"now": 0, "max": 0}
+    lock = threading.Lock()
+
+    def slow_fetch(url):
+        with lock:
+            peak["now"] += 1
+            peak["max"] = max(peak["max"], peak["now"])
+        time.sleep(0.02)
+        with lock:
+            peak["now"] -= 1
+        return {
+            "code": "Ok",
+            "routes": [{"distance": 1000.0, "duration": 60.0, "legs": [{"steps": []}]}],
+            "waypoints": [{"distance": 1}, {"distance": 1}],
+        }
+
+    original = road._fetch
+    road._fetch = slow_fetch
+    try:
+        # Two nested pools, sixteen possible in flight; the semaphore must hold the line.
+        with ThreadPoolExecutor(max_workers=8) as outer:
+            list(outer.map(lambda i: road._query_osrm((i, 0.0), (i + 1, 1.0)), range(24)))
+    finally:
+        road._fetch = original
+
+    assert peak["max"] <= road.MAX_CONCURRENT_REQUESTS

@@ -124,3 +124,42 @@ def test_an_unusable_factor_set_fails_every_row_rather_than_inventing_one():
 
     assert not report.calculated
     assert all("no WTW factor" in row.status for row in report.failed)
+
+
+def test_pricing_rows_in_parallel_gives_the_same_report(monkeypatch):
+    """Rows are priced concurrently; a mismatched pairing would put one shipment's
+    figures against another's reference and never announce itself."""
+    import random
+    import time
+
+    random.seed(3)
+    original = route_module.road_route
+
+    def jittery(origin, destination):
+        # Uneven timing, so a wrong pairing shows up instead of hiding behind even work.
+        time.sleep(random.uniform(0.001, 0.02))
+        return original(origin, destination)
+
+    monkeypatch.setattr(route_module, "road_route", jittery)
+    content = HEADER + "".join(
+        f"SEV-{i:02d},29.4,40.7,{6.0 + i * 0.5:.2f},48.0,24\n" for i in range(8)
+    )
+    shipments = parse_shipments(content)
+
+    serial = build_report(shipments, concurrency=1)
+    parallel = build_report(shipments, concurrency=4)
+
+    assert [r.shipment.reference for r in parallel.rows] == [s.reference for s in shipments]
+    assert report_to_csv(serial) == report_to_csv(parallel)
+
+
+def test_progress_is_reported_once_per_row_and_only_moves_forward():
+    shipments = parse_shipments(
+        HEADER + "".join(f"SEV-{i},29.4,40.7,{6.0 + i:.1f},48.0,24\n" for i in range(5))
+    )
+    seen: list[int] = []
+
+    build_report(shipments, concurrency=2, on_progress=seen.append)
+
+    assert seen == sorted(seen)
+    assert seen[-1] == len(shipments)

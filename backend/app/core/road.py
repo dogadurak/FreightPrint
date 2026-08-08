@@ -1,4 +1,5 @@
 import os
+import threading
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 
@@ -13,6 +14,14 @@ REQUEST_TIMEOUT_S = 30
 # OSRM silently snaps unreachable input to the nearest road and still returns a route
 # (e.g. Reykjavik snaps 762 km to the Faroe Islands), so reject implausible snaps.
 MAX_SNAP_DISTANCE_KM = 100
+
+# How many requests may be in flight at once, across every caller. The limit belongs
+# here rather than to whoever is calling: a batch job pool of four, each row pool of
+# four, was measured putting sixteen requests on the public demo server at once —
+# exactly the hammering the per-caller setting was meant to prevent. Raise it against
+# a self-hosted OSRM, where the ceiling is your own hardware.
+MAX_CONCURRENT_REQUESTS = int(os.environ.get("OSRM_MAX_CONCURRENCY", "4"))
+_request_slots = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
 
 
 class RoadRoutingError(RuntimeError):
@@ -65,14 +74,21 @@ def _query_osrm(origin: tuple[float, float], destination: tuple[float, float]) -
     coords = f"{origin[0]},{origin[1]};{destination[0]},{destination[1]}"
     url = f"{OSRM_BASE_URL}/route/v1/driving/{coords}"
 
+    with _request_slots:
+        return _parse_osrm(_fetch(url), origin, destination)
+
+
+def _fetch(url: str):
     response = requests.get(
         url,
         params={"overview": "simplified", "geometries": "geojson", "steps": "true"},
         timeout=REQUEST_TIMEOUT_S,
     )
     response.raise_for_status()
-    payload = response.json()
+    return response.json()
 
+
+def _parse_osrm(payload: dict, origin: tuple[float, float], destination: tuple[float, float]):
     if payload.get("code") != "Ok" or not payload.get("routes"):
         raise RoadRoutingError(
             f"OSRM returned no route for {origin} -> {destination}: {payload.get('code')}"
