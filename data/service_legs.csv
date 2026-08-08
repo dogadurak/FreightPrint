@@ -1,14 +1,14 @@
-from_terminal,to_terminal,mode,ref_distance_km
-pendik,trieste,sea,2500
-pendik,bari,sea,1755
-pendik,patras,sea,1450
-yalova,sete,sea,3100
-mersin,trieste,sea,2750
-trieste,patras,sea,1225
-trieste,wels,rail,420
-trieste,lambach,rail,380
-trieste,koln,rail,950
-trieste,duisburg,rail,1020
-trieste,ostrava,rail,670
-trieste,regensburg,rail,540
-halkali,chitila,rail,515
+from_terminal,to_terminal,mode,ref_distance_km,transit_hours,frequency_per_week,schedule_source
+pendik,trieste,sea,2500,64,6,DFDS published schedule
+pendik,bari,sea,1755,,,
+pendik,patras,sea,1450,34,,DFDS published schedule (Patras way-call)
+yalova,sete,sea,3100,80,5,DFDS published schedule
+mersin,trieste,sea,2750,,3,DFDS published schedule (frequency only)
+trieste,patras,sea,1225,,,
+trieste,wels,rail,420,,,
+trieste,lambach,rail,380,,,
+trieste,koln,rail,950,,8,DFDS intermodal (departures only)
+trieste,duisburg,rail,1020,,,
+trieste,ostrava,rail,670,,,
+trieste,regensburg,rail,540,,,
+halkali,chitila,rail,515,,,

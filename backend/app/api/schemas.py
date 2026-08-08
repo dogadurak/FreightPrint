@@ -92,6 +92,28 @@ class EtsCostOut(BaseModel):
     notes: list[str] = []
 
 
+class ScheduleStepOut(BaseModel):
+    kind: str
+    mode: str | None = None
+    label: str
+    hours: float
+    start_h: float
+    is_estimated: bool = False
+
+
+class TimelineOut(BaseModel):
+    """Door-to-door time, split into moving, being handled, and waiting to depart.
+
+    Route-level like risk: the clock does not change with the emission factor set.
+    """
+
+    total_hours: float
+    total_days: float
+    hours_by_kind: dict[str, float]
+    steps: list[ScheduleStepOut] = []
+    notes: list[str] = []
+
+
 class LegOut(BaseModel):
     mode: str
     from_name: str
@@ -126,6 +148,7 @@ class AlternativeOut(BaseModel):
     legs: list[LegOut]
     emission_range: RangeOut | None = None
     risk: RouteRiskOut | None = None
+    timeline: TimelineOut | None = None
     notes: list[str] = []
 
 

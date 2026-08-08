@@ -169,3 +169,77 @@ def test_ferry_distance_is_separated_from_driving_distance(monkeypatch):
     assert result.driving_km == pytest.approx(506)
 
     road.road_route.cache_clear()
+
+
+def test_road_time_includes_the_rest_the_law_requires():
+    """Driving hours alone put Turkey to Germany inside two days; the daily rest is most
+    of the difference between that and a real transit."""
+    from app.core.schedule import road_elapsed_hours
+
+    driving_only = 2515 / 70
+    elapsed = road_elapsed_hours(2515)
+
+    assert elapsed > driving_only * 2
+    assert 3 <= elapsed / 24 <= 4
+
+
+def test_a_short_hop_needs_no_daily_rest():
+    from app.core.schedule import road_elapsed_hours
+
+    # Under 4.5 h of driving: no break, no rest, so elapsed is just the driving.
+    assert road_elapsed_hours(200) == pytest.approx(200 / 70, rel=0.01)
+
+
+def test_waiting_for_a_weekly_service_is_half_the_gap():
+    """Arriving at random against an even schedule, the mean wait is half the interval."""
+    from app.core.schedule import expected_wait_hours
+
+    assert expected_wait_hours(7) == pytest.approx(12)
+    assert expected_wait_hours(1) == pytest.approx(84)
+
+
+def test_an_unknown_frequency_adds_no_wait_rather_than_guessing():
+    from app.core.schedule import expected_wait_hours
+
+    assert expected_wait_hours(None) == 0
+    assert expected_wait_hours(0) == 0
+
+
+def test_a_timeline_says_which_of_its_figures_are_estimates():
+    """Rail times are derived and terminal dwell is typical, not measured."""
+    from app.core.schedule import build_timeline
+
+    route = RouteAlternative(
+        legs=[
+            Leg("road", "Gebze", "Pendik", 20, from_id="__origin__", to_id="pendik"),
+            Leg("sea", "Pendik", "Trieste", 2500, from_id="pendik", to_id="trieste"),
+            Leg("rail", "Trieste", "Koln", 950, from_id="trieste", to_id="koln"),
+        ],
+        label="multimodal",
+    )
+    timeline = build_timeline(route)
+
+    assert timeline.any_estimated
+    assert timeline.notes
+    # The published Pendik-Trieste crossing is 64 h and must not be re-derived.
+    sea = next(s for s in timeline.steps if s.mode == "sea" and s.kind == "transit")
+    assert sea.hours == 64 and not sea.is_estimated
+
+
+def test_handling_and_waiting_are_counted_not_folded_into_transit():
+    """Most of a multimodal disadvantage is time not spent moving."""
+    from app.core.schedule import build_timeline
+
+    route = RouteAlternative(
+        legs=[
+            Leg("road", "a", "Pendik", 20, from_id="__origin__", to_id="pendik"),
+            Leg("sea", "Pendik", "Trieste", 2500, from_id="pendik", to_id="trieste"),
+            Leg("rail", "Trieste", "Koln", 950, from_id="trieste", to_id="koln"),
+        ],
+        label="multimodal",
+    )
+    kinds = build_timeline(route).hours_by_kind
+
+    assert kinds["dwell"] > 0
+    assert kinds["wait"] > 0
+    assert kinds["transit"] > kinds["dwell"] + kinds["wait"]

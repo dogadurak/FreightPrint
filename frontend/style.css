@@ -19,6 +19,10 @@
   --sea: #2a78d6;
   --rail: #1baf7a;
 
+  --time-transit: #4a3aa7;
+  --time-dwell: #e87ba4;
+  --time-wait: #eda100;
+
   --good: #0f7a45;
   --good-wash: #e8f6ee;
   --bad: #b3261e;
@@ -52,6 +56,9 @@
     --road: #d95926;
     --sea: #3987e5;
     --rail: #199e70;
+    --time-transit: #9085e9;
+    --time-dwell: #d55181;
+    --time-wait: #c98500;
     --good: #3fb782;
     --good-wash: #10261c;
     --bad: #e66767;
@@ -77,6 +84,9 @@
   --road: #d95926;
   --sea: #3987e5;
   --rail: #199e70;
+  --time-transit: #9085e9;
+  --time-dwell: #d55181;
+  --time-wait: #c98500;
   --good: #3fb782;
   --good-wash: #10261c;
   --bad: #e66767;
@@ -405,3 +415,27 @@ td.exposed { color: var(--bad); font-weight: 620; }
 .cost-split { margin-top: 0.7rem; }
 .cost-split td small { color: var(--ink-muted); font-weight: 400; }
 .cost-split tr.total td { font-weight: 660; border-top: 2px solid var(--border-strong); }
+
+/* ── timeline ────────────────────────────────────────────────────────── */
+.time-row {
+  display: grid; grid-template-columns: minmax(7rem, 12rem) 1fr auto;
+  align-items: center; gap: 0.75rem;
+  padding: 0.25rem; margin: -0.25rem; border-radius: var(--r-sm);
+  cursor: pointer; border: none; background: none; width: auto; text-align: left;
+  font: inherit; color: var(--ink);
+  transition: background-color .16s ease;
+}
+.time-row:hover { background: var(--surface-sunken); }
+.time-row[aria-current="true"] { background: var(--accent-wash); }
+.time-track { height: 18px; }
+.time-stack { display: flex; gap: 2px; height: 100%; transition: width .45s cubic-bezier(.22,.61,.36,1); }
+.time-stack .step { min-width: 2px; transition: flex-basis .45s cubic-bezier(.22,.61,.36,1); }
+.time-stack .step:first-child { border-radius: 4px 0 0 4px; }
+.time-stack .step:last-child { border-radius: 0 4px 4px 0; }
+.time-stack .step:only-child { border-radius: 4px; }
+/* Moving, being handled, waiting. Deliberately none of the mode hues, so a time bar is
+   never misread as a mode bar. Validated all-pairs in both themes; the first attempt used
+   grey for handling, which fell below the chroma floor and read as absent data. */
+.step.transit, .swatch.step-transit { background: var(--time-transit); }
+.step.dwell, .swatch.step-dwell { background: var(--time-dwell); }
+.step.wait, .swatch.step-wait { background: var(--time-wait); }

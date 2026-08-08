@@ -15,6 +15,7 @@ from ..core.cost import CostInputError, calculate_ets, compare_reroute
 from ..core.network import build_network, load_terminals
 from ..core.report import ReportInputError, build_report, parse_shipments, report_to_csv
 from ..core.risk import assess_route, load_risk_zones
+from ..core.schedule import build_timeline
 from ..core.road import RoadRoutingError
 from ..core.route import Leg, RouteAlternative, find_route_alternatives
 from ..core.sea import BLOCKABLE_PASSAGES, DEFAULT_RESTRICTIONS, SeaRoutingError, sea_route
@@ -32,9 +33,11 @@ from .schemas import (
     RouteResponse,
     RouteRiskOut,
     SailingOut,
+    ScheduleStepOut,
     ScenarioOut,
     ScenarioTotalOut,
     TerminalOut,
+    TimelineOut,
     ZoneCrossingOut,
 )
 
@@ -152,6 +155,24 @@ def _risk_out(route) -> RouteRiskOut:
         ],
         passages=risk.passages,
         untracked_sea_km=round(risk.untracked_sea_km, 1),
+    )
+
+
+def _timeline_out(route) -> TimelineOut:
+    timeline = build_timeline(route)
+    return TimelineOut(
+        total_hours=round(timeline.total_hours, 1),
+        total_days=round(timeline.total_days, 2),
+        hours_by_kind={k: round(v, 1) for k, v in timeline.hours_by_kind.items()},
+        steps=[
+            ScheduleStepOut(
+                kind=step.kind, mode=step.mode, label=step.label,
+                hours=round(step.hours, 1), start_h=round(step.start_h, 1),
+                is_estimated=step.is_estimated,
+            )
+            for step in timeline.steps
+        ],
+        notes=timeline.notes,
     )
 
 
@@ -374,6 +395,7 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
                 legs=legs,
                 emission_range=emission_range,
                 risk=_risk_out(route),
+                timeline=_timeline_out(route),
                 notes=route.notes,
             )
         )

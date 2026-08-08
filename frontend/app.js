@@ -28,6 +28,7 @@ const mapElement = $("map");
 
 const nf = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
 const nf3 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
+const nf1 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
 const signed = (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${nf.format(Math.abs(v))}`;
 
 let factorSets = [];
@@ -668,6 +669,7 @@ function applyScenario() {
   renderNotices(scenario);
   updateComparison(scenario);
   updateSensitivity(scenario);
+  renderTimeline(scenario);
   renderRiskCost(scenario);
   renderLegDetail(scenario);
 
@@ -850,6 +852,64 @@ function showSkeleton() {
 
 initMap();
 loadFactorSets();
+
+/* ── timeline ────────────────────────────────────────────────────────── */
+
+const STEP_LABELS = { transit: "yolda", dwell: "aktarma", wait: "kalkış beklemesi" };
+
+/** Lay the journey out in time. Most of a multimodal disadvantage is not distance:
+ *  it is handling and waiting for the next departure, which a distance figure hides. */
+function renderTimeline(scenario) {
+  const total = scenario.totals[selectedIndex] ?? scenario.totals[0];
+  const alternative = payload.alternatives.find((a) => a.label === total.label);
+  const timeline = alternative?.timeline;
+  if (!timeline) { $("timeline").innerHTML = ""; return; }
+
+  // Every alternative shares one scale, so the bars are comparable at a glance.
+  const longest = Math.max(
+    ...payload.alternatives.map((a) => a.timeline?.total_hours ?? 0), 1,
+  );
+
+  const rows = scenario.totals.map((row, index) => {
+    const alt = payload.alternatives.find((a) => a.label === row.label);
+    const line = alt?.timeline;
+    if (!line) return "";
+    const blocks = line.steps.map((step) => `<span class="step ${step.kind}"
+        style="flex:0 0 ${(step.hours / line.total_hours) * 100}%"
+        title="${STEP_LABELS[step.kind]}: ${step.label} · ${nf1.format(step.hours)} sa${
+          step.is_estimated ? " (tahmin)" : ""}"></span>`).join("");
+    return `<button type="button" class="time-row" data-index="${index}"
+        aria-current="${index === selectedIndex}"
+        aria-label="${row.label}: ${nf1.format(line.total_days)} gün">
+        <span class="bar-name">${row.label}${
+          row.is_all_road ? '<span class="baseline-tag">temel</span>' : ""}</span>
+        <span class="time-track"><span class="time-stack"
+          style="width:${(line.total_hours / longest) * 100}%">${blocks}</span></span>
+        <span class="bar-value">${nf1.format(line.total_days)} gün</span>
+      </button>`;
+  }).join("");
+
+  const split = Object.entries(timeline.hours_by_kind)
+    .map(([kind, hours]) => `${STEP_LABELS[kind]} ${nf.format(hours)} sa`)
+    .join(" · ");
+
+  $("timeline").innerHTML = `<div class="bars">${rows}</div>
+    <p class="hint">Seçili rota: ${split}</p>
+    <div class="legend-row">
+      ${Object.entries(STEP_LABELS).map(([kind, label]) =>
+        `<span class="key"><span class="swatch step-${kind}"></span>${label}</span>`).join("")}
+    </div>
+    ${timeline.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
+
+  $("timeline-note").textContent =
+    `${nf1.format(timeline.total_days)} gün · ${timeline.steps.length} adım`;
+
+  $("timeline").querySelectorAll(".time-row").forEach((element) =>
+    element.addEventListener("click", () => {
+      selectedIndex = Number(element.dataset.index);
+      applyScenario();
+    }));
+}
 
 /* ── risk & cost ─────────────────────────────────────────────────────── */
 

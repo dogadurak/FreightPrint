@@ -1,4 +1,5 @@
 import csv
+from functools import lru_cache
 import json
 from dataclasses import dataclass
 from math import asin, cos, radians, sin, sqrt
@@ -63,6 +64,39 @@ def load_service_legs(path: Path | None = None) -> list[dict]:
             }
             for row in csv.DictReader(f)
         ]
+
+
+@dataclass(frozen=True)
+class ServiceSchedule:
+    """A service's published timetable, where the operator publishes one.
+
+    Both fields are optional because most of these corridors do not publish. Absent is
+    kept distinct from zero so a missing timetable is never read as "no wait".
+    """
+
+    transit_hours: float | None
+    frequency_per_week: float | None
+    source: str
+
+
+@lru_cache(maxsize=1)
+def load_service_schedules(path: Path | None = None) -> dict[tuple[str, str], ServiceSchedule]:
+    """Schedules keyed both ways round: a service runs in both directions."""
+    path = path or DATA_DIR / "service_legs.csv"
+    schedules: dict[tuple[str, str], ServiceSchedule] = {}
+    with open(path, encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            schedule = ServiceSchedule(
+                transit_hours=float(row["transit_hours"]) if row.get("transit_hours") else None,
+                frequency_per_week=(
+                    float(row["frequency_per_week"]) if row.get("frequency_per_week") else None
+                ),
+                source=row.get("schedule_source", ""),
+            )
+            origin, destination = row["from_terminal"], row["to_terminal"]
+            schedules[(origin, destination)] = schedule
+            schedules[(destination, origin)] = schedule
+    return schedules
 
 
 def build_network(

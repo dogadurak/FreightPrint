@@ -3,7 +3,7 @@
 Çok modlu yük taşımacılığı karbon ve rota analiz motoru.
 Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
-**Durum:** Faz 4 — web arayüzü çalışıyor.
+**Durum:** Faz 5 — risk, maliyet ve süre modülü çalışıyor.
 
 ## Kurulum
 
@@ -71,6 +71,8 @@ muhasebe esasına ne kadar bağlı olduğu.
 | `GET /api/factor-sets` | Seçilebilir faktör setleri ve her birinin deniz esası |
 | `POST /api/routes` | Sevkiyat → alternatifler, emisyon, tasarruf, belirsizlik |
 | `POST /api/report` | Toplu CSV → indirilebilir rapor |
+| `GET /api/risk-zones` | İlan edilmiş savaş riski bölgeleri (GeoJSON) |
+| `POST /api/compare` | İki sefer: doğrudan ve bir boğazdan kaçınan |
 
 ### Toplu rapor
 
@@ -133,6 +135,10 @@ python -m pytest tests/ -q
 | `backend/app/main.py` | FastAPI girişi, arayüzü statik olarak sunar |
 | `backend/app/api/` | Pydantic şemaları ve REST uçları |
 | `backend/app/core/report.py` | Toplu sevkiyat dosyası → rapor |
+| `backend/app/core/risk.py` | Risk bölgesi kesişimi, geçilen boğazlar |
+| `backend/app/core/cost.py` | ETS kapsamı ve sapma maliyeti |
+| `backend/app/core/schedule.py` | Kapıdan kapıya süre: sürüş kuralları, aktarma, bekleme |
+| `data/risk_zones.geojson` | İlan edilmiş savaş riski bölgeleri (elle sayısallaştırılmış) |
 | `scripts/check_privacy.py` | Commit'e müşteri verisi sızmasını engelleyen kontrol |
 | `frontend/` | Tek sayfa arayüz (MapLibre + vanilla JS, derleme adımı yok) |
 | `backend/app/core/cache.py` | SQLite disk önbelleği — süreç yeniden başlasa da korunur |
@@ -174,6 +180,38 @@ Aynı sevkiyat, Pendik–Trieste–Köln (24 ton):
 savunulamıyor.** Demiryolu bacağı hâlâ net kazanç (tren 0,020'ye karşı karayolu 0,060),
 sorun ro-ro deniz bacağında. Sistem bu yüzden hangi faktör setiyle hesap yaptığını her
 çıktıda yazar ve tasarruf negatifse ağaç eşdeğerini sıfır döndürür.
+
+## Risk, maliyet ve süre
+
+**Güzergâh riski.** Deniz bacaklarının izi searoute'tan alınıp ilan edilmiş savaş riski
+bölgeleriyle kesiştirilir. Bölgeler `data/risk_zones.geojson` içinde, Joint War Committee
+listesinden (JWLA-033) **elle sayısallaştırılmış basitleştirilmiş dikdörtgenler** —
+kesin hukuki sınır değil, "rota bu alana giriyor mu" sorusunu cevaplamak için.
+
+Poligonların doğruluğu iki testle sınanır: (1) bir bölge, kapsadığını iddia ettiği boğazın
+gerçek koordinatını içermeli, (2) searoute bağımsız olarak "bu rota Süveyş'ten geçti"
+diyorsa, iz Süveyş'i iddia eden bölgeyle kesişmeli. Bu testler yazıldığında iki yanlış
+iddia yakalandı ve düzeltildi.
+
+İzi olmayan bir deniz bacağı **"kontrol edilmedi"** olarak raporlanır, temiz sayılmaz.
+
+**ETS maliyeti.** Şemanın gerçek coğrafi kuralı uygulanır: AEA içi seferler %100, bir ucu
+dışarıda olanlar **%50**, ikisi de dışarıda olanlar kapsam dışı. Kademe: 2024 %40,
+2025 %70, 2026 ve sonrası %100. Yalnızca deniz bacakları — karayolu ayrı bir şema (ETS2),
+demiryolu denizcilik şemasında değil.
+
+**Savaş risk primi hesaplanmaz.** Prim tekne değeri üzerinden pazarlıkla belirlenir ve
+yayımlanmaz; kullanıcı girdisidir. Sistemin eklediği, sapmanın **hesaplanabilir** kısmı:
+mesafe, süre, CO2 ve ETS farkı. Böylece armatörün faturası bir şeye karşı denetlenebilir.
+
+**Kapıdan kapıya süre.** Mesafeden değil, üç parçadan oluşur: yolda geçen süre, terminal
+aktarması ve kalkış beklemesi. Karayolunda AB sürüş kuralları uygulanır (günde 9 saat
+sürüş, 4,5 saatte bir 45 dk mola, 11 saat günlük dinlenme) — bunlar olmadan Türkiye'den
+Almanya'ya iki gün çıkardı. Deniz süreleri yayımlanmış tarifelerden (DFDS), yoksa
+türetilir ve "tahmin" işaretlenir.
+
+Gebze→Düsseldorf için sonuç: tam karayolu **3,1 gün**, çok modlu **5,5 gün** — ve farkın
+üçte biri hiç hareket edilmeyen süre (18 sa aktarma + 25 sa bekleme).
 
 ## Emisyon hesabı
 
@@ -275,9 +313,10 @@ rotası ve mesafe geçer; sevkiyat satırları, müşteri adları ve tonajlar ge
   olduğu henüz belirlenmedi — kendi deniz mesafemizi hesaplamadan hakem yok.
 - **Ambarlı hiçbir servise bağlı değil.** Brifingde terminal olarak listeli ama servis
   bacağı yok, dolayısıyla rotalamaya hiç girmiyor. Bir test bunu görünür tutuyor.
-- **Süre ve servis sıklığı veri modelinde yok.** `service_legs.csv` yalnızca mesafe
-  taşıyor; deniz ve demiryolu bacaklarının transit süresi hesaplanmıyor, bu yüzden
-  "en hızlı rota" sorusu henüz cevaplanamıyor.
+- **Demiryolu transit süreleri türetilmiş.** Bu koridorlar için yayımlanmış tarife
+  bulunamadı; 40 km/sa ortalamadan hesaplanıyor ve çıktıda "tahmin" olarak işaretli.
+- **Aktarma süreleri sektör tipik değerleri**, ölçüm değil. Gümrük ve sınır kapısı
+  bekleme süreleri hiç dâhil değil — gerçek kapıdan kapıya süre daha uzun olabilir.
 - **Belirsizlik her moda aynı bandı uyguluyor.** Karayolu sapması %1,9 ölçüldü ama deniz
   sapması %12–43; ikisine de aynı %5 verilmesi en belirsiz bacakta sahte güven üretiyor.
 - **`reference` seti WTW desteklemez.** Müşteri raporu yalnızca TTW değerleri verdiği için
