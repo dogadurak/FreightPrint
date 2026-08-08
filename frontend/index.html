@@ -129,8 +129,14 @@
           Yüklediğiniz dosya, seçili senaryoyla fiyatlanır. Zorunlu sütunlar:
           <code>origin_lon, origin_lat, destination_lon, destination_lat</code>
         </p>
+        <p class="hint">
+          Excel (<code>.xlsx</code>) veya CSV. Noktalı virgülle ayrılmış ve virgüllü
+          ondalık kullanan Türkçe Excel çıktıları da okunur; çalışma kitabının
+          <strong>ilk sayfası</strong> alınır.
+        </p>
         <label>Sevkiyat dosyası
-          <input type="file" name="file" accept=".csv,text/csv" required>
+          <input type="file" name="file" required
+                 accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         </label>
         <button type="submit" class="ghost" id="report-submit">Rapor indir</button>
         <p class="hint" id="report-status" role="status"></p>

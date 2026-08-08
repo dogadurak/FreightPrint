@@ -6,6 +6,7 @@ obligation to produce one already exists, and it is produced by hand today.
 
 import csv
 import io
+import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable
@@ -25,6 +26,14 @@ from .uncertainty import round_to_significant
 
 REQUIRED_COLUMNS = ("origin_lon", "origin_lat", "destination_lon", "destination_lat")
 OPTIONAL_COLUMNS = ("reference", "origin_name", "destination_name", "tonnage")
+
+# An .xlsx is a zip, and every zip starts here. Sniffed rather than trusted from the
+# extension: a renamed file should still work, and a mislabelled one should say why.
+ZIP_MAGIC = b"PK\x03\x04"
+
+# A spreadsheet expands far beyond its compressed size, so the upload cap that guards
+# the CSV path does not guard this one. Cells, not bytes, are what cost us here.
+MAX_WORKBOOK_CELLS = 200_000
 
 OUTPUT_COLUMNS = (
     "reference",
@@ -100,9 +109,113 @@ class Report:
         return sum(row.saving_co2_kg or 0.0 for row in self.calculated)
 
 
+def _number(value: str, column: str, row_number: int, comma_is_decimal: bool) -> float:
+    """Read a number the way this particular file writes it.
+
+    A Turkish or continental Excel writes 29,4306 for what this code wants as 29.4306,
+    and refusing those files would refuse most of the real ones. But `1,234` is a
+    thousand to an English Excel and one-and-a-bit to a Turkish one, and guessing wrong
+    on a tonnage is a silent factor of a thousand that no range check would catch.
+
+    So the ambiguity is settled by evidence rather than by the shape of the number: a
+    file that separates its columns with semicolons or tabs has freed the comma to be a
+    decimal mark, and a comma-separated file has not. `comma_is_decimal` carries that
+    finding down from the delimiter, so no single value has to be guessed at.
+    """
+    text = str(value).strip()
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        pass
+    if comma_is_decimal and re.fullmatch(r"-?\d+,\d+", text):
+        return float(text.replace(",", "."))
+    raise ReportInputError(f"row {row_number}: {column} is not a number: {text!r}")
+
+
+def _cell_text(value) -> str:
+    """A spreadsheet cell as the text an equivalent CSV would have held."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, float) and value.is_integer():
+        # Excel stores every number as a float, so a tonnage of 24 arrives as 24.0
+        # and a reference of 1001 as 1001.0. Neither should reach the report that way.
+        return str(int(value))
+    return str(value).strip()
+
+
+def workbook_to_csv(raw: bytes) -> str:
+    """Flatten the first worksheet into the CSV text the parser already understands.
+
+    Only the first sheet is read. A workbook whose shipments are spread over several
+    sheets would be silently half-reported, so this is a documented limit rather than
+    a guess at which sheets were meant.
+    """
+    try:
+        import openpyxl
+    except ImportError as error:  # pragma: no cover - dependency is declared
+        raise ReportInputError(
+            "reading .xlsx needs openpyxl; install it or upload the sheet as CSV"
+        ) from error
+
+    try:
+        workbook = openpyxl.load_workbook(
+            io.BytesIO(raw), read_only=True, data_only=True, keep_links=False
+        )
+    except Exception as error:
+        raise ReportInputError(f"could not read the workbook: {error}") from error
+
+    try:
+        sheet = workbook.worksheets[0]
+        if sheet.max_row and sheet.max_column:
+            if sheet.max_row * sheet.max_column > MAX_WORKBOOK_CELLS:
+                raise ReportInputError(
+                    f"sheet has more than {MAX_WORKBOOK_CELLS:,} cells; split it or upload CSV"
+                )
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, lineterminator="\n")
+        written = 0
+        for row in sheet.iter_rows(values_only=True):
+            cells = [_cell_text(cell) for cell in row]
+            if not any(cells):
+                continue  # Trailing blank rows are Excel's, not the user's.
+            writer.writerow(cells)
+            written += 1
+    finally:
+        workbook.close()
+
+    if not written:
+        raise ReportInputError("the first worksheet is empty")
+    return buffer.getvalue()
+
+
+def read_upload(raw: bytes, filename: str | None = None) -> str:
+    """Turn an uploaded file into CSV text, whichever of the two forms it arrived in."""
+    if raw.startswith(ZIP_MAGIC):
+        return workbook_to_csv(raw)
+    if filename and filename.lower().endswith((".xlsx", ".xlsm")):
+        raise ReportInputError(
+            f"{filename} is named like a workbook but is not one. "
+            "An .xls saved by an old Excel has to be re-saved as .xlsx or CSV."
+        )
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise ReportInputError(f"file must be UTF-8 text or an .xlsx workbook: {error}") from error
+
+
 def parse_shipments(content: str) -> list[ShipmentRow]:
     """Read the upload, refusing it whole rather than reporting on a misread column."""
-    reader = csv.DictReader(io.StringIO(content))
+    # Excel in most of Europe writes CSV with semicolons, because the comma is its
+    # decimal mark. Sniffed from the header alone, which is the one line whose shape
+    # is known in advance.
+    header = content.split("\n", 1)[0]
+    delimiter = max(",;\t", key=header.count) if header else ","
+    # Only a file that gave up the comma as a separator can be using it as a decimal mark.
+    comma_is_decimal = delimiter != ","
+    reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
     if reader.fieldnames is None:
         raise ReportInputError("file is empty")
 
@@ -115,12 +228,11 @@ def parse_shipments(content: str) -> list[ShipmentRow]:
 
     shipments = []
     for number, row in enumerate(reader, start=2):
-        try:
-            origin = (float(row["origin_lon"]), float(row["origin_lat"]))
-            destination = (float(row["destination_lon"]), float(row["destination_lat"]))
-            tonnage = float(row.get("tonnage") or 24)
-        except (TypeError, ValueError) as error:
-            raise ReportInputError(f"row {number}: {error}") from error
+        read = lambda column: _number(row[column], column, number, comma_is_decimal)
+        origin = (read("origin_lon"), read("origin_lat"))
+        destination = (read("destination_lon"), read("destination_lat"))
+        raw_tonnage = (row.get("tonnage") or "").strip() if row.get("tonnage") else ""
+        tonnage = read("tonnage") if raw_tonnage else 24.0
 
         for point in (origin, destination):
             if not (-180 <= point[0] <= 180 and -90 <= point[1] <= 90):

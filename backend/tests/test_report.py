@@ -6,6 +6,7 @@ from app.core.report import (
     ReportInputError,
     build_report,
     parse_shipments,
+    read_upload,
     report_to_csv,
 )
 from app.core.road import RoadRoute, RoadRoutingError
@@ -163,3 +164,79 @@ def test_progress_is_reported_once_per_row_and_only_moves_forward():
 
     assert seen == sorted(seen)
     assert seen[-1] == len(shipments)
+
+
+def _workbook(rows) -> bytes:
+    """A real .xlsx, built the way Excel would: numbers as numbers, not as text."""
+    import io
+
+    import openpyxl
+
+    workbook = openpyxl.Workbook()
+    for row in rows:
+        workbook.active.append(row)
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+SHEET_HEADER = ["reference", "origin_lon", "origin_lat", "destination_lon", "destination_lat", "tonnage"]
+
+
+def test_a_workbook_reads_the_same_as_the_equivalent_csv():
+    raw = _workbook([SHEET_HEADER, ["SEV-1", 29.4306, 40.7889, 6.7735, 51.2277, 24]])
+
+    from_sheet = parse_shipments(read_upload(raw, "shipments.xlsx"))
+    from_csv = parse_shipments(HEADER + ROW)
+
+    assert from_sheet == from_csv
+
+
+def test_excel_integers_do_not_reach_the_report_as_decimals():
+    """Excel stores every number as a float, so a reference of 1001 arrives as 1001.0."""
+    raw = _workbook([SHEET_HEADER, [1001, 29.4306, 40.7889, 6.7735, 51.2277, 24]])
+
+    shipment = parse_shipments(read_upload(raw, "shipments.xlsx"))[0]
+
+    assert shipment.reference == "1001"
+    assert shipment.tonnage == 24
+
+
+def test_trailing_blank_rows_excel_leaves_behind_are_not_shipments():
+    raw = _workbook(
+        [SHEET_HEADER, ["SEV-1", 29.4306, 40.7889, 6.7735, 51.2277, 24], [None] * 6, [None] * 6]
+    )
+
+    assert len(parse_shipments(read_upload(raw, "shipments.xlsx"))) == 1
+
+
+def test_a_semicolon_separated_export_is_read_as_one():
+    """Excel across most of Europe writes CSV with semicolons, because the comma is
+    already its decimal mark."""
+    content = (
+        "reference;origin_lon;origin_lat;destination_lon;destination_lat;tonnage\n"
+        "SEV-1;29,4306;40,7889;6,7735;51,2277;24\n"
+    )
+
+    shipment = parse_shipments(content)[0]
+
+    assert shipment.origin == (29.4306, 40.7889)
+    assert shipment.tonnage == 24
+
+
+def test_a_grouped_number_is_refused_rather_than_guessed():
+    """1,234 is one thousand to an English Excel and 1.234 to a Turkish one. Guessing
+    would put a shipment a thousand kilometres from where it is."""
+    content = HEADER.replace("origin_lon", "origin_lon") + "SEV-1,\"1,234\",40.78,6.77,51.22,24\n"
+
+    with pytest.raises(ReportInputError, match="origin_lon"):
+        parse_shipments(content)
+
+
+def test_a_file_named_xlsx_that_is_not_one_says_so():
+    with pytest.raises(ReportInputError, match="named like a workbook"):
+        read_upload(b"reference,origin_lon\nSEV-1,29.4\n", "shipments.xlsx")
+
+
+def test_plain_csv_still_arrives_through_the_same_door():
+    assert read_upload((HEADER + ROW).encode("utf-8-sig")) == HEADER + ROW

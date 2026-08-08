@@ -15,7 +15,13 @@ from ..core.cost import CostInputError, calculate_ets, compare_reroute
 from ..core.geocode import GeocodingError, search
 from ..core.jobs import DEFAULT_CONCURRENCY, registry
 from ..core.network import build_network, load_terminals
-from ..core.report import ReportInputError, build_report, parse_shipments, report_to_csv
+from ..core.report import (
+    ReportInputError,
+    build_report,
+    parse_shipments,
+    read_upload,
+    report_to_csv,
+)
 from ..core.risk import assess_route, load_risk_zones
 from ..core.reefer import ReeferFactorError, calculate_reefer
 from ..core.schedule import build_timeline
@@ -473,7 +479,7 @@ MAX_UPLOAD_BYTES = 2_000_000
 
 @router.post("/report", response_class=PlainTextResponse)
 def bulk_report(
-    file: UploadFile = File(..., description="CSV of shipments"),
+    file: UploadFile = File(..., description="Shipments as CSV or .xlsx"),
     scope: str = Form("TTW"),
     factor_set: str = Form("reference"),
     road_fuel_type: str | None = Form(None),
@@ -484,16 +490,8 @@ def bulk_report(
     if scope not in {"TTW", "WTW"}:
         raise HTTPException(status_code=422, detail=f"scope must be TTW or WTW, got {scope!r}")
 
-    raw = file.file.read(MAX_UPLOAD_BYTES + 1)
-    if len(raw) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail=f"file exceeds {MAX_UPLOAD_BYTES} bytes")
     try:
-        content = raw.decode("utf-8-sig")
-    except UnicodeDecodeError as error:
-        raise HTTPException(status_code=422, detail=f"file must be UTF-8 text: {error}") from error
-
-    try:
-        shipments = parse_shipments(content)
+        shipments = parse_shipments(_read_upload(file))
     except ReportInputError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -652,13 +650,14 @@ SYNCHRONOUS_ROW_LIMIT = 20
 
 
 def _read_upload(file: UploadFile) -> str:
+    """CSV text from whichever of the accepted forms was uploaded."""
     raw = file.file.read(MAX_UPLOAD_BYTES + 1)
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail=f"file exceeds {MAX_UPLOAD_BYTES} bytes")
     try:
-        return raw.decode("utf-8-sig")
-    except UnicodeDecodeError as error:
-        raise HTTPException(status_code=422, detail=f"file must be UTF-8 text: {error}") from error
+        return read_upload(raw, file.filename)
+    except ReportInputError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 def _job_out(job) -> JobOut:
@@ -670,7 +669,7 @@ def _job_out(job) -> JobOut:
 
 @router.post("/report/jobs", response_model=JobOut, status_code=202)
 def start_report_job(
-    file: UploadFile = File(..., description="CSV of shipments"),
+    file: UploadFile = File(..., description="Shipments as CSV or .xlsx"),
     scope: str = Form("TTW"),
     factor_set: str = Form("reference"),
     road_fuel_type: str | None = Form(None),
