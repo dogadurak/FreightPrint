@@ -1,5 +1,6 @@
 import json
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
@@ -113,6 +114,53 @@ def geocode(place: str, country: str, cache: dict | None = None) -> tuple[float,
     if owns_cache:
         _save_cache(cache)
     return tuple(coords) if coords else None
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One place a search could have meant."""
+
+    name: str
+    lon: float
+    lat: float
+    kind: str
+    importance: float
+
+
+def search(query: str, country: str | None = None, limit: int = 5) -> list[Candidate]:
+    """Return the places a name could mean, most likely first — never just the first.
+
+    Silently taking the top hit is how a destination ends up in the wrong province: the
+    validation set has a name matching several settlements whose readings differ by
+    seven percentage points of route distance. The caller has to choose.
+    """
+    params = {
+        "q": query.strip(),
+        "format": "json",
+        "limit": max(1, min(limit, 10)),
+        "addressdetails": 1,
+    }
+    if country:
+        params["countrycodes"] = normalise_country(country).lower()
+
+    response = requests.get(
+        NOMINATIM_URL, params=params, headers={"User-Agent": USER_AGENT},
+        timeout=REQUEST_TIMEOUT_S,
+    )
+    response.raise_for_status()
+    results = response.json()
+    time.sleep(MIN_REQUEST_INTERVAL_S)
+
+    return [
+        Candidate(
+            name=hit.get("display_name", query),
+            lon=float(hit["lon"]),
+            lat=float(hit["lat"]),
+            kind=hit.get("type", ""),
+            importance=float(hit.get("importance", 0)),
+        )
+        for hit in results
+    ]
 
 
 def geocode_all(places: list[tuple[str, str]]) -> dict[tuple[str, str], tuple[float, float] | None]:

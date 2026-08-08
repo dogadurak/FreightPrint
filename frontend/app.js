@@ -816,6 +816,65 @@ async function downloadReport(job) {
   URL.revokeObjectURL(url);
 }
 
+/* ── place search ────────────────────────────────────────────────────── */
+
+const placeQuery = $("place-query");
+const placeResults = $("place-results");
+let placeTimer;
+
+/** Search by name, then make the user pick which place was meant.
+ *
+ *  Resolving a name to one point silently is how a shipment lands in the wrong province.
+ *  One name in the validation set matches several villages, and two of the readings
+ *  differ by seven points of route distance — both perfectly ordinary on screen. The
+ *  choice is the user's to make.
+ */
+async function searchPlaces(query) {
+  if (query.trim().length < 2) { placeResults.hidden = true; return; }
+  placeResults.hidden = false;
+  placeResults.innerHTML = '<p class="place-empty">Aranıyor…</p>';
+  try {
+    const found = await fetch(`/api/places?q=${encodeURIComponent(query)}&limit=5`)
+      .then((r) => (r.ok ? r.json() : []));
+    if (!found.length) {
+      placeResults.innerHTML = '<p class="place-empty">Sonuç yok.</p>';
+      return;
+    }
+    placeResults.innerHTML = found.map((place, index) => `
+      <div class="place-hit" data-index="${index}" role="option" tabindex="0">
+        <span class="place-name">${place.name}</span>
+        <span class="place-actions">
+          <button type="button" class="ghost" data-target="origin">kalkış</button>
+          <button type="button" class="ghost" data-target="destination">varış</button>
+        </span>
+      </div>`).join("");
+
+    placeResults.querySelectorAll("[data-target]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const hit = found[Number(button.closest(".place-hit").dataset.index)];
+        const isOrigin = button.dataset.target === "origin";
+        (isOrigin ? originInput : destinationInput).value = `${hit.lon}, ${hit.lat}`;
+        // The first part of the display name is the place itself.
+        form.elements[isOrigin ? "origin_name" : "destination_name"].value =
+          hit.name.split(",")[0];
+        placeEndpointMarkers();
+        if (map) map.flyTo({ center: [hit.lon, hit.lat], zoom: 6, duration: 800 });
+        placeResults.hidden = true;
+        placeQuery.value = "";
+      });
+    });
+  } catch (error) {
+    placeResults.innerHTML = `<p class="place-empty">Arama başarısız: ${error.message}</p>`;
+  }
+}
+
+placeQuery.addEventListener("input", (event) => {
+  // Nominatim asks for at most one request a second; debounce rather than type-ahead.
+  clearTimeout(placeTimer);
+  placeTimer = setTimeout(() => searchPlaces(event.target.value), 500);
+});
+placeQuery.addEventListener("blur", () => setTimeout(() => { placeResults.hidden = true; }, 200));
+
 $("pick-origin").addEventListener("click", () => setPicking("origin"));
 $("pick-destination").addEventListener("click", () => setPicking("destination"));
 [originInput, destinationInput].forEach((input) =>

@@ -59,6 +59,11 @@ Pano dört bölümden oluşur:
 Rotalama pahalı (~6 sn, yedi OSRM çağrısı), fiyatlama bedava. Bu yüzden panonun sunduğu
 her senaryo **tek istekte** hesaplanır; sonrasında geçiş yapmak sunucuya hiç gitmez.
 
+**Yer arama neden tek cevap vermiyor?** Bir adı arka planda tek noktaya çözmek, sevkiyatı
+yanlış vilayete göndermenin yoludur ve fark kendini belli etmez: doğrulama setinde bir
+adın iki okuması rota mesafesinde **7 puan** fark veriyordu, ikisi de ekranda gayet normal
+görünüyordu. Arama bu yüzden adayları listeler, seçim kullanıcınındır.
+
 **Manşet KPI neden "tasarruf" değil?** Bu koridorda doğru GLEC ro-ro faktörleriyle tasarruf
 negatif çıkıyor (aşağıdaki bulgu). Manşeti "tasarruf" diye kurmak ya negatif sayıyı yanlış
 çerçevede gösterir ya da kullanıcıyı yaltaklanan faktörlere iter. Onun yerine manşet
@@ -71,6 +76,7 @@ muhasebe esasına ne kadar bağlı olduğu.
 | `GET /api/factor-sets` | Seçilebilir faktör setleri ve her birinin deniz esası |
 | `POST /api/routes` | Sevkiyat → alternatifler, emisyon, tasarruf, belirsizlik |
 | `POST /api/report` | Toplu CSV → indirilebilir rapor |
+| `GET /api/places` | Yer adı → aday konumlar (tek cevap değil, liste) |
 | `GET /api/risk-zones` | İlan edilmiş savaş riski bölgeleri (GeoJSON) |
 | `POST /api/report/jobs` | Toplu CSV → arka plan işi (202 + iş kimliği) |
 | `GET /api/report/jobs/{id}` | İşin durumu ve ilerlemesi |
@@ -319,10 +325,8 @@ rotası ve mesafe geçer; sevkiyat satırları, müşteri adları ve tonajlar ge
   entegrasyonu henüz yok, bu yüzden demiryolu bacağı hesaplanmıyor.
 - **Karayolu için public OSRM demo sunucusu kullanılıyor.** Hız sınırlı; prodüksiyon
   için `OSRM_BASE_URL` ortam değişkeniyle kendi OSRM örneğinizi gösterin.
-- **CLI geocoding kullanmaz.** Şehir adı değil, koordinat girilmesi gerekiyor.
-  `geocode.py` yalnızca doğrulama analizinde kullanılıyor; birden fazla yerleşimin
-  aynı adı taşıdığı durumlarda sessizce yanlış eşleşme üretebildiği için hesap
-  yoluna dâhil edilmedi.
+- **CLI geocoding kullanmaz.** Komut satırında koordinat girilmesi gerekiyor; arama
+  yalnızca web arayüzünde var.
 - **Referans mesafeler kendi aralarında çelişiyor.** `data/service_legs.csv` Pendik–Bari
   için 1755 km diyor, doğrulama veri seti aynı bacak için 1825 km. Hangisinin doğru
   olduğu henüz belirlenmedi — kendi deniz mesafemizi hesaplamadan hakem yok.

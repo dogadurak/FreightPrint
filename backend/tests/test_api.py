@@ -429,3 +429,20 @@ def test_a_job_that_cannot_price_anything_reports_failed(client):
 def test_an_unknown_job_is_a_404(client):
     assert client.get("/api/report/jobs/deadbeef").status_code == 404
     assert client.get("/api/report/jobs/deadbeef/file").status_code == 404
+
+
+def test_a_place_search_returns_candidates_not_one_answer(client):
+    """Resolving a name behind the user's back is how a shipment lands in the wrong
+    province; the endpoint hands back the choice instead."""
+    response = client.get("/api/places", params={"q": "Santa Maria", "limit": 5})
+
+    assert response.status_code == 200
+    places = response.json()
+    assert len(places) > 1
+    assert len({(p["lon"], p["lat"]) for p in places}) == len(places)
+    for place in places:
+        assert -180 <= place["lon"] <= 180 and -90 <= place["lat"] <= 90
+
+
+def test_an_empty_place_query_is_refused(client):
+    assert client.get("/api/places", params={"q": "   "}).status_code == 422

@@ -249,3 +249,10 @@ class JobOut(BaseModel):
     progress: float
     filename: str
     error: str | None = None
+
+
+class PlaceOut(BaseModel):
+    name: str
+    lon: float
+    lat: float
+    kind: str = ""

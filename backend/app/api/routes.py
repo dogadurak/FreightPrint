@@ -12,6 +12,7 @@ from ..core.emissions import (
     tree_equivalent,
 )
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
+from ..core.geocode import GeocodingError, search
 from ..core.jobs import DEFAULT_CONCURRENCY, registry
 from ..core.network import build_network, load_terminals
 from ..core.report import ReportInputError, build_report, parse_shipments, report_to_csv
@@ -29,6 +30,7 @@ from .schemas import (
     EtsLegOut,
     FactorSetOut,
     JobOut,
+    PlaceOut,
     LegOut,
     RangeOut,
     RouteRequest,
@@ -687,3 +689,28 @@ def report_job_file(job_id: str) -> PlainTextResponse:
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{job.filename}"'},
     )
+
+
+@router.get("/places", response_model=list[PlaceOut])
+def find_places(q: str, country: str | None = None, limit: int = 5) -> list[PlaceOut]:
+    """Places a name could mean, for the caller to choose between.
+
+    Deliberately a list. Resolving a name to one point behind the user's back is how a
+    shipment ends up in the wrong province, and the difference does not announce itself:
+    two readings of one name in the validation set differ by seven points of route
+    distance, and both look perfectly ordinary on screen.
+    """
+    if not q or not q.strip():
+        raise HTTPException(status_code=422, detail="q must not be empty")
+    try:
+        candidates = search(q, country=country, limit=limit)
+    except GeocodingError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except requests.RequestException as error:
+        raise HTTPException(
+            status_code=503, detail=f"geocoding service unavailable: {error}"
+        ) from error
+    return [
+        PlaceOut(name=c.name, lon=round(c.lon, 5), lat=round(c.lat, 5), kind=c.kind)
+        for c in candidates
+    ]
