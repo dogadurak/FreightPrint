@@ -1,7 +1,7 @@
 {
   "type": "FeatureCollection",
   "name": "risk_zones",
-  "note": "Hand-digitised from the Joint War Committee Hull War, Piracy, Terrorism and Related Perils Listed Areas (JWLA-033, 3 March 2026), published as a PDF with coordinates; the JWC issues no machine-readable version. Boundaries here are simplified rectangles that capture each area's extent, not its exact legal outline: they are for showing whether a route enters a listed area, never for underwriting. Re-digitise when a new JWLA is issued.",
+  "note": "Hand-digitised from the Joint War Committee Hull War, Piracy, Terrorism and Related Perils Listed Areas (JWLA-033, 3 March 2026), published as a PDF with coordinates; the JWC issues no machine-readable version. Boundaries here are simplified rectangles that capture each area's extent, not its exact legal outline: they are for showing whether a route enters a listed area, never for underwriting. Re-digitise when a new JWLA is issued. Each zone's `chokepoints` list is asserted in tests: the chokepoint's real coordinates must fall inside the polygon claiming it.",
   "features": [
     {
       "type": "Feature",
@@ -12,11 +12,36 @@
         "source": "JWC Listed Areas JWLA-033",
         "valid_from": "2026-03-03",
         "valid_to": null,
-        "chokepoints": ["babalmandab", "suez"]
+        "chokepoints": [
+          "babalmandab"
+        ]
       },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[32.0, 12.0], [52.0, 12.0], [52.0, 20.0], [32.0, 20.0], [32.0, 12.0]]]
+        "coordinates": [
+          [
+            [
+              32.0,
+              12.0
+            ],
+            [
+              52.0,
+              12.0
+            ],
+            [
+              52.0,
+              20.0
+            ],
+            [
+              32.0,
+              20.0
+            ],
+            [
+              32.0,
+              12.0
+            ]
+          ]
+        ]
       }
     },
     {
@@ -28,11 +53,36 @@
         "source": "JWC Listed Areas JWLA-033",
         "valid_from": "2026-03-03",
         "valid_to": null,
-        "chokepoints": ["babalmandab"]
+        "chokepoints": [
+          "babalmandab"
+        ]
       },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[43.0, -2.0], [65.0, -2.0], [65.0, 15.0], [43.0, 15.0], [43.0, -2.0]]]
+        "coordinates": [
+          [
+            [
+              43.0,
+              -2.0
+            ],
+            [
+              65.0,
+              -2.0
+            ],
+            [
+              65.0,
+              15.0
+            ],
+            [
+              43.0,
+              15.0
+            ],
+            [
+              43.0,
+              -2.0
+            ]
+          ]
+        ]
       }
     },
     {
@@ -44,11 +94,36 @@
         "source": "JWC Listed Areas JWLA-033",
         "valid_from": "2026-03-03",
         "valid_to": null,
-        "chokepoints": ["ormuz"]
+        "chokepoints": [
+          "ormuz"
+        ]
       },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[47.0, 23.0], [60.0, 23.0], [60.0, 30.5], [47.0, 30.5], [47.0, 23.0]]]
+        "coordinates": [
+          [
+            [
+              47.0,
+              23.0
+            ],
+            [
+              60.0,
+              23.0
+            ],
+            [
+              60.0,
+              30.5
+            ],
+            [
+              47.0,
+              30.5
+            ],
+            [
+              47.0,
+              23.0
+            ]
+          ]
+        ]
       }
     },
     {
@@ -60,11 +135,34 @@
         "source": "JWC Listed Areas JWLA-033",
         "valid_from": "2026-03-03",
         "valid_to": null,
-        "chokepoints": ["bosporus"]
+        "chokepoints": []
       },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[29.5, 43.3], [41.0, 43.3], [41.0, 47.0], [29.5, 47.0], [29.5, 43.3]]]
+        "coordinates": [
+          [
+            [
+              29.5,
+              43.3
+            ],
+            [
+              41.0,
+              43.3
+            ],
+            [
+              41.0,
+              47.0
+            ],
+            [
+              29.5,
+              47.0
+            ],
+            [
+              29.5,
+              43.3
+            ]
+          ]
+        ]
       }
     }
   ]

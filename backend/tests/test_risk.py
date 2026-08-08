@@ -99,3 +99,52 @@ def test_overlapping_zones_do_not_double_count_the_exposure():
     assert len(risk.crossings) == 2
     assert per_zone_total == pytest.approx(risk.distance_in_zones_km * 2)
     assert risk.distance_in_zones_km == pytest.approx(per_zone_total / 2)
+
+
+# Independently known positions, used to check the zones rather than to build them.
+CHOKEPOINT_POSITIONS = {
+    "babalmandab": (43.35, 12.58),
+    "suez": (32.55, 30.02),
+    "ormuz": (56.50, 26.57),
+    "bosporus": (29.06, 41.12),
+    "gibraltar": (-5.60, 35.95),
+    "panama": (-79.68, 9.08),
+    "malacca": (100.75, 2.50),
+}
+
+
+def test_a_zone_contains_every_chokepoint_it_claims():
+    """The polygons are hand-drawn rectangles, so their claims have to be checkable.
+
+    This caught two wrong ones: the southern Red Sea zone stops at 20N and was claiming
+    the Suez Canal at 30N, and the Black Sea zone was claiming a Bosporus that lies
+    outside it.
+    """
+    from shapely.geometry import Point
+
+    for zone in load_risk_zones():
+        for chokepoint in zone.chokepoints:
+            assert chokepoint in CHOKEPOINT_POSITIONS, f"{zone.id} claims unknown {chokepoint}"
+            assert zone.geometry.contains(Point(*CHOKEPOINT_POSITIONS[chokepoint])), (
+                f"{zone.id} claims {chokepoint} but its polygon does not contain it"
+            )
+
+
+def test_the_zones_agree_with_searoutes_own_chokepoint_labels():
+    """Two independent sources cross-checking: searoute labels its network's edges, the
+    zones are drawn from a published list. A voyage searoute says transits a chokepoint
+    must cross a zone that claims it."""
+    from app.core.sea import sea_route
+
+    track = sea_route((121.80, 31.23), (4.13, 51.95))
+    leg = Leg(
+        mode="sea", from_name="Shanghai", to_name="Rotterdam", distance_km=track.distance_km,
+        geometry=tuple(map(tuple, track.geometry)), passages=tuple(track.passages),
+    )
+    risk = assess_route(_route(leg))
+    claimed = {c for crossing in risk.crossings for c in crossing.zone.chokepoints}
+
+    assert "babalmandab" in risk.passages
+    assert claimed & set(risk.passages), (
+        f"route transits {risk.passages} but the zones it crosses claim {claimed}"
+    )

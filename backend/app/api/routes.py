@@ -14,7 +14,7 @@ from ..core.emissions import (
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
 from ..core.network import build_network, load_terminals
 from ..core.report import ReportInputError, build_report, parse_shipments, report_to_csv
-from ..core.risk import assess_route
+from ..core.risk import assess_route, load_risk_zones
 from ..core.road import RoadRoutingError
 from ..core.route import Leg, RouteAlternative, find_route_alternatives
 from ..core.sea import BLOCKABLE_PASSAGES, DEFAULT_RESTRICTIONS, SeaRoutingError, sea_route
@@ -88,6 +88,34 @@ def list_factor_sets() -> list[FactorSetOut]:
             )
         )
     return sets
+
+
+@router.get("/risk-zones")
+def risk_zones() -> dict:
+    """The listed areas as GeoJSON, so the map can show where the exposure is.
+
+    Served rather than bundled into the front end: the zones are reissued whenever the
+    JWC updates its list, and a copy in the browser would drift from the one the
+    intersection actually uses.
+    """
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "id": zone.id,
+                    "name": zone.name,
+                    "zone_type": zone.zone_type,
+                    "source": zone.source,
+                    "valid_from": zone.valid_from,
+                    "chokepoints": list(zone.chokepoints),
+                },
+                "geometry": zone.geometry.__geo_interface__,
+            }
+            for zone in load_risk_zones()
+        ],
+    }
 
 
 def _leg_out(leg) -> LegOut:

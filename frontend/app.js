@@ -107,7 +107,12 @@ function initMap() {
   });
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
   map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
-  map.on("load", () => { loadTerminals(); placeEndpointMarkers(); paintBasemap(currentTheme()); });
+  map.on("load", async () => {
+    await loadRiskZones();
+    loadTerminals();
+    placeEndpointMarkers();
+    paintBasemap(currentTheme());
+  });
   map.on("click", onMapClick);
 }
 
@@ -149,6 +154,53 @@ function onMapClick(event) {
   (picking === "origin" ? originInput : destinationInput).value = formatPoint(event.lngLat);
   placeEndpointMarkers();
   setPicking(null);
+}
+
+/** Draw the listed areas under everything else, so a route line stays readable over
+ *  them. Crossed zones are picked out; the rest stay quiet. */
+async function loadRiskZones() {
+  const zones = await fetch("/api/risk-zones").then((r) => r.json());
+  // feature-state needs a stable id per feature; the array index is one.
+  zones.features.forEach((feature, index) => { feature.id = index; });
+  map.addSource("risk-zones", { type: "geojson", data: zones });
+  map.addLayer({
+    id: "risk-zone-fill", type: "fill", source: "risk-zones",
+    paint: {
+      "fill-color": ["case", ["boolean", ["feature-state", "crossed"], false],
+        "#b3261e", "#8b93a0"],
+      "fill-opacity": ["case", ["boolean", ["feature-state", "crossed"], false], 0.22, 0.09],
+    },
+  });
+  map.addLayer({
+    id: "risk-zone-line", type: "line", source: "risk-zones",
+    paint: {
+      "line-color": ["case", ["boolean", ["feature-state", "crossed"], false],
+        "#b3261e", "#8b93a0"],
+      "line-width": ["case", ["boolean", ["feature-state", "crossed"], false], 1.6, 0.8],
+      "line-dasharray": [3, 2],
+    },
+  });
+
+  const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 6 });
+  map.on("mousemove", "risk-zone-fill", (event) => {
+    const p = event.features[0].properties;
+    popup.setLngLat(event.lngLat).setHTML(
+      `<strong>${p.name}</strong><span style="color:#6e7783">${p.source}</span>`,
+    ).addTo(map);
+  });
+  map.on("mouseleave", "risk-zone-fill", () => popup.remove());
+}
+
+/** Mark which zones the drawn route enters. */
+function highlightCrossedZones(zoneIds) {
+  if (!map || !map.getSource("risk-zones")) return;
+  const data = map.getSource("risk-zones")._data;
+  data.features.forEach((feature, index) => {
+    map.setFeatureState(
+      { source: "risk-zones", id: index },
+      { crossed: zoneIds.includes(feature.properties.id) },
+    );
+  });
 }
 
 async function loadTerminals() {
@@ -270,6 +322,7 @@ function drawAlternative(alternative, scenario, total) {
   });
 
   attachLegHover();
+  highlightCrossedZones((alternative.risk?.zones ?? []).map((z) => z.id));
   if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 50, duration: 600 });
 }
 
@@ -871,6 +924,66 @@ const compareForm = $("compare-form");
 const compareStatus = $("compare-status");
 const compareSubmit = $("compare-submit");
 
+/** Draw both sailings together so the diversion can be seen, not just read. */
+function drawCompare(data) {
+  if (!map) return;
+  clearRoute();
+  const bounds = new maplibregl.LngLatBounds();
+
+  [["compare-direct", data.direct, "#b3261e"], ["compare-diverted", data.diverted, "#0f7a45"]]
+    .forEach(([id, sailing, colour]) => {
+      if (!sailing.geometry?.length) return;
+      sailing.geometry.forEach((point) => bounds.extend(point));
+      map.addSource(id, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: sailing.geometry },
+          properties: {
+            label: sailing.label,
+            km: nf.format(sailing.distance_km),
+            days: sailing.duration_h ? nf.format(sailing.duration_h / 24) : "—",
+            zone: nf.format(sailing.risk.distance_in_zones_km),
+          },
+        },
+      });
+      map.addLayer({
+        id, type: "line", source: id,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": colour, "line-width": 3 },
+      });
+      map.addLayer({
+        id: `${id}-hit`, type: "line", source: id,
+        paint: { "line-color": "#000", "line-opacity": 0, "line-width": 18 },
+      });
+      drawnLayers.push(id);
+    });
+
+  attachCompareHover();
+  highlightCrossedZones(
+    (data.direct.risk.zones ?? []).map((z) => z.id),
+  );
+  if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, duration: 800 });
+}
+
+function attachCompareHover() {
+  const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+  drawnLayers.forEach((id) => {
+    map.on("mousemove", `${id}-hit`, (event) => {
+      map.getCanvas().style.cursor = "pointer";
+      const p = event.features[0].properties;
+      popup.setLngLat(event.lngLat).setHTML(
+        `<strong>${p.label}</strong>${p.km} km · ${p.days} gün<br>`
+        + `<span style="color:#6e7783">riskli bölgede ${p.zone} km</span>`,
+      ).addTo(map);
+    });
+    map.on("mouseleave", `${id}-hit`, () => {
+      map.getCanvas().style.cursor = "";
+      popup.remove();
+    });
+  });
+}
+
 function renderCompare(data) {
   const row = (s) => `<tr>
       <td>${s.label}</td>
@@ -915,6 +1028,12 @@ function renderCompare(data) {
     </table>
     ${verdict}`;
   $("risk-note").textContent = `${data.factor_set} · ${data.scope} · ${data.tonnage} ton`;
+  $("map-legend").innerHTML =
+    '<span class="key"><span class="swatch" style="background:#b3261e"></span>doğrudan</span>'
+    + '<span class="key"><span class="swatch" style="background:#0f7a45"></span>sapma</span>'
+    + '<span class="key"><span class="swatch" style="background:#8b93a0;opacity:.5"></span>'
+    + "ilan edilmiş bölge</span>";
+  drawCompare(data);
   $("risk-cost").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
