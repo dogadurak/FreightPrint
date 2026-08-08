@@ -446,3 +446,46 @@ def test_a_place_search_returns_candidates_not_one_answer(client):
 
 def test_an_empty_place_query_is_refused(client):
     assert client.get("/api/places", params={"q": "   "}).status_code == 422
+
+
+def test_reefer_is_absent_unless_the_cargo_is_refrigerated(client):
+    payload = _post(client).json()
+
+    assert all(a["reefer"] is None for a in payload["alternatives"])
+    assert all(a["total_with_reefer_co2_kg"] is None for a in payload["alternatives"])
+
+
+def test_reefer_is_additive_and_never_folded_into_the_transport_figure(client):
+    """The transport number is published GLEC; the refrigeration number is derived.
+    Merging them would hide which half rests on assumption."""
+    dry = _post(client, factor_set="glec", scope="WTW").json()["alternatives"]
+    cold = _post(client, factor_set="glec", scope="WTW", is_reefer=True).json()["alternatives"]
+
+    for plain, chilled in zip(dry, cold):
+        assert chilled["total_co2_kg"] == plain["total_co2_kg"]
+        assert chilled["total_with_reefer_co2_kg"] > plain["total_co2_kg"]
+        assert chilled["reefer"]["is_verified"] is False
+
+
+def test_the_reefer_bill_grows_with_time_spent_not_distance_covered(client):
+    """A multimodal route is slower, so it carries more refrigeration than the road
+    baseline even where it covers similar ground. A per-kilometre model cannot see this."""
+    alternatives = _post(client, is_reefer=True).json()["alternatives"]
+    road = next(a for a in alternatives if a["is_all_road"])
+    multimodal = next(a for a in alternatives if not a["is_all_road"])
+
+    assert multimodal["timeline"]["total_hours"] > road["timeline"]["total_hours"]
+    assert multimodal["reefer"]["co2_kg"] > road["reefer"]["co2_kg"]
+    # The road leg never stops being driven, so nothing is billed as standing still.
+    assert road["reefer"]["stationary_co2_kg"] == 0
+    assert multimodal["reefer"]["stationary_co2_kg"] > 0
+
+
+def test_a_derived_reefer_figure_carries_its_warning_into_every_scenario(client):
+    payload = _post(
+        client, is_reefer=True, scenarios=[{"factor_set": "glec", "scope": "WTW"}]
+    ).json()
+    total = payload["scenarios"][0]["totals"][0]
+
+    assert total["reefer"] is not None
+    assert any("derived, not published" in w for w in total["reefer"]["warnings"])

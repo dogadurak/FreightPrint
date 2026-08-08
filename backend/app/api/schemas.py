@@ -45,6 +45,9 @@ class RouteRequest(BaseModel):
     # Left unset, each factor keeps the utilisation its publisher assumed.
     load_factor: float | None = Field(default=None, gt=0, le=1)
     empty_return_share: float | None = Field(default=None, ge=0, le=1)
+    # Refrigerated cargo. Priced against the clock rather than the odometer, so it is
+    # orthogonal to the factor set and applies identically across every scenario.
+    is_reefer: bool = False
     load_uncertainty: float = Field(default=0.0, ge=0, lt=1)
     distance_uncertainty: float = Field(default=0.05, ge=0, lt=1)
     max_alternatives: int | None = Field(default=None, ge=1, le=20)
@@ -149,7 +152,27 @@ class AlternativeOut(BaseModel):
     emission_range: RangeOut | None = None
     risk: RouteRiskOut | None = None
     timeline: TimelineOut | None = None
+    reefer: "ReeferOut | None" = None
+    total_with_reefer_co2_kg: float | None = None
     notes: list[str] = []
+
+
+class ReeferOut(BaseModel):
+    """Refrigeration's own emissions, kept apart from the transport figure.
+
+    Deliberately additive rather than folded into `total_co2_kg`: the transport number
+    comes from published GLEC tables, this one is derived, and merging them would hide
+    which half rests on assumption. `stationary_co2_kg` is the part a per-kilometre
+    model cannot see — the unit still drawing while the box waits for a sailing.
+    """
+
+    co2_kg: float
+    stationary_co2_kg: float
+    co2_by_kind: dict[str, float]
+    hours: float
+    source: str
+    is_verified: bool
+    warnings: list[str] = []
 
 
 class ScenarioTotalOut(BaseModel):
@@ -163,6 +186,8 @@ class ScenarioTotalOut(BaseModel):
     saving_co2_kg: float | None = None
     emission_range: RangeOut | None = None
     ets: EtsCostOut | None = None
+    reefer: ReeferOut | None = None
+    total_with_reefer_co2_kg: float | None = None
 
 
 class ScenarioOut(BaseModel):

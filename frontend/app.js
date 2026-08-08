@@ -638,7 +638,12 @@ function renderNotices(scenario) {
   const chosen = scenario.totals[selectedIndex] ?? scenario.totals[0];
   const alternative = payload.alternatives.find((a) => a.label === chosen.label);
   // Route notes are computed per leg and were reaching the browser unread.
-  const messages = [...(alternative?.notes ?? []), ...scenario.warnings];
+  const messages = [
+    ...(alternative?.notes ?? []),
+    ...scenario.warnings,
+    // A derived reefer figure has to say so wherever it is shown, not only in its panel.
+    ...(chosen.reefer?.is_verified === false ? chosen.reefer.warnings : []),
+  ];
   if (!scenario.is_verified) {
     messages.unshift("Bu faktör seti doğrulanmamış değer içeriyor — rapora girmemeli.");
   }
@@ -708,6 +713,7 @@ form.addEventListener("submit", async (event) => {
     tonnage: Number(data.get("tonnage")),
     factor_set: "glec",
     scope: "TTW",
+    is_reefer: data.get("is_reefer") === "on",
     scenarios,
   };
   if (data.get("load_factor")) body.load_factor = Number(data.get("load_factor"));
@@ -944,6 +950,30 @@ loadFactorSets();
 
 const STEP_LABELS = { transit: "yolda", dwell: "aktarma", wait: "kalkış beklemesi" };
 
+/** Refrigeration, shown inside the timeline panel because that is what it is billed
+ *  against. The hours the cargo stands still are called out separately: they are the
+ *  part a per-kilometre model scores as zero, and on a multimodal route they are a
+ *  third of the refrigeration bill. */
+function renderReefer(total) {
+  const reefer = total.reefer;
+  if (!reefer) return "";
+
+  const share = reefer.co2_kg ? (reefer.stationary_co2_kg / reefer.co2_kg) * 100 : 0;
+  const split = Object.entries(reefer.co2_by_kind)
+    .map(([kind, kg]) => `${STEP_LABELS[kind]} ${nf.format(kg)} kg`)
+    .join(" · ");
+
+  return `<div class="reefer-block">
+    <p class="reefer-head">Soğutma <strong>${nf.format(reefer.co2_kg)} kg CO2e</strong>
+      <span class="card-note">${nf1.format(reefer.hours)} saat boyunca</span></p>
+    <p class="hint">${split}</p>
+    <p class="hint">Yük hareketsizken yanan: <strong>${nf.format(reefer.stationary_co2_kg)} kg</strong>
+      (${nf.format(share)}%) — km bazlı bir hesap bunu sıfır sayardı.</p>
+    <p class="hint">Taşıma ile toplanmadan ayrı gösteriliyor:
+      taşıma rakamı yayınlanmış GLEC tablolarından, bu türetme.</p>
+  </div>`;
+}
+
 /** Lay the journey out in time. Most of a multimodal disadvantage is not distance:
  *  it is handling and waiting for the next departure, which a distance figure hides. */
 function renderTimeline(scenario) {
@@ -986,6 +1016,7 @@ function renderTimeline(scenario) {
       ${Object.entries(STEP_LABELS).map(([kind, label]) =>
         `<span class="key"><span class="swatch step-${kind}"></span>${label}</span>`).join("")}
     </div>
+    ${renderReefer(total)}
     ${timeline.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
 
   $("timeline-note").textContent =

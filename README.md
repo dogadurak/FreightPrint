@@ -274,6 +274,33 @@ sonra sizinki uygulanır. İkisi birden uygulanırsa faktör 1,8 katına çıkar
 
 Hiçbir şey vermezseniz faktör yayınlandığı hâliyle kullanılır — kaynağının önerdiği budur.
 
+### Frigo yük — saatle işler, km ile değil
+
+Frigo yük seçildiğinde soğutmanın emisyonu **ayrı bir kalem** olarak eklenir; taşıma
+rakamının içine karıştırılmaz. Sebep basit: taşıma sayısı yayınlanmış GLEC tablolarından
+gelir, soğutma sayısı türetmedir, ikisini toplamak hangi yarının varsayıma dayandığını
+gizlerdi.
+
+GLEC reefer'ı yalnızca **konteyner gemisi** için ve **oran** olarak verir (Tablo 46: kuru
+76'ya karşı reefer 145 g CO2e/TEU-km). Bu oran başka moda taşınamaz. Konteyner gemisinin
+ton-km emisyonu düşük olduğu için soğutma ünitesi onu ikiye katlıyor gibi görünür; ro-ro'nun
+emisyonu zaten bir mertebe yüksektir, aynı ünite orada küçük bir ek olur. Oranı ro-ro'ya
+uygulamak ek yükü **yaklaşık dokuz kat** abartırdı.
+
+Modlar arasında taşınabilen şey ünitenin **enerji çekişidir**, o da zamana bağlıdır. Bu
+yüzden ek yük bir kez `g CO2e/ton/saat` olarak türetilir ve **kapıdan kapıya sürenin
+tamamına** uygulanır — aktarmada ve kalkış beklemesinde geçen saatler dâhil, çünkü kutu o
+saatlerde de fişte ve çekiyor.
+
+Türetme zinciri `data/reefer_factors.csv` içinde açıkça yazılı: 145 − 76 = 69 g/TEU-km,
+GLEC s.38'deki 10 ton/TEU ile 6,9 g/ton-km, 32 km/sa gemi hızıyla **221 g/ton/saat**. Üç
+varsayım içerir ve hiçbiri bu hâliyle yayınlanmamıştır — bu yüzden satır `is_verified=no`
+taşır ve arayüzde uyarı düşer.
+
+Pratik sonucu: Gebze→Düsseldorf koridorunda multimodalin karayoluna göre cezası kuru yükte
+%5 iken frigo yükte **%11'e** çıkıyor. Aradaki fark multimodalin 42,5 saatlik aktarma ve
+bekleme süresi — km bazlı bir hesabın sıfır saydığı, soğutma faturasının üçte biri.
+
 ## Doğrulama
 
 Sistem, gerçek bir lojistik firmasının iki müşteri için hazırladığı karbon raporlarındaki

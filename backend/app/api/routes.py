@@ -17,6 +17,7 @@ from ..core.jobs import DEFAULT_CONCURRENCY, registry
 from ..core.network import build_network, load_terminals
 from ..core.report import ReportInputError, build_report, parse_shipments, report_to_csv
 from ..core.risk import assess_route, load_risk_zones
+from ..core.reefer import ReeferFactorError, calculate_reefer
 from ..core.schedule import build_timeline
 from ..core.road import RoadRoutingError
 from ..core.route import Leg, RouteAlternative, find_route_alternatives
@@ -33,6 +34,7 @@ from .schemas import (
     PlaceOut,
     LegOut,
     RangeOut,
+    ReeferOut,
     RouteRequest,
     RouteResponse,
     RouteRiskOut,
@@ -180,6 +182,28 @@ def _timeline_out(route) -> TimelineOut:
     )
 
 
+def _reefer_out(route, request: RouteRequest) -> ReeferOut | None:
+    """Refrigeration for one route, or nothing when the cargo is not refrigerated.
+
+    Costs no routing call: it reads the timeline the route already carries.
+    """
+    if not request.is_reefer:
+        return None
+    try:
+        emission = calculate_reefer(build_timeline(route), tonnage=request.tonnage)
+    except (ReeferFactorError, ValueError):
+        return None
+    return ReeferOut(
+        co2_kg=round_to_significant(emission.co2_kg),
+        stationary_co2_kg=round_to_significant(emission.stationary_co2_kg),
+        co2_by_kind={k: round_to_significant(v) for k, v in emission.co2_by_kind.items()},
+        hours=round(emission.total_hours, 1),
+        source=emission.factor.source,
+        is_verified=emission.factor.is_verified,
+        warnings=emission.warnings,
+    )
+
+
 def _leg_countries(route, terminals) -> list[tuple[str | None, str | None]]:
     """Country pair per priced leg, in the order `expand_route_legs` produces them.
 
@@ -281,6 +305,10 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals)
         except (FactorNotFoundError, ValueError):
             emission_range = None
 
+        # Refrigeration rides on the clock, not the factor set, so it is identical
+        # across scenarios — but it is repeated here so each scenario's total stands
+        # on its own without the caller having to join it back to the alternative.
+        reefer = _reefer_out(route, request)
         totals.append(
             ScenarioTotalOut(
                 label=shipment.label,
@@ -296,6 +324,12 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals)
                 # Allowance cost follows the emissions, so it belongs to the scenario;
                 # risk follows the track and is reported once on the alternative.
                 ets=_ets_out(shipment, route, terminals, request),
+                reefer=reefer,
+                total_with_reefer_co2_kg=(
+                    round_to_significant(shipment.total_co2_kg + reefer.co2_kg)
+                    if reefer
+                    else None
+                ),
             )
         )
 
@@ -375,6 +409,7 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
             emission_range = None
 
         saving = shipment.saving_co2_kg
+        reefer = _reefer_out(route, request)
         alternatives.append(
             AlternativeOut(
                 label=shipment.label,
@@ -400,6 +435,12 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
                 emission_range=emission_range,
                 risk=_risk_out(route),
                 timeline=_timeline_out(route),
+                reefer=reefer,
+                total_with_reefer_co2_kg=(
+                    round_to_significant(shipment.total_co2_kg + reefer.co2_kg)
+                    if reefer
+                    else None
+                ),
                 notes=route.notes,
             )
         )

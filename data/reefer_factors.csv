@@ -1,0 +1,2 @@
+id,g_co2e_per_tonne_hour,scope,source,is_verified,notes
+derived_glec_container,221,WTW,Derived from GLEC Framework 2019 (Jul 2022) Table 46,no,"Chain: industry-average container ship WTW is 76 g CO2e/TEU-km dry against 145 reefer, so the refrigeration overhead is 69 g/TEU-km. GLEC p.38 gives 10 tonnes per TEU, making it 6.9 g per tonne-km. Divided by a 32 km/h container-ship operating speed that becomes 221 g per tonne-hour. Every step is an assumption and none of it is published as such."

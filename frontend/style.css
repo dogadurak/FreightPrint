@@ -273,6 +273,20 @@ button.ghost:hover { background: var(--surface-sunken); }
 
 .legend-inline, .legend-row { display: flex; flex-wrap: wrap; gap: 0.8rem; font-size: 0.79rem; color: var(--ink-secondary); }
 .legend-row { margin-top: 0.85rem; padding-top: 0.7rem; border-top: 1px solid var(--border); }
+/* Refrigeration sits inside the timeline card, separated by a rule: it is billed
+   against those hours, but it is a derived figure and must not read as part of the
+   published transport total above it. */
+.reefer-block { margin-top: 0.85rem; padding-top: 0.7rem; border-top: 1px solid var(--border); }
+.reefer-head { margin: 0 0 0.3rem; font-size: 0.86rem; color: var(--ink-secondary); }
+.reefer-head strong { color: var(--ink-primary); }
+.reefer-head .card-note { margin-left: 0.4rem; }
+
+/* A checkbox in a grid of text inputs needs the label beside the box, not above it. */
+.check-field { display: flex; align-items: flex-start; gap: 0.45rem; }
+.check-field input { width: auto; margin: 0; }
+.check-field span { font-weight: 500; }
+.check-field small { display: block; font-weight: 400; }
+
 .key { display: inline-flex; align-items: center; gap: 0.35rem; }
 .swatch { width: 0.8rem; height: 0.55rem; border-radius: 2px; }
 .swatch.road { background: var(--road); }
