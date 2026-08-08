@@ -72,6 +72,9 @@ muhasebe esasına ne kadar bağlı olduğu.
 | `POST /api/routes` | Sevkiyat → alternatifler, emisyon, tasarruf, belirsizlik |
 | `POST /api/report` | Toplu CSV → indirilebilir rapor |
 | `GET /api/risk-zones` | İlan edilmiş savaş riski bölgeleri (GeoJSON) |
+| `POST /api/report/jobs` | Toplu CSV → arka plan işi (202 + iş kimliği) |
+| `GET /api/report/jobs/{id}` | İşin durumu ve ilerlemesi |
+| `GET /api/report/jobs/{id}/file` | Biten işin raporu |
 | `POST /api/compare` | İki sefer: doğrudan ve bir boğazdan kaçınan |
 
 ### Toplu rapor
@@ -79,6 +82,18 @@ muhasebe esasına ne kadar bağlı olduğu.
 Arayüzdeki "Toplu rapor" bölümünden CSV yükleyip rapor indirebilirsiniz. Zorunlu sütunlar
 `origin_lon, origin_lat, destination_lon, destination_lat`; isteğe bağlı `reference,
 origin_name, destination_name, tonnage`. Örnek dosya arayüzden indirilebilir.
+
+Yükleme **arka plan işi** olarak çalışır: soğuk bir sevkiyat ~6 saniye ve yedi OSRM
+çağrısı sürdüğü için 500 satırlık bir dosya hiçbir istek zaman aşımına sığmaz. Dosya
+gönderilir, iş kimliği döner, arayüz ilerlemeyi sorar (`4/25 sevkiyat (%16)`), bitince
+indirir. Satırlar birbirinden bağımsız olduğu için dörder dörder işlenir — ölçüldü,
+100 satırda 36,6 sn yerine 9,4 sn. Eşzamanlılık kasten düşük: public OSRM demo sunucusu
+hız sınırlıyor, kendi sunucunuzda artırılabilir.
+
+> İşler **süreç belleğinde** tutulur. Bu, brifingin stateless tercihine uygun ve
+> kullanıcının birkaç dakika izlediği bir şey için veritabanı gereksiz. Ama işler yeniden
+> başlatmayı atlatmaz ve ikinci bir işçi süreci onları göremez — çok işçili dağıtım için
+> önce paylaşılan bir depo gerekir.
 
 Her sevkiyat için **en düşük emisyonlu** seçenek raporlanır — bu tam karayolu da olabilir.
 Rotalanamayan bir sevkiyat kendi satırında hatasıyla görünür, diğerlerini düşürmez.

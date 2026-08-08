@@ -753,6 +753,12 @@ const reportForm = $("report-form");
 const reportStatus = $("report-status");
 const reportSubmit = $("report-submit");
 
+/** Upload as a background job and poll it.
+ *
+ * A cold shipment costs about six seconds, so a few hundred rows outlive any request
+ * timeout. The upload returns a handle straight away and the progress comes from the
+ * job rather than from a spinner that knows nothing.
+ */
 reportForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const body = new FormData(reportForm);
@@ -767,26 +773,48 @@ reportForm.addEventListener("submit", async (event) => {
   if (emptyReturn) body.set("empty_return_share", emptyReturn);
 
   reportSubmit.disabled = true;
-  reportStatus.textContent = "Rapor hazırlanıyor — her sevkiyat ayrı rotalanıyor…";
+  reportStatus.textContent = "Dosya gönderiliyor…";
   try {
-    const response = await fetch("/api/report", { method: "POST", body });
-    if (!response.ok) {
-      const problem = await response.json().catch(() => ({}));
-      reportStatus.textContent = problem.detail ?? `İstek başarısız (${response.status}).`;
+    const started = await fetch("/api/report/jobs", { method: "POST", body });
+    const job = await started.json();
+    if (!started.ok) {
+      reportStatus.textContent = job.detail ?? `İstek başarısız (${started.status}).`;
       return;
     }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url; link.download = "freightprint-rapor.csv"; link.click();
-    URL.revokeObjectURL(url);
-    reportStatus.textContent = "Rapor indirildi.";
+    const finished = await pollReportJob(job.id);
+    if (finished.status === "failed") {
+      reportStatus.textContent = `Rapor üretilemedi: ${finished.error}`;
+      return;
+    }
+    await downloadReport(finished);
+    reportStatus.textContent = `Rapor indirildi — ${finished.total} sevkiyat.`;
   } catch (error) {
     reportStatus.textContent = `Sunucuya ulaşılamadı: ${error.message}`;
   } finally {
     reportSubmit.disabled = false;
   }
 });
+
+async function pollReportJob(jobId) {
+  // Poll gently: the run is minutes long, so a tighter loop only adds requests.
+  for (;;) {
+    const job = await fetch(`/api/report/jobs/${jobId}`).then((r) => r.json());
+    if (job.status === "done" || job.status === "failed") return job;
+    reportStatus.textContent =
+      `Hesaplanıyor — ${job.done}/${job.total} sevkiyat (%${Math.round(job.progress * 100)})`;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
+async function downloadReport(job) {
+  const blob = await fetch(`/api/report/jobs/${job.id}/file`).then((r) => r.blob());
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = job.filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 $("pick-origin").addEventListener("click", () => setPicking("origin"));
 $("pick-destination").addEventListener("click", () => setPicking("destination"));

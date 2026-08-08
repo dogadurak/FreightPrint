@@ -6,7 +6,9 @@ obligation to produce one already exists, and it is produced by hand today.
 
 import csv
 import io
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from typing import Callable
 
 from .emissions import (
     DEFAULT_FACTOR_SET,
@@ -149,18 +151,22 @@ def build_report(
     road_fuel_type: str | None = None,
     load_factor: float | None = None,
     empty_return_share: float | None = None,
+    concurrency: int = 1,
+    on_progress: Callable[[int], None] | None = None,
 ) -> Report:
     """Price every shipment, keeping going when one cannot be routed.
 
     A single unroutable address must not cost the customer the other 33 rows, so a
     failure is recorded against its own row and the run continues.
+
+    Rows are independent, so they can be routed a few at a time. Concurrency stays the
+    caller's choice because the limit is the routing server's patience, not ours.
     """
     factors = load_emission_factors()
     tree_factors = load_tree_factors()
-    rows: list[ReportRow] = []
     warnings: set[str] = set()
 
-    for shipment in shipments:
+    def price(shipment: ShipmentRow) -> ReportRow:
         try:
             routes = find_route_alternatives(
                 origin=shipment.origin,
@@ -178,8 +184,7 @@ def build_report(
                 empty_return_share=empty_return_share,
             )
         except (RoadRoutingError, LookupError, ValueError) as error:
-            rows.append(ReportRow(shipment=shipment, status=f"failed: {error}"))
-            continue
+            return ReportRow(shipment=shipment, status=f"failed: {error}")
 
         ranked = lowest_emission_first(routes, priced)
         warnings.update(w for _, emission in ranked for w in emission.warnings)
@@ -188,7 +193,7 @@ def build_report(
         # answers. It may be the all-road baseline when nothing else beats it.
         route, emission = min(ranked, key=lambda pair: pair[1].total_co2_kg)
         saving = emission.saving_co2_kg
-        rows.append(
+        return (
             ReportRow(
                 shipment=shipment,
                 status="ok",
@@ -206,6 +211,20 @@ def build_report(
                 ),
             )
         )
+
+    if concurrency > 1:
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            rows = []
+            for row in pool.map(price, shipments):
+                rows.append(row)
+                if on_progress:
+                    on_progress(len(rows))
+    else:
+        rows = []
+        for shipment in shipments:
+            rows.append(price(shipment))
+            if on_progress:
+                on_progress(len(rows))
 
     sources = sorted(
         {f.source for f in factors if f.factor_set == factor_set and f.scope == scope and f.is_verified}

@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -353,3 +355,77 @@ def test_a_diversion_that_cannot_be_sailed_says_so_instead_of_reporting_zero(cli
     assert "no sea route" in payload["diverted"]["unreachable"]
     assert payload["extra_distance_km"] is None
     assert payload["total_extra_eur"] is None
+
+
+def _start_job(client, content=SHIPMENT_CSV, **fields):
+    return client.post(
+        "/api/report/jobs",
+        files={"file": ("shipments.csv", content, "text/csv")},
+        data={"scope": "TTW", "factor_set": "reference"} | fields,
+    )
+
+
+def _await_job(client, job_id, tries=200):
+    for _ in range(tries):
+        status = client.get(f"/api/report/jobs/{job_id}").json()
+        if status["status"] in {"done", "failed"}:
+            return status
+        time.sleep(0.05)
+    raise AssertionError(f"job {job_id} never finished")
+
+
+def test_a_job_is_accepted_immediately_and_finishes_later(client):
+    """A cold shipment costs seconds, so the upload cannot wait for the whole run."""
+    response = _start_job(client)
+
+    assert response.status_code == 202
+    job = response.json()
+    assert job["status"] in {"queued", "running"}
+    assert job["total"] == 2
+
+    finished = _await_job(client, job["id"])
+    assert finished["status"] == "done"
+    assert finished["done"] == finished["total"]
+    assert finished["progress"] == 1.0
+
+
+def test_the_finished_job_hands_back_the_same_report(client):
+    job = _start_job(client, factor_set="glec", scope="WTW").json()
+    _await_job(client, job["id"])
+
+    response = client.get(f"/api/report/jobs/{job['id']}/file")
+    assert response.status_code == 200
+    assert "text/csv" in response.headers["content-type"]
+    assert "factor set: glec" in response.text
+    assert response.text.count("SEV-") == 2
+
+
+def test_a_file_is_not_offered_before_the_job_finishes(client):
+    """Handing back a half-written report would be worse than making the client wait."""
+    job = _start_job(client).json()
+    early = client.get(f"/api/report/jobs/{job['id']}/file")
+
+    assert early.status_code in {200, 409}
+    if early.status_code == 409:
+        assert "not done" in early.json()["detail"]
+
+
+def test_a_malformed_upload_fails_at_submission_not_a_minute_later(client):
+    response = _start_job(client, content="origin_lon,origin_lat\n29.43,40.78\n")
+
+    assert response.status_code == 422
+    assert "missing column" in response.json()["detail"]
+
+
+def test_a_job_that_cannot_price_anything_reports_failed(client):
+    job = _start_job(client, factor_set="reference", scope="WTW").json()
+    finished = _await_job(client, job["id"])
+
+    assert finished["status"] == "failed"
+    assert "no WTW factor" in finished["error"]
+    assert client.get(f"/api/report/jobs/{job['id']}/file").status_code == 422
+
+
+def test_an_unknown_job_is_a_404(client):
+    assert client.get("/api/report/jobs/deadbeef").status_code == 404
+    assert client.get("/api/report/jobs/deadbeef/file").status_code == 404

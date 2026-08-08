@@ -12,6 +12,7 @@ from ..core.emissions import (
     tree_equivalent,
 )
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
+from ..core.jobs import DEFAULT_CONCURRENCY, registry
 from ..core.network import build_network, load_terminals
 from ..core.report import ReportInputError, build_report, parse_shipments, report_to_csv
 from ..core.risk import assess_route, load_risk_zones
@@ -27,6 +28,7 @@ from .schemas import (
     EtsCostOut,
     EtsLegOut,
     FactorSetOut,
+    JobOut,
     LegOut,
     RangeOut,
     RouteRequest,
@@ -599,4 +601,89 @@ def compare_sailings(request: CompareRequest) -> CompareResponse:
         avoided_zone_km=round(
             direct.risk.distance_in_zones_km - diverted.risk.distance_in_zones_km, 1
         ),
+    )
+
+
+# A file this size finishes inside a request; anything larger has to become a job.
+SYNCHRONOUS_ROW_LIMIT = 20
+
+
+def _read_upload(file: UploadFile) -> str:
+    raw = file.file.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"file exceeds {MAX_UPLOAD_BYTES} bytes")
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise HTTPException(status_code=422, detail=f"file must be UTF-8 text: {error}") from error
+
+
+def _job_out(job) -> JobOut:
+    return JobOut(
+        id=job.id, status=job.status, total=job.total, done=job.done,
+        progress=round(job.progress, 3), filename=job.filename, error=job.error,
+    )
+
+
+@router.post("/report/jobs", response_model=JobOut, status_code=202)
+def start_report_job(
+    file: UploadFile = File(..., description="CSV of shipments"),
+    scope: str = Form("TTW"),
+    factor_set: str = Form("reference"),
+    road_fuel_type: str | None = Form(None),
+    load_factor: float | None = Form(None),
+    empty_return_share: float | None = Form(None),
+) -> JobOut:
+    """Start a report in the background and hand back a handle to poll.
+
+    A cold shipment costs about six seconds, so a few hundred rows outlives any request
+    timeout. The file is parsed here so a malformed upload still fails immediately rather
+    than a minute later inside a job.
+    """
+    if scope not in {"TTW", "WTW"}:
+        raise HTTPException(status_code=422, detail=f"scope must be TTW or WTW, got {scope!r}")
+    try:
+        shipments = parse_shipments(_read_upload(file))
+    except ReportInputError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    def work(job) -> str:
+        report = build_report(
+            shipments,
+            scope=scope,
+            factor_set=factor_set,
+            road_fuel_type=road_fuel_type,
+            load_factor=load_factor,
+            empty_return_share=empty_return_share,
+            concurrency=DEFAULT_CONCURRENCY,
+            on_progress=lambda done: setattr(job, "done", done),
+        )
+        if not report.calculated:
+            raise RuntimeError(report.rows[0].status if report.rows else "nothing calculated")
+        return report_to_csv(report)
+
+    return _job_out(registry().submit(len(shipments), work, "freightprint-rapor.csv"))
+
+
+@router.get("/report/jobs/{job_id}", response_model=JobOut)
+def report_job_status(job_id: str) -> JobOut:
+    job = registry().get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
+    return _job_out(job)
+
+
+@router.get("/report/jobs/{job_id}/file", response_class=PlainTextResponse)
+def report_job_file(job_id: str) -> PlainTextResponse:
+    job = registry().get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
+    if job.status == "failed":
+        raise HTTPException(status_code=422, detail=job.error or "job failed")
+    if job.status != "done":
+        raise HTTPException(status_code=409, detail=f"job is {job.status}, not done")
+    return PlainTextResponse(
+        content=job.result,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{job.filename}"'},
     )

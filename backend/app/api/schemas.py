@@ -237,3 +237,15 @@ class CompareResponse(BaseModel):
     surcharge_eur: float = 0.0
     total_extra_eur: float | None = None
     avoided_zone_km: float | None = None
+
+
+class JobOut(BaseModel):
+    """A background run's state. The file itself is fetched separately once done."""
+
+    id: str
+    status: str
+    total: int
+    done: int
+    progress: float
+    filename: str
+    error: str | None = None
