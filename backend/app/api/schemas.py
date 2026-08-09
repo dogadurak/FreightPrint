@@ -171,6 +171,7 @@ class AlternativeOut(BaseModel):
     timeline: TimelineOut | None = None
     reefer: "ReeferOut | None" = None
     total_with_reefer_co2_kg: float | None = None
+    playback: "PlaybackOut | None" = None
     notes: list[str] = []
 
 
@@ -190,6 +191,36 @@ class ReeferOut(BaseModel):
     source: str
     is_verified: bool
     warnings: list[str] = []
+
+
+class PlaybackSegmentOut(BaseModel):
+    kind: str
+    mode: str | None = None
+    label: str
+    start_h: float
+    hours: float
+    co2_kg: float
+    reefer_co2_kg: float = 0.0
+    geometry: list[list[float]] = []
+    is_estimated: bool = False
+    track_is_indicative: bool = False
+
+
+class PlaybackOut(BaseModel):
+    """The journey laid out so a client can play it back.
+
+    Segments run back to back with no gaps, so any hour on the clock lands in exactly
+    one of them. Carbon is attributed to the segment that produced it rather than
+    spread evenly over elapsed time — a truck parked at a terminal burns nothing, and
+    an animation that kept the counter climbing through an eighteen-hour handling stop
+    would be lying in a way nobody watching could catch.
+    """
+
+    segments: list[PlaybackSegmentOut]
+    total_hours: float
+    total_co2_kg: float
+    total_reefer_co2_kg: float = 0.0
+    stationary_hours: float = 0.0
 
 
 class ScenarioTotalOut(BaseModel):

@@ -312,6 +312,56 @@ button.ghost:hover { background: var(--surface-sunken); }
 .check-field span { font-weight: 500; }
 .check-field small { display: block; font-weight: 400; }
 
+/* ── journey player ──────────────────────────────────────────────────── */
+/* Under the map, not over it: the marker it drives is the thing worth watching. */
+.player { margin-top: 0.8rem; }
+.player-controls { display: flex; align-items: center; gap: 0.6rem; }
+.player-play {
+  width: 2.1rem; height: 2.1rem; flex: none; margin: 0; padding: 0;
+  font-size: 0.85rem; line-height: 1; border-radius: 50%;
+}
+.player-controls input[type="range"] { flex: 1; margin: 0; padding: 0; accent-color: var(--accent); }
+.player-controls select { width: auto; margin: 0; font-size: 0.8rem; padding: 0.25rem 0.4rem; }
+
+.player-readout {
+  display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap;
+  margin-top: 0.6rem; font-size: 0.82rem; font-variant-numeric: tabular-nums;
+}
+.play-clock { font-weight: 640; }
+.play-co2 { font-weight: 640; color: var(--ink); }
+.play-reefer { color: var(--ink-secondary); }
+.play-what { color: var(--ink-secondary); }
+/* A stop reads as a stop: the two stationary kinds are tinted like the timeline. */
+.play-what.dwell { color: var(--time-dwell); font-weight: 600; }
+.play-what.wait { color: var(--time-wait); font-weight: 600; }
+.play-flag, .play-risk {
+  padding: 0.1rem 0.4rem; border-radius: 999px; font-size: 0.75rem;
+  background: var(--warn-wash); border: 1px solid var(--warn-border); color: var(--warn-ink);
+}
+.play-risk { background: var(--bad-wash); border-color: var(--bad); color: var(--bad); }
+
+.player-track { display: flex; gap: 2px; height: 6px; margin-top: 0.5rem; }
+.player-block { border-radius: 2px; background: var(--time-transit); }
+.player-block.dwell { background: var(--time-dwell); }
+.player-block.wait { background: var(--time-wait); }
+
+/* The marker pulses while moving and goes flat when parked, so a stop is visible
+   even if you are not reading the label. */
+.play-marker {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px rgba(42, 120, 214, .35);
+  animation: play-pulse 1.4s ease-in-out infinite;
+}
+.play-marker.stopped {
+  background: var(--time-wait);
+  box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px rgba(237, 161, 0, .3);
+  animation: none;
+}
+@keyframes play-pulse {
+  50% { box-shadow: 0 0 0 3px var(--surface), 0 0 0 9px rgba(42, 120, 214, .12); }
+}
+
 /* Sits under the map rather than floating over it: the catchment is a whole-map
    context layer, and a control on top of it would cover the thing it describes. */
 .map-toggle { width: auto; margin-top: 0.7rem; padding: 0.4rem 0.8rem; font-size: 0.84rem; }

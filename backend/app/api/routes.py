@@ -31,6 +31,7 @@ from ..core.report import (
     report_to_csv,
 )
 from ..core.risk import assess_route, load_risk_zones
+from ..core.playback import PlaybackMismatch, build_playback
 from ..core.reefer import ReeferFactorError, calculate_reefer
 from ..core.schedule import build_timeline
 from ..core.road import RoadRoutingError
@@ -49,6 +50,8 @@ from .schemas import (
     JobOut,
     PlaceOut,
     LegOut,
+    PlaybackOut,
+    PlaybackSegmentOut,
     RangeOut,
     ReeferOut,
     RoadFuelOut,
@@ -248,16 +251,23 @@ def _timeline_out(route) -> TimelineOut:
     )
 
 
-def _reefer_out(route, request: RouteRequest) -> ReeferOut | None:
-    """Refrigeration for one route, or nothing when the cargo is not refrigerated.
+def _reefer_emission(route, request: RouteRequest):
+    """The refrigeration calculation itself, shared by the summary and the playback.
 
     Costs no routing call: it reads the timeline the route already carries.
     """
     if not request.is_reefer:
         return None
     try:
-        emission = calculate_reefer(build_timeline(route), tonnage=request.tonnage)
+        return calculate_reefer(build_timeline(route), tonnage=request.tonnage)
     except (ReeferFactorError, ValueError):
+        return None
+
+
+def _reefer_out(route, request: RouteRequest) -> ReeferOut | None:
+    """Refrigeration for one route, or nothing when the cargo is not refrigerated."""
+    emission = _reefer_emission(route, request)
+    if emission is None:
         return None
     return ReeferOut(
         co2_kg=round_to_significant(emission.co2_kg),
@@ -267,6 +277,37 @@ def _reefer_out(route, request: RouteRequest) -> ReeferOut | None:
         source=emission.factor.source,
         is_verified=emission.factor.is_verified,
         warnings=emission.warnings,
+    )
+
+
+def _playback_out(route, shipment, reefer_emission) -> PlaybackOut | None:
+    """The playable journey, or nothing if the clock and the legs disagree.
+
+    A mismatch is swallowed rather than failing the request: the animation is a way of
+    reading the answer, and losing it should not cost the caller the answer itself.
+    """
+    try:
+        playback = build_playback(route, shipment, build_timeline(route), reefer_emission)
+    except PlaybackMismatch:
+        return None
+
+    return PlaybackOut(
+        segments=[
+            PlaybackSegmentOut(
+                kind=s.kind, mode=s.mode, label=s.label,
+                start_h=round(s.start_h, 2), hours=round(s.hours, 2),
+                co2_kg=round_to_significant(s.co2_kg),
+                reefer_co2_kg=round_to_significant(s.reefer_co2_kg),
+                geometry=s.geometry,
+                is_estimated=s.is_estimated,
+                track_is_indicative=s.track_is_indicative,
+            )
+            for s in playback.segments
+        ],
+        total_hours=round(playback.total_hours, 2),
+        total_co2_kg=round_to_significant(playback.total_co2_kg),
+        total_reefer_co2_kg=round_to_significant(playback.total_reefer_co2_kg),
+        stationary_hours=round(playback.stationary_hours, 2),
     )
 
 
@@ -507,6 +548,7 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
                     if reefer
                     else None
                 ),
+                playback=_playback_out(route, shipment, _reefer_emission(route, request)),
                 notes=route.notes,
             )
         )

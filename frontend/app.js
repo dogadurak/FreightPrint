@@ -827,7 +827,10 @@ function applyScenario() {
   renderLegDetail(scenario);
 
   const chosen = scenario.totals[selectedIndex];
-  drawAlternative(payload.alternatives.find((a) => a.label === chosen.label), scenario, chosen);
+  const shown = payload.alternatives.find((a) => a.label === chosen.label);
+  drawAlternative(shown, scenario, chosen);
+  // The player belongs to one alternative; switching scenario or route reloads it.
+  resetPlayer(shown);
 }
 
 /* ── requests ────────────────────────────────────────────────────────── */
@@ -1058,6 +1061,17 @@ placeQuery.addEventListener("blur", () => setTimeout(() => { placeResults.hidden
 
 $("pick-origin").addEventListener("click", () => setPicking("origin"));
 $("pick-destination").addEventListener("click", () => setPicking("destination"));
+$("player-play").addEventListener("click", togglePlay);
+$("player-speed").addEventListener("change", (event) => {
+  playSpeed = Number(event.target.value);
+});
+$("player-scrub").addEventListener("input", (event) => {
+  if (!playback) return;
+  stopPlaying();   // scrubbing takes over from playing rather than fighting it
+  playHead = (Number(event.target.value) / 1000) * playback.total_hours;
+  drawPlayHead();
+});
+
 $("catchment-toggle").addEventListener("click", () => {
   // The map may have failed to load; the rest of the dashboard still works.
   if (map) toggleCatchment();
@@ -1443,3 +1457,175 @@ compareForm.addEventListener("submit", async (event) => {
     compareSubmit.disabled = false;
   }
 });
+
+/* ── journey player ──────────────────────────────────────────────────── */
+
+/** Play the shipment along its route.
+ *
+ *  The map was showing the same picture whether a crossing took two days or ten. This
+ *  walks the clock the server laid out: where the box is, what it has emitted by then,
+ *  and — the part the totals hide — the hours it spends going nowhere. On this corridor
+ *  a third of the multimodal disadvantage is handling and waiting, and the marker
+ *  sitting still at Trieste says that better than "18 sa aktarma" does.
+ *
+ *  Carbon comes from the segment that produced it, never interpolated across the whole
+ *  clock: a parked truck burns nothing, and a counter that kept climbing through a
+ *  handling stop would be lying in a way nobody watching could catch.
+ */
+let playback = null;
+let playHead = 0;          // hours
+let playTimer = null;
+let playSpeed = 6;         // hours of journey per second of wall clock
+
+const PLAY_KIND_LABELS = { transit: "yolda", dwell: "aktarma", wait: "kalkış beklemesi" };
+
+function resetPlayer(alternative) {
+  stopPlaying();
+  playback = alternative?.playback ?? null;
+  playHead = 0;
+  const panel = $("player");
+  if (!panel) return;
+  if (!playback || !playback.segments.length) { panel.hidden = true; return; }
+  panel.hidden = false;
+  $("player-scrub").value = 0;
+  renderPlayerTrack();
+  drawPlayHead();
+}
+
+/** The segment bar under the controls: one block per segment, width by duration. */
+function renderPlayerTrack() {
+  $("player-track").innerHTML = playback.segments.map((s) => `
+    <span class="player-block ${s.kind}"
+          style="flex:0 0 ${(s.hours / playback.total_hours) * 100}%"
+          title="${PLAY_KIND_LABELS[s.kind]}: ${s.label}"></span>`).join("");
+}
+
+/** Position and running totals at a given hour. */
+function stateAt(hours) {
+  let co2 = 0;
+  let reefer = 0;
+  let current = playback.segments[0];
+  let point = current.geometry[0] ?? null;
+
+  for (const segment of playback.segments) {
+    const end = segment.start_h + segment.hours;
+    if (hours >= end) {
+      co2 += segment.co2_kg;
+      reefer += segment.reefer_co2_kg;
+      if (segment.geometry.length) point = segment.geometry[segment.geometry.length - 1];
+      continue;
+    }
+    // Inside this segment: take the fraction of it that has elapsed.
+    const done = segment.hours > 0 ? (hours - segment.start_h) / segment.hours : 1;
+    co2 += segment.co2_kg * done;
+    reefer += segment.reefer_co2_kg * done;
+    current = segment;
+    point = pointAlong(segment.geometry, done) ?? point;
+    break;
+  }
+  return { co2, reefer, segment: current, point };
+}
+
+/** Interpolate along a track by distance, so the marker moves at a steady pace rather
+ *  than jumping between however densely OSRM happened to sample that stretch. */
+function pointAlong(geometry, fraction) {
+  if (!geometry.length) return null;
+  if (geometry.length === 1) return geometry[0];
+
+  const spans = [];
+  let total = 0;
+  for (let i = 1; i < geometry.length; i += 1) {
+    const [x1, y1] = geometry[i - 1];
+    const [x2, y2] = geometry[i];
+    const d = Math.hypot(x2 - x1, y2 - y1);
+    spans.push(d);
+    total += d;
+  }
+  if (total === 0) return geometry[0];
+
+  let travelled = Math.max(0, Math.min(1, fraction)) * total;
+  for (let i = 0; i < spans.length; i += 1) {
+    if (travelled <= spans[i] || i === spans.length - 1) {
+      const t = spans[i] === 0 ? 0 : travelled / spans[i];
+      const [x1, y1] = geometry[i];
+      const [x2, y2] = geometry[i + 1];
+      return [x1 + (x2 - x1) * t, y1 + (y2 - y1) * t];
+    }
+    travelled -= spans[i];
+  }
+  return geometry[geometry.length - 1];
+}
+
+function drawPlayHead() {
+  if (!playback) return;
+  const { co2, reefer, segment, point } = stateAt(playHead);
+  const days = Math.floor(playHead / 24);
+  const hours = Math.round(playHead % 24);
+  const moving = segment.kind === "transit";
+
+  const zone = zoneAt(point);
+  $("player-readout").innerHTML = `
+    <span class="play-clock">${days} gün ${hours} sa</span>
+    <span class="play-co2">${nf.format(co2)} kg CO2</span>
+    ${reefer > 0 ? `<span class="play-reefer">+${nf.format(reefer)} kg soğutma</span>` : ""}
+    <span class="play-what ${segment.kind}">${
+      moving ? `${MODE_LABELS[segment.mode] ?? segment.mode} · ${segment.label}`
+             : `⏸ ${PLAY_KIND_LABELS[segment.kind]} — ${segment.label}`}</span>
+    ${segment.track_is_indicative && moving
+      ? '<span class="play-flag">iz şematik</span>' : ""}
+    ${zone ? `<span class="play-risk">⚠ ${zone}</span>` : ""}`;
+
+  if (map && point) {
+    if (!playMarker) {
+      const element = document.createElement("div");
+      element.className = "play-marker";
+      playMarker = new maplibregl.Marker({ element }).setLngLat(point).addTo(map);
+    } else {
+      playMarker.setLngLat(point);
+    }
+    playMarker.getElement().classList.toggle("stopped", !moving);
+  }
+}
+
+let playMarker = null;
+
+/** Which listed area the shipment is inside, if any. Point-in-rectangle is enough:
+ *  the zones are digitised as boxes and the README says so. */
+function zoneAt(point) {
+  if (!point || !map || !map.getSource("risk-zones")) return null;
+  const zones = map.getSource("risk-zones")._data;
+  for (const feature of zones.features) {
+    for (const ring of feature.geometry.coordinates) {
+      const lons = ring.map((p) => p[0]);
+      const lats = ring.map((p) => p[1]);
+      if (point[0] >= Math.min(...lons) && point[0] <= Math.max(...lons)
+          && point[1] >= Math.min(...lats) && point[1] <= Math.max(...lats)) {
+        return feature.properties.name;
+      }
+    }
+  }
+  return null;
+}
+
+function stopPlaying() {
+  if (playTimer) { clearInterval(playTimer); playTimer = null; }
+  const button = $("player-play");
+  if (button) button.textContent = "▶";
+}
+
+function togglePlay() {
+  if (!playback) return;
+  if (playTimer) { stopPlaying(); return; }
+  if (playHead >= playback.total_hours) playHead = 0;
+  $("player-play").textContent = "⏸";
+  const tick = 1 / 30;   // seconds of wall clock per frame
+  playTimer = setInterval(() => {
+    playHead += playSpeed * tick;
+    if (playHead >= playback.total_hours) {
+      playHead = playback.total_hours;
+      stopPlaying();
+    }
+    $("player-scrub").value = (playHead / playback.total_hours) * 1000;
+    drawPlayHead();
+  }, tick * 1000);
+}

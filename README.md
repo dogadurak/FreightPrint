@@ -53,7 +53,7 @@ Pano dört bölümden oluşur:
 |---|---|
 | **Senaryo çubuğu** | Faktör esası (refakatsiz / refakatli / filo ort. / karşılaştırma esası) ve kapsam (TTW/WTW). Değiştirmek **anında** — yeniden rotalama yok |
 | **KPI kartları** | Seçilen rotanın emisyonu · tam karayoluna işaretli fark · Monte Carlo belirsizlik aralığı · ro-ro esasına duyarlılık |
-| **Harita + karşılaştırma** | Rota çizimi ve alternatiflerin moda göre yığılı emisyon çubukları |
+| **Harita + karşılaştırma** | Rota çizimi, **yolculuk oynatıcı** ve alternatiflerin moda göre yığılı emisyon çubukları |
 | **Duyarlılık paneli** | Aynı rota, her faktör esası altında — noktalar tam karayolu çizgisini geçtiğinde karar değişir |
 
 Rotalama pahalı (~6 sn, yedi OSRM çağrısı), fiyatlama bedava. Bu yüzden panonun sunduğu
@@ -287,6 +287,25 @@ türetilir ve "tahmin" işaretlenir.
 
 Gebze→Düsseldorf için sonuç: tam karayolu **3,1 gün**, çok modlu **5,5 gün** — ve farkın
 üçte biri hiç hareket edilmeyen süre (18 sa aktarma + 25 sa bekleme).
+
+## Yolculuk oynatıcı
+
+Haritanın altındaki oynat düğmesi sevkiyatı rotası boyunca yürütür: saat ilerler, CO2
+sayacı birikir, işaretçi hareket eder. Statik bir çizgi, geçiş iki gün de sürse on gün de
+sürse aynı görünür; bu onu görünür kılar.
+
+İki tasarım kararı, animasyonun dürüst kalması için:
+
+- **Karbon, onu üreten segmente yazılır** — toplam süreye eşit dağıtılmaz. Terminalde
+  bekleyen kamyon yakıt yakmaz; 18 saatlik aktarma boyunca sayacın tırmanmaya devam
+  etmesi, izleyenin fark edemeyeceği bir yalan olurdu.
+- **Soğutma durmaz.** Frigo seçiliyse sayaç aktarma ve bekleme saatlerinde de artar,
+  çünkü kutu o saatlerde de fişte. Bu, saat bazlı reefer hesabının görünür hâli.
+
+İşaretçi hareket ederken nabız gibi atar, durduğunda sararır ve sabitlenir. Gebze→Düsseldorf
+multimodalde **131 saatin 42'si (%32) hareketsiz** geçiyor — koridorun asıl dezavantajı bu
+ve bir tabloda görünmüyordu. Şematik izler (demiryolu, searoute'un Korint kısayolu)
+oynatıcıda da "iz şematik" diye işaretlenir, risk bölgesine girildiğinde uyarı çıkar.
 
 ## Terminal etki alanı
 

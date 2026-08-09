@@ -183,6 +183,24 @@
           <div class="legend-inline" id="map-legend"></div>
         </div>
         <div id="map" aria-label="Rota haritası"></div>
+
+        <!-- Yolculuk oynatıcı: rakamlar yerine olan biten -->
+        <div class="player" id="player" hidden>
+          <div class="player-controls">
+            <button type="button" class="player-play" id="player-play"
+                    aria-label="Yolculuğu oynat">▶</button>
+            <input type="range" id="player-scrub" min="0" max="1000" value="0" step="1"
+                   aria-label="Yolculuk zamanı">
+            <select id="player-speed" aria-label="Oynatma hızı">
+              <option value="12">12 sa/sn</option>
+              <option value="6" selected>6 sa/sn</option>
+              <option value="2">2 sa/sn</option>
+            </select>
+          </div>
+          <div class="player-readout" id="player-readout"></div>
+          <div class="player-track" id="player-track" aria-hidden="true"></div>
+        </div>
+
         <button type="button" class="ghost map-toggle" id="catchment-toggle"
                 aria-pressed="false">Terminal etki alanı</button>
         <div id="catchment-legend" hidden></div>
