@@ -371,6 +371,27 @@ sonra sizinki uygulanır. İkisi birden uygulanırsa faktör 1,8 katına çıkar
 
 Hiçbir şey vermezseniz faktör yayınlandığı hâliyle kullanılır — kaynağının önerdiği budur.
 
+### HVO — besleme stoğu sonucu belirliyor
+
+"HVO kullanıyoruz" tek başına bir emisyon rakamı vermez. GLEC'te HVO satırı yok, o yüzden
+JRC'nin RED II yolak değerlerinden (Tablo 43, AR6) GLEC dizel satırı üzerinden ölçeklendi:
+
+| Besleme stoğu | g CO2eq/MJ | kg CO2/ton-km | Dizele oran |
+|---|---|---|---|
+| Atık kızartma yağı (`hvo_uco`) | 12,3 | 0,0103 | **%14** |
+| Hayvansal yağ (`hvo_tallow`) | 20,2 | 0,0170 | %23 |
+| Kolza (`hvo_rapeseed`) | 43,1 | 0,0362 | %48 |
+| Palm, açık havuz (`hvo_palm`) | 65,2 | 0,0548 | **%73** |
+| *Dizel (kıyas)* | *89,2* | *0,0750* | *%100* |
+
+Aradaki fark **5 kat**. Palm yağından üretilmiş HVO dizelin üçte ikisinden fazlasını
+salıyor — ve bu **iLUC hariç**. Tek jenerik bir "HVO" rakamı bu aralığı gizler.
+
+Besleme stoğu bilinmiyorsa `hvo` satırı DEFRA'nın jenerik değerini (17,3 g/MJ) taşır.
+Bu değer JRC aralığında atık kızartma yağı ile hayvansal yağ arasına düşüyor — ağırlıklı
+atık bazlı İngiltere pazarıyla tutarlı, iyi bir çapraz kontrol. Ama bilinmiyorsa
+kullanın; tedarikçinize sorabileceğiniz bir sorunun cevabı bu tabloda.
+
 ### Frigo yük — saatle işler, km ile değil
 
 Frigo yük seçildiğinde soğutmanın emisyonu **ayrı bir kalem** olarak eklenir; taşıma
@@ -468,10 +489,11 @@ rotası ve mesafe geçer; sevkiyat satırları, müşteri adları ve tonajlar ge
 - **Demiryolu için dizel çekiş varsayılıyor.** GLEC'in dizel satırı hem TTW hem WTW verdiği
   için tutarlı bir çift oluşturuyor. Trieste–Köln gibi elektrikli koridorlarda gerçek değer
   0,0091 WTW, yani mevcut varsayım muhafazakâr (yüksek) yönde.
-- **HVO ve elektrik faktörleri türetme.** GLEC'te bu satırlar yok; DEFRA ve şebeke
+- **HVO ve elektrik faktörleri türetme.** GLEC'te bu satırlar yok; DEFRA, JRC ve şebeke
   yoğunluklarından GLEC dizel satırı üzerinden ölçeklendi ve `is_verified=no` taşıyorlar.
-  Türkiye şebeke faktörü ve HVO'nun atık/bitkisel ayrımı kaynaklandırılamadığı için
-  **hiç eklenmedi**.
+- **HVO satırları dolaylı arazi kullanımını (iLUC) içermez.** RED II Ek VIII bunu bitkisel
+  kökenli yakıtlara ekliyor ve kazancı silecek büyüklükte; değeri yetkili kaynaktan
+  doğrulayamadığım için eklenmedi, her satır dışlandığını yazıyor.
 - **Deniz ve demiryolu belirsizliği ölçüm değil.** Deniz bandı tek bir bağımsız
   karşılaştırmaya (searoute, n=1) dayanıyor; demiryolu hiç kontrol edilmedi ve deniz
   değerini ödünç alıyor. `data/distance_uncertainty.csv` her satırda bunu yazıyor.

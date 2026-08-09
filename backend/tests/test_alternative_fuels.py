@@ -119,9 +119,103 @@ def test_the_electric_rows_admit_what_they_leave_out(factors):
     assert "understates" in notes
 
 
-def test_the_unsourced_fuels_are_gone(factors):
-    """Turkey's grid and the waste/crop HVO split were carried without a citable
-    source. An uncited number in a tool that claims a standard is worse than a gap."""
+def test_no_fuel_row_exists_without_a_source(factors):
+    """Turkey's grid and a waste/crop HVO split were both once carried with no citable
+    source and were deleted rather than kept, because an uncited number in a tool that
+    claims a standard is worse than a gap. Both are back now that primary sources were
+    found -- Ember for the grid, JRC's RED II pathways for the feedstocks -- so what is
+    guarded is the rule, not the absence."""
+    invented = {"hvo_waste", "hvo_crop"}  # never had a source; superseded by the JRC rows
     fuels = {f.fuel_type for f in factors}
 
-    assert not fuels & {"electric_tr", "hvo_waste", "hvo_crop"}
+    assert not fuels & invented
+    for factor in factors:
+        assert factor.source.strip(), f"{factor.fuel_type}/{factor.scope} has no source"
+
+
+def test_the_corridors_own_grid_is_covered(factors):
+    """Turkiye is where the pilot corridor starts; an electric scenario that could not
+    price its origin country was not much of a scenario."""
+    turkiye = factor_for(factors, "electric_tr", "WTW")
+
+    assert "Ember" in turkiye.source
+    assert not turkiye.is_verified
+    # Between Germany and Poland, which is where a ~400 g/kWh grid belongs.
+    assert (factor_for(factors, "electric_de", "WTW").value
+            < turkiye.value
+            < factor_for(factors, "electric_pl", "WTW").value)
+
+
+# JRC typical values, g CO2eq/MJ of final fuel, AR6 basis (Table 43 of the RED II
+# pathway update). These are the primary figures the rows were built from.
+JRC_TYPICAL = {
+    "hvo_uco": 12.3,
+    "hvo_tallow": 20.2,
+    "hvo_rapeseed": 43.1,
+    "hvo_palm": 65.2,
+}
+
+
+def test_each_feedstock_reproduces_its_jrc_pathway(factors):
+    """Converted on GLEC's own fuel intensity, so the payload basis carries over."""
+    diesel_wtw_per_litre = DIESEL_TTW_PER_L + DIESEL_WTT_PER_L
+    mj_per_tonne_km = GLEC_DIESEL_WTW / diesel_wtw_per_litre * MJ_PER_L_DIESEL
+
+    for fuel, g_per_mj in JRC_TYPICAL.items():
+        expected = mj_per_tonne_km * g_per_mj / 1000
+        assert factor_for(factors, fuel, "WTW").value == pytest.approx(expected, rel=1e-3)
+
+
+def test_the_feedstock_decides_whether_hvo_is_worth_switching_to(factors):
+    """The headline reason the split exists: waste cooking oil is a seventh of diesel,
+    palm from an open effluent pond is nearly three quarters of it. One generic HVO
+    figure hides a fivefold spread."""
+    uco = factor_for(factors, "hvo_uco", "WTW").value
+    palm = factor_for(factors, "hvo_palm", "WTW").value
+
+    assert uco / GLEC_DIESEL_WTW < 0.20
+    assert palm / GLEC_DIESEL_WTW > 0.65
+    assert palm / uco > 4
+
+
+def test_the_feedstocks_are_ordered_the_way_the_pathways_are(factors):
+    ordered = [factor_for(factors, fuel, "WTW").value for fuel in JRC_TYPICAL]
+
+    assert ordered == sorted(ordered), "a feedstock is out of order against JRC"
+
+
+def test_combustion_does_not_vary_by_feedstock(factors):
+    """Tank-to-wheel is the same molecule whatever it was made from: trace CH4 and N2O,
+    with the biogenic CO2 reported out of scope."""
+    values = {factor_for(factors, fuel, "TTW").value for fuel in JRC_TYPICAL}
+
+    assert len(values) == 1
+    assert 0 < values.pop() < 0.005
+
+
+def test_every_feedstock_row_says_land_use_change_is_excluded(factors):
+    """It is large enough to erase the saving for crop-grown feedstock, so a row that
+    quietly omitted it would read as far better than it is."""
+    for fuel in JRC_TYPICAL:
+        notes = factor_for(factors, fuel, "WTW").notes.lower()
+        assert "land-use" in notes or "land use" in notes
+        assert "excludes" in notes
+
+
+def test_the_generic_row_points_at_the_specific_ones(factors):
+    """Whoever reaches for plain `hvo` should learn that the answer depends on something
+    they can go and ask their supplier."""
+    notes = factor_for(factors, "hvo", "WTW").notes.lower()
+
+    assert "hvo_uco" in notes and "hvo_palm" in notes
+    assert "unknown" in notes
+
+
+def test_the_generic_figure_falls_inside_the_pathway_range(factors):
+    """DEFRA's single number cross-checks against JRC: a mostly waste-based market should
+    land between waste cooking oil and tallow. If it fell outside, one of the two sources
+    would be being read wrong."""
+    generic = factor_for(factors, "hvo", "WTW").value
+
+    assert factor_for(factors, "hvo_uco", "WTW").value < generic
+    assert generic < factor_for(factors, "hvo_tallow", "WTW").value
