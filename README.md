@@ -141,7 +141,7 @@ Sık kullanılan seçenekler:
 |---|---|
 | `--tonnage` | Taşınan yük (ton), varsayılan 24 |
 | `--scope` | `TTW` veya `WTW` — faktör kapsamı |
-| `--fuel` | Karayolu yakıtı (`diesel`, `hvo`, `lng`, `electric`) |
+| `--fuel` | Karayolu yakıtı — `diesel_b5`, `hvo_uco`, `electric_tr` … Boş bırakılırsa setin varsayılanı. `--list-fuels` seçenekleri yazar |
 | `--load-factor` | Doluluk oranı 0-1 |
 | `--empty-return` | Boş dönüş payı 0-1 |
 | `--load-uncertainty` | Doluluğun ne kadar altına düşebileceği |
@@ -386,6 +386,10 @@ JRC'nin RED II yolak değerlerinden (Tablo 43, AR6) GLEC dizel satırı üzerind
 
 Aradaki fark **5 kat**. Palm yağından üretilmiş HVO dizelin üçte ikisinden fazlasını
 salıyor — ve bu **iLUC hariç**. Tek jenerik bir "HVO" rakamı bu aralığı gizler.
+
+Yakıt panodaki **Karayolu yakıtı** listesinden seçilir; liste faktör dosyasından üretilir,
+arayüze gömülü değildir, ve türetme olan satırlar seçenekte "türetme" diye işaretlidir.
+Komut satırında `--list-fuels` aynı listeyi yazar.
 
 Besleme stoğu bilinmiyorsa `hvo` satırı DEFRA'nın jenerik değerini (17,3 g/MJ) taşır.
 Bu değer JRC aralığında atık kızartma yağı ile hayvansal yağ arasına düşüyor — ağırlıklı

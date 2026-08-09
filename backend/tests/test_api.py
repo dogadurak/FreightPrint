@@ -633,3 +633,40 @@ def test_a_background_job_returns_the_format_it_was_started_with(client):
     downloaded = client.get(f"/api/report/jobs/{job['id']}/file")
     assert downloaded.content.startswith(b"PK")
     assert "spreadsheetml" in downloaded.headers["content-type"]
+
+
+def test_the_api_says_which_road_fuels_exist(client):
+    """The names are not guessable — the rows are diesel_b5 and electric_tr, so a caller
+    reaching for "diesel" or "electric" gets an error. A factor row nobody can discover
+    is a factor row nobody can use."""
+    sets = {s["name"]: s for s in client.get("/api/factor-sets").json()}
+    fuels = {f["fuel_type"]: f for f in sets["glec"]["road_fuels"]}
+
+    assert {"diesel_b5", "hvo_uco", "hvo_palm", "electric_tr"} <= set(fuels)
+    assert fuels["diesel_b5"]["is_default"] and fuels["diesel_b5"]["is_verified"]
+    assert not fuels["hvo_uco"]["is_verified"], "a derived row must not look published"
+    assert fuels["hvo_uco"]["label"] != "hvo_uco", "no human-readable label"
+
+
+def test_the_listed_fuels_are_exactly_the_ones_that_price(client):
+    """The list is generated from the factor file, so it cannot drift from what the
+    engine will actually accept."""
+    sets = {s["name"]: s for s in client.get("/api/factor-sets").json()}
+
+    for fuel in sets["glec"]["road_fuels"]:
+        response = _post(
+            client, factor_set="glec", scope="WTW", road_fuel_type=fuel["fuel_type"]
+        )
+        assert response.status_code == 200, f"{fuel['fuel_type']} is listed but will not price"
+
+
+def test_the_feedstock_choice_reaches_the_answer(client):
+    """Selecting palm-oil HVO instead of waste cooking oil has to move the number, or
+    the selector is decoration."""
+    uco = _post(client, factor_set="glec", scope="WTW", road_fuel_type="hvo_uco").json()
+    palm = _post(client, factor_set="glec", scope="WTW", road_fuel_type="hvo_palm").json()
+
+    road_uco = next(a for a in uco["alternatives"] if a["is_all_road"])["total_co2_kg"]
+    road_palm = next(a for a in palm["alternatives"] if a["is_all_road"])["total_co2_kg"]
+
+    assert road_palm > road_uco * 3

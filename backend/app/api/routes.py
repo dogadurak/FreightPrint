@@ -51,6 +51,7 @@ from .schemas import (
     LegOut,
     RangeOut,
     ReeferOut,
+    RoadFuelOut,
     RouteRequest,
     RouteResponse,
     RouteRiskOut,
@@ -86,6 +87,25 @@ FACTOR_SET_DESCRIPTIONS = {
     "placeholder": "Unverified values; not for reporting",
 }
 
+# Names a person can choose between. The fuel_type itself is the contract; this is only
+# what to show beside it, and an unlisted fuel falls back to its own name rather than
+# disappearing from the list.
+FUEL_LABELS = {
+    "diesel": "Dizel",
+    "diesel_b5": "Dizel (B5)",
+    "hvo": "HVO — besleme stogu bilinmiyor",
+    "hvo_uco": "HVO — atik kizartma yagi",
+    "hvo_tallow": "HVO — hayvansal yag",
+    "hvo_rapeseed": "HVO — kolza",
+    "hvo_palm": "HVO — palm (acik havuz)",
+    "electric": "Elektrik",
+    "electric_tr": "Elektrik — Turkiye sebekesi",
+    "electric_eu": "Elektrik — AB ortalamasi",
+    "electric_de": "Elektrik — Almanya sebekesi",
+    "electric_se": "Elektrik — Isvec sebekesi",
+    "electric_pl": "Elektrik — Polonya sebekesi",
+}
+
 
 @router.get("/terminals", response_model=list[TerminalOut])
 def list_terminals() -> list[TerminalOut]:
@@ -107,7 +127,8 @@ def list_terminals() -> list[TerminalOut]:
 
 @router.get("/factor-sets", response_model=list[FactorSetOut])
 def list_factor_sets() -> list[FactorSetOut]:
-    """What the caller may price with, and what each choice implies for the sea leg."""
+    """What the caller may price with: the sea basis each choice implies, and the road
+    fuels it can price. Both come from the factor file, so neither can drift from it."""
     factors = load_emission_factors()
     names = sorted({factor.factor_set for factor in factors})
 
@@ -115,6 +136,21 @@ def list_factor_sets() -> list[FactorSetOut]:
     for name in names:
         rows = [f for f in factors if f.factor_set == name]
         sea = {f.scope: f.value for f in rows if f.mode == "sea"}
+
+        road = [f for f in rows if f.mode == "road"]
+        fuels = []
+        for fuel_type in sorted({f.fuel_type for f in road}):
+            same = [f for f in road if f.fuel_type == fuel_type]
+            fuels.append(
+                RoadFuelOut(
+                    fuel_type=fuel_type,
+                    label=FUEL_LABELS.get(fuel_type, fuel_type),
+                    factor_by_scope={f.scope: f.value for f in same},
+                    is_verified=all(f.is_verified for f in same),
+                    is_default=any(f.is_default for f in same),
+                )
+            )
+
         sets.append(
             FactorSetOut(
                 name=name,
@@ -123,6 +159,7 @@ def list_factor_sets() -> list[FactorSetOut]:
                 source=sorted({f.source for f in rows})[0],
                 is_verified=all(f.is_verified for f in rows),
                 description=FACTOR_SET_DESCRIPTIONS.get(name, ""),
+                road_fuels=fuels,
             )
         )
     return sets

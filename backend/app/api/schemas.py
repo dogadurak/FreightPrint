@@ -19,6 +19,22 @@ class TerminalOut(BaseModel):
     is_connected: bool
 
 
+class RoadFuelOut(BaseModel):
+    """One road fuel a set can price with.
+
+    Listed rather than left for the caller to guess: the names are data, they change
+    when the factor file does, and a caller who guesses "diesel" or "electric" gets an
+    error naming eleven alternatives. `is_default` marks the one a request that names
+    no fuel receives.
+    """
+
+    fuel_type: str
+    label: str
+    factor_by_scope: dict[str, float]
+    is_verified: bool
+    is_default: bool
+
+
 class FactorSetOut(BaseModel):
     name: str
     scopes: list[str]
@@ -26,6 +42,7 @@ class FactorSetOut(BaseModel):
     source: str
     is_verified: bool
     description: str
+    road_fuels: list[RoadFuelOut] = []
 
 
 class Scenario(BaseModel):

@@ -837,6 +837,31 @@ async function loadFactorSets() {
   // A set without a factor for every mode can only ever answer with an error, so it is
   // never offered as a scenario.
   factorSets = all.filter((set) => Object.keys(set.sea_factor_by_scope).length > 0);
+  fillFuelSelect();
+}
+
+/** Offer the road fuels the engine actually has, read from the factor file through the
+ *  API rather than hard-coded here. A list written into the front end drifts the moment
+ *  a row is added, and the names are not guessable: asking for "diesel" or "electric"
+ *  is an error, because the rows are diesel_b5 and electric_tr.
+ *
+ *  Derived factors say so in the option itself. A fuel whose number was scaled off the
+ *  diesel row should not look like the published one beside it. */
+function fillFuelSelect() {
+  const select = $("road-fuel");
+  if (!select) return;
+  const primary = factorSets.find((set) => set.name === "glec") ?? factorSets[0];
+  const fuels = primary?.road_fuels ?? [];
+  if (!fuels.length) { select.parentElement.hidden = true; return; }
+
+  const fallback = fuels.find((f) => f.is_default);
+  select.innerHTML = [
+    `<option value="">Varsayılan${fallback ? ` — ${fallback.label}` : ""}</option>`,
+    ...fuels
+      .filter((f) => !f.is_default)
+      .map((f) => `<option value="${f.fuel_type}">${f.label}${
+        f.is_verified ? "" : " · türetme"}</option>`),
+  ].join("");
 }
 
 form.addEventListener("submit", async (event) => {
@@ -864,6 +889,8 @@ form.addEventListener("submit", async (event) => {
     is_reefer: data.get("is_reefer") === "on",
     scenarios,
   };
+  // Empty means "whatever the set calls default", which is what the engine does too.
+  if (data.get("road_fuel_type")) body.road_fuel_type = data.get("road_fuel_type");
   if (data.get("load_factor")) body.load_factor = Number(data.get("load_factor"));
   if (data.get("empty_return_share")) body.empty_return_share = Number(data.get("empty_return_share"));
 

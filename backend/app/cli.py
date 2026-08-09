@@ -28,8 +28,10 @@ def _parse_point(value: str) -> tuple[float, float]:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="FreightPrint multimodal route and carbon engine")
-    parser.add_argument("--origin", required=True, type=_parse_point, help="lon,lat")
-    parser.add_argument("--destination", required=True, type=_parse_point, help="lon,lat")
+    # Not required at the parser level: --list-fuels answers a question about the factor
+    # file and has no route to ask about. main() enforces them for every other run.
+    parser.add_argument("--origin", type=_parse_point, help="lon,lat")
+    parser.add_argument("--destination", type=_parse_point, help="lon,lat")
     parser.add_argument("--origin-name", default="origin")
     parser.add_argument("--destination-name", default="destination")
     parser.add_argument("--tonnage", type=float, default=24.0)
@@ -39,7 +41,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default="reference",
         help="which factor set to price with, e.g. reference or glec",
     )
-    parser.add_argument("--fuel", default=None, help="road fuel type, e.g. diesel, hvo, lng")
+    parser.add_argument(
+        "--fuel",
+        default=None,
+        help="road fuel type, e.g. diesel_b5, hvo_uco, electric_tr. Omit for the "
+             "set's default. --list-fuels prints what the chosen set offers.",
+    )
+    parser.add_argument(
+        "--list-fuels",
+        action="store_true",
+        help="print the road fuels the chosen factor set can price, and exit",
+    )
     parser.add_argument(
         "--load-factor",
         type=float,
@@ -89,8 +101,38 @@ def _print_route(shipment, route, tree_factors) -> None:
             print(f"      {species:<42} {'':>11} {count:>10,.0f} agac/yil")
 
 
+def _print_fuels(factor_set: str) -> None:
+    """List what the chosen set can price, so the names never have to be guessed.
+
+    They are not guessable: the rows are `diesel_b5` and `electric_tr`, so a reasonable
+    guess at `diesel` or `electric` is an error.
+    """
+    factors = load_emission_factors()
+    road = [f for f in factors if f.factor_set == factor_set and f.mode == "road"]
+    if not road:
+        sys.exit(f"'{factor_set}' setinde karayolu yakiti yok")
+
+    print(f"{factor_set} setinin karayolu yakitlari:\n")
+    for fuel_type in sorted({f.fuel_type for f in road}):
+        same = [f for f in road if f.fuel_type == fuel_type]
+        scopes = ", ".join(f"{f.scope} {f.value}" for f in sorted(same, key=lambda x: x.scope))
+        marks = []
+        if any(f.is_default for f in same):
+            marks.append("varsayilan")
+        if not all(f.is_verified for f in same):
+            marks.append("turetme")
+        suffix = f"  [{', '.join(marks)}]" if marks else ""
+        print(f"  {fuel_type:<15} {scopes}{suffix}")
+
+
 def main() -> None:
     args = _build_parser().parse_args()
+
+    if args.list_fuels:
+        _print_fuels(args.factor_set)
+        return
+    if args.origin is None or args.destination is None:
+        sys.exit("--origin ve --destination gerekli (yalniz --list-fuels icin degil)")
 
     try:
         routes = find_route_alternatives(
