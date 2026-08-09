@@ -18,7 +18,12 @@ from dataclasses import dataclass, field
 
 from .cache import DiskCache
 from .network import Terminal, load_terminals
-from .road import MAX_TABLE_COORDINATES, RoadRoutingError, table_durations
+from .road import (
+    MAX_TABLE_COORDINATES,
+    OSRM_BASE_URL,
+    RoadRoutingError,
+    table_durations,
+)
 
 # One degree of latitude is ~111 km, so 1.0 samples about every 111 km north-south and
 # less east-west as you go north. Coarse by default: a finer grid is a linear cost in
@@ -145,8 +150,17 @@ def build_catchment(
     cells: list[CatchmentCell] = []
     unreachable = 0
     for batch in _batches(points, per_batch):
+        # What is cached is the duration matrix, so the key holds exactly what the
+        # matrix depends on: which server answered, which terminals were asked from,
+        # and which points were asked about.
+        #
+        # `max_duration_h` is deliberately *not* here. It is applied to the answer
+        # afterwards, so including it would make raising the limit from 8 to 10 hours
+        # re-fetch identical data and pay the full cold cost again. `OSRM_BASE_URL` is
+        # here for the opposite reason: without it, pointing at a self-hosted OSRM
+        # would keep serving the demo server's answers.
         key = (
-            f"catch1|{','.join(t.id for t in ordered)}|{max_duration_h}|"
+            f"catch2|{OSRM_BASE_URL}|{','.join(t.id for t in ordered)}|"
             f"{';'.join(f'{lon},{lat}' for lon, lat in batch)}"
         )
         durations = cache.get_or_compute(key, lambda: table_durations(sources, batch))

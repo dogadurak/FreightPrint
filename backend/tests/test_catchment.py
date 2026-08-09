@@ -76,14 +76,19 @@ def test_each_point_goes_to_the_terminal_that_reaches_it_fastest(table):
 
 def test_a_point_with_no_route_is_dropped_not_given_to_the_least_bad_terminal(monkeypatch):
     """None means OSRM found no road, which is what open water looks like. Treating it
-    as a large number would paint the sea in a terminal's colour."""
+    as a large number would paint the sea in a terminal's colour.
+
+    The time limit is lifted for this test on purpose. With the default eight hours,
+    substituting any big sentinel for None lands past the limit and the point drops out
+    anyway — so the assertion would hold while the distinction it names was broken.
+    """
 
     def no_route_anywhere(sources, destinations):
         return [[None for _ in destinations] for _ in sources]
 
     monkeypatch.setattr(catchment_module, "table_durations", no_route_anywhere)
     result = build_catchment(TERMINALS, bounds=BOX, spacing_deg=1.0,
-                             connected_only=False, cache=NoCache())
+                             max_duration_h=1e9, connected_only=False, cache=NoCache())
 
     assert result.cells == []
     assert result.unreachable == result.sampled
@@ -177,3 +182,53 @@ def test_physical_proximity_can_still_be_asked_for(table):
     )
 
     assert "ambarli" in result.terminal_ids
+
+
+def test_raising_the_time_limit_does_not_re_fetch_identical_data(monkeypatch):
+    """The cache holds the duration matrix; the limit is applied to it afterwards. If
+    the limit were part of the key, widening it would pay the full cold cost again for
+    data already in hand — 26 seconds against the public OSRM server."""
+    calls = []
+
+    def counting(sources, destinations):
+        calls.append(len(destinations))
+        return [[1.0 for _ in destinations] for _ in sources]
+
+    monkeypatch.setattr(catchment_module, "table_durations", counting)
+
+    class CountingCache:
+        def __init__(self):
+            self.store = {}
+
+        def get_or_compute(self, key, compute):
+            if key not in self.store:
+                self.store[key] = compute()
+            return self.store[key]
+
+    cache = CountingCache()
+    build_catchment(TERMINALS, bounds=BOX, spacing_deg=1.0, max_duration_h=8.0,
+                    connected_only=False, cache=cache)
+    after_first = len(calls)
+    build_catchment(TERMINALS, bounds=BOX, spacing_deg=1.0, max_duration_h=10.0,
+                    connected_only=False, cache=cache)
+
+    assert len(calls) == after_first, "widening the limit re-fetched the same durations"
+
+
+def test_the_cache_key_names_the_server_that_answered(monkeypatch):
+    """Pointing at a self-hosted OSRM must not keep serving the demo server's answers."""
+    keys = []
+
+    class RecordingCache:
+        def get_or_compute(self, key, compute):
+            keys.append(key)
+            return compute()
+
+    monkeypatch.setattr(
+        catchment_module, "table_durations",
+        lambda sources, destinations: [[1.0 for _ in destinations] for _ in sources],
+    )
+    build_catchment(TERMINALS, bounds=BOX, spacing_deg=1.0,
+                    connected_only=False, cache=RecordingCache())
+
+    assert keys and all(catchment_module.OSRM_BASE_URL in key for key in keys)

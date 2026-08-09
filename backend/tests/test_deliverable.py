@@ -166,3 +166,37 @@ def test_an_empty_report_still_produces_a_readable_file():
 
     assert load_workbook(io.BytesIO(report_to_xlsx(report))).sheetnames
     assert "Hesap esası" in pdf_text(report_to_pdf(report))
+
+
+@pytest.mark.parametrize(
+    "value,decimals,expected",
+    [(4770, 0, "4.770"), (1234567, 0, "1.234.567"), (24, 0, "24"), (4.5, 1, "4,5"), (0, 0, "0")],
+)
+def test_numbers_are_written_in_turkish(value, decimals, expected):
+    """Not cosmetic. Turkish groups thousands with a full stop, so the English default
+    renders 4770 kg as "4,770" — which reads as four point seven seven. In a carbon
+    report that is a factor of a thousand, in the direction of looking harmless."""
+    from app.core.deliverable import _number_tr
+
+    assert _number_tr(value, decimals) == expected
+
+
+def test_the_pdf_does_not_print_english_separators(report):
+    """The whole document is Turkish; a number in another convention inside it is a
+    misreading waiting to happen."""
+    text = pdf_text(report_to_pdf(report))
+
+    import re
+    english_grouped = re.findall(r"\d,\d{3}\b", text)
+    assert not english_grouped, f"English thousands grouping in a Turkish report: {english_grouped}"
+
+
+def test_whole_tonnages_lose_the_decimal_excel_gave_them(report):
+    """Every spreadsheet number arrives as a float, so 24 tonnes becomes 24.0."""
+    text = pdf_text(report_to_pdf(report))
+
+    assert "24,0" not in text and "24.0" not in text
+
+
+def test_the_status_column_is_in_the_documents_own_language(report):
+    assert "hesaplandı" in pdf_text(report_to_pdf(report))

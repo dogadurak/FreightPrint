@@ -336,6 +336,12 @@ python -m app.cli --origin=... --destination=... --factor-set glec --scope WTW
 **Refakatli/refakatsiz seçimi sonucun işaretini değiştirir** — bu yüzden gizli bir varsayım
 değil, ayrı bir faktör seti olarak açıkta duruyor.
 
+**Varsayılan yakıt.** Bir modun birden çok yakıtı olduğunda (karayolu: dizel, HVO,
+elektrik) `is_default` sütunu, yakıt belirtmeyen bir aramanın hangi satırı alacağını
+söyler. Bu bir veri beyanıdır, kodda tahmin değil: sete HVO satırı eklemek, "karayolu
+faktörünü ver" sorgusunun anlamını sessizce değiştiremez. Varsayılanı olmayan set
+(`placeholder`) çıplak aramayı reddeder.
+
 Bir faktör istenen sette yoksa sistem **hata verir**, başka sete düşmez. Çıktının "GLEC ile
 hesaplandı" deyip bir bacağı başka yerden alması, standart iddiası taşıyan bir üründe
 kabul edilemez.

@@ -247,12 +247,22 @@ def test_handling_and_waiting_are_counted_not_folded_into_transit():
 
 def test_osrm_requests_are_capped_across_every_caller():
     """A batch job pool wrapping a per-row pool was measured putting sixteen requests on
-    the demo server at once. The cap belongs to the client, not to whoever calls it."""
+    the demo server at once. The cap belongs to the client, not to whoever calls it.
+
+    The observed peak is checked against a limit installed here, not against
+    `MAX_CONCURRENT_REQUESTS`. Asserting against the module's own constant moves the
+    goalposts with it: raise the constant to 999 and the assertion passes while nothing
+    is capped at all. `test_the_shipped_concurrency_limit_is_small` guards the value.
+    """
     import threading
     import time
     from concurrent.futures import ThreadPoolExecutor
 
     from app.core import road
+
+    limit = 3
+    original_slots = road._request_slots
+    road._request_slots = threading.BoundedSemaphore(limit)
 
     peak = {"now": 0, "max": 0}
     lock = threading.Lock()
@@ -278,5 +288,17 @@ def test_osrm_requests_are_capped_across_every_caller():
             list(outer.map(lambda i: road._query_osrm((i, 0.0), (i + 1, 1.0)), range(24)))
     finally:
         road._fetch = original
+        road._request_slots = original_slots
 
-    assert peak["max"] <= road.MAX_CONCURRENT_REQUESTS
+    assert peak["max"] <= limit
+    # Without a working gate two nested pools would have run far more than this at once,
+    # so a peak of one would mean the work never overlapped and the test proved nothing.
+    assert peak["max"] > 1, "no concurrency was exercised; the test would pass either way"
+
+
+def test_the_shipped_concurrency_limit_is_small():
+    """The public OSRM demo server is rate limited and one route request costs seven
+    calls. A default that had drifted upward would hammer it silently."""
+    from app.core import road
+
+    assert 1 <= road.MAX_CONCURRENT_REQUESTS <= 8

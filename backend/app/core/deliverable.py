@@ -76,6 +76,38 @@ PDF_COLUMNS = (
     "route", "total_km", "total_co2_kg", "all_road_co2_kg", "saving_co2_kg", "status",
 )
 
+STATUS_TR = {"ok": "hesaplandı"}
+
+
+def _number_tr(value: float, decimals: int = 0) -> str:
+    """A number written the way the rest of this document is: in Turkish.
+
+    This is not cosmetic. Turkish groups thousands with a full stop and marks decimals
+    with a comma, so the English default renders 4770 kg as "4,770" — which a Turkish
+    reader parses as four point seven seven. In a carbon report that is a factor of a
+    thousand, in the direction of looking harmless.
+    """
+    formatted = f"{value:,.{decimals}f}"
+    # Swap the two separators via a placeholder so neither pass undoes the other.
+    return formatted.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+
+
+def _cell_text_for(column: str, value) -> str:
+    """One PDF cell's text, formatted for what the column holds."""
+    if value is None:
+        return ""
+    if column == "status":
+        return STATUS_TR.get(value, value.replace("failed:", "hesaplanamadı:"))
+    if column == "tonnage":
+        # Excel hands every number back as a float, so 24 tonnes arrives as 24.0.
+        return _number_tr(value, 0 if float(value).is_integer() else 1)
+    if column.endswith("_km"):
+        return _number_tr(value, 0)
+    if column.endswith("_kg") or column == "trees_equivalent":
+        return _number_tr(value, 0)
+    return str(value)
+
+
 _fonts_registered = False
 
 
@@ -266,11 +298,11 @@ def report_to_pdf(report: Report) -> bytes:
     ]
     basis_rows.append([
         Paragraph("<b>Toplam CO2</b>", styles["cell"]),
-        Paragraph(f"{round_to_significant(report.total_co2_kg):,.0f} kg", styles["cell"]),
+        Paragraph(f"{_number_tr(round_to_significant(report.total_co2_kg))} kg", styles["cell"]),
     ])
     basis_rows.append([
         Paragraph("<b>Toplam fark</b>", styles["cell"]),
-        Paragraph(f"{round_to_significant(report.total_saving_co2_kg):,.0f} kg", styles["cell"]),
+        Paragraph(f"{_number_tr(round_to_significant(report.total_saving_co2_kg))} kg", styles["cell"]),
     ])
     basis = Table(basis_rows, colWidths=[38 * mm, 225 * mm])
     basis.setStyle(TableStyle([
@@ -292,10 +324,7 @@ def report_to_pdf(report: Report) -> bytes:
     for report_row in report.rows:
         values = _row_values(report_row)
         body.append([
-            Paragraph("" if values[c] is None else f"{values[c]:,.0f}"
-                      if isinstance(values[c], (int, float)) and c.endswith("_kg")
-                      else str(values[c] if values[c] is not None else ""), styles["cell"])
-            for c in PDF_COLUMNS
+            Paragraph(_cell_text_for(c, values[c]), styles["cell"]) for c in PDF_COLUMNS
         ])
 
     # Widths in millimetres and summing to the printable width (A4 landscape less the
