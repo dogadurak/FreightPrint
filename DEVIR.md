@@ -3,7 +3,7 @@
 Bu belge projeyi başka bir asistanla sürdürecek biri için yazıldı. Kodun anlattığını
 tekrar etmez; **kodda görünmeyen kararları, bulguları ve tuzakları** anlatır.
 
-Son durum: **34 commit, 230 test geçiyor, çalışma ağacı temiz. Planın tüm fazları bitti.**
+Son durum: **38 commit, 247 test geçiyor, çalışma ağacı temiz. Planın tüm fazları bitti.**
 
 ---
 
@@ -51,6 +51,7 @@ verirken `glec` TTW ile **−%19** veriyor.
 | 5 | Risk ve maliyet modülü | ✅ Bitti |
 | — | Pano yükseltmesi, zaman ekseni, toplu iş kuyruğu, frigo, xlsx | ✅ Bitti |
 | — | HVO / elektrik faktörleri (GLEC dışı kaynak) | ✅ Bitti |
+| — | Teslim formatları: Excel + PDF (brifingde tarif, geç fark edildi) | ✅ Bitti |
 | 6 | Terminal etki alanı haritası | ✅ Bitti |
 | 7 | AIS katmanı (koşullu) | ⛔ Faz 0'da elenmesi gerektiği görüldü |
 | 8 | Paketleme / CI | ✅ Bitti |
@@ -170,6 +171,24 @@ süresi soğutma faturasının üçte biri. Koridorda multimodalin cezası kuru 
 frigo yükte **%11**. Km bazlı bir model bunu sıfır görürdü.
 
 ---
+
+## 4a. Teslim formatları — neden ayrı sayfa, neden gömülü font
+
+Brifingin tek cümlelik tanımı "müşteriye **teslim edilebilir karbon raporu** üreten" diyor
+ve teknoloji tablosu formatı adlandırıyor: **Excel (openpyxl) + PDF**. Uzun süre yalnızca
+CSV üretildi; bu boşluk fazlar "bitti" sayıldıktan sonra fark edildi.
+
+- **Excel'de esas ayrı bir sayfada.** Üstbilgi satırının üstüne yazılan not, veri
+  sıralanıp kopyalandığında kaybolan ilk şeydir. Faktör seti, kapsam, kaynaklar,
+  uyarılar ve yöntem notu "Esas ve kaynaklar" sayfasında durur.
+- **PDF'te Bitstream Vera gömülü.** reportlab'in yerleşik fontları **Latin-1**'dir ve
+  Latin-1'de **ı, ş, ğ, İ yoktur** — Türkçe rapor bozuk çıkar. Vera reportlab ile
+  birlikte geldiği için konteynerde sistem fontu gerekmez. Bunu değiştirmeyin.
+- **PDF'te `Durum` sütunu zorunlu.** Olmadan, rotalanamayan sevkiyat boş satır olarak
+  görünür ve okuyan bunu "emisyonu sıfır" sanabilir.
+- **Negatif fark için özel stil yok** — olamaz. Toplu rapor en düşük emisyonlu seçeneği
+  taşır; çok modlu kaybettiğinde seçilen rota zaten tam karayolu olur ve fark **sıfır**
+  çıkar. Yöntem notu bunu açıklar, yoksa sıfır "hesaplanmadı" gibi okunur.
 
 ## 5. Kalan işler
 
