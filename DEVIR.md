@@ -3,7 +3,7 @@
 Bu belge projeyi başka bir asistanla sürdürecek biri için yazıldı. Kodun anlattığını
 tekrar etmez; **kodda görünmeyen kararları, bulguları ve tuzakları** anlatır.
 
-Son durum: **28 commit, 210 test geçiyor, çalışma ağacı temiz.**
+Son durum: **31 commit, 212 test geçiyor, çalışma ağacı temiz.**
 
 ---
 
@@ -45,7 +45,7 @@ dönüşüyor. İşaret değişiyor.
 | — | HVO / elektrik faktörleri (GLEC dışı kaynak) | ✅ Bitti |
 | 6 | Terminal etki alanı (izokron) haritası | ❌ Hiç başlanmadı |
 | 7 | AIS katmanı (koşullu) | ⛔ Faz 0'da elenmesi gerektiği görüldü |
-| 8 | Paketleme / CI | ❌ Hiç başlanmadı |
+| 8 | Paketleme / CI | ✅ Bitti |
 
 ### Faz 0 — Fizibilite (bitti)
 
@@ -165,18 +165,13 @@ frigo yükte **%11**. Km bazlı bir model bunu sıfır görürdü.
 
 ## 5. Kalan işler
 
-### 5.1 Faz 6 — terminal etki alanı (izokron)
+### 5.1 Faz 6 — terminal etki alanı (izokron) — **tek kalan faz**
 
 Hiç başlanmadı. Hangi terminalin hangi bölgeyi kapsadığını gösteren izokron haritası.
-OSRM'in `/table` veya `/isochrone` servisi ile yapılabilir; public demo sunucu bunun için
-yetersiz kalır, kendi OSRM örneğiniz gerekir.
+OSRM'in `/table` servisi ile yapılabilir; public demo sunucu bunun için yetersiz kalır,
+`docker compose --profile self-hosted up -d` ile kendi OSRM örneğinizi kaldırın.
 
-### 5.2 Faz 8 — paketleme / CI
-
-Hiç başlanmadı. `docker-compose.yml` OSRM için var ama uygulama için yok. Test takımı
-(210 test) CI'da koşmuyor.
-
-### 5.3 Risk poligonlarının bağımsız doğrulanması (kısmen çözüldü)
+### 5.2 Risk poligonlarının bağımsız doğrulanması (kısmen çözüldü)
 
 `data/risk_zones.geojson` **elle sayısallaştırılmış basitleştirilmiş dikdörtgenler**.
 JWC sınırlarıyla satır satır karşılaştırılmadı — JWLA-033 yalnızca PDF olarak yayımlanıyor,
@@ -256,7 +251,33 @@ yaparken bunlara dikkat:
 
 ---
 
-## 9. Çalıştırma
+## 9. Paketleme ve CI (Faz 8, bitti)
+
+```bash
+docker compose up -d app                      # public OSRM ile -> :8100
+docker compose --profile self-hosted up -d    # yerel OSRM ile
+python scripts/install_hooks.py               # gizlilik kancası
+```
+
+Üç şeyi bilin:
+
+- **Testler ağa çıkmaz.** `conftest.py` her testin ağ erişimini kapatır. Bu koruma
+  eklenirken Nominatim'e canlı istek atan bir test bulundu — CI'da rastgele kırılırdı.
+  Takım 46 sn'den 17 sn'ye indi. Muafiyet `@pytest.mark.network`, şu an kullanan yok.
+- **Önbellek `/app/var`, referans veri `/app/data`.** Bunları ayırmak zorunluydu: ikisi
+  de `data/` altındayken, önbelleği korumak için oraya volume bağlamak faktör tablosunu
+  da sabitler ve düzeltilmiş bir faktör yeniden dağıtılan konteynere ulaşmazdı.
+  `FREIGHTPRINT_CACHE_DIR` ile taşınır.
+- **İki ayrı gizlilik kontrolü var.** `check_privacy.py` doğrulama veri setini okur, o
+  yüzden yalnızca yerelde çalışır. `check_tracked_files.py` yalnızca depoya bakar, o
+  yüzden CI'da çalışan budur: hassas bir dosya takibe girmiş mi, ve bir defter
+  **çıktısıyla** commit'lenmiş mi (defter kaynağı serbest, çıktısı değil).
+
+CI dosyası `.github/workflows/ci.yml` — depo push edilene kadar koşmaz.
+
+---
+
+## 10. Çalıştırma
 
 ```bash
 pip install -r requirements.txt
