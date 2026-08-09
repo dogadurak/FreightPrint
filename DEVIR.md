@@ -3,7 +3,7 @@
 Bu belge projeyi başka bir asistanla sürdürecek biri için yazıldı. Kodun anlattığını
 tekrar etmez; **kodda görünmeyen kararları, bulguları ve tuzakları** anlatır.
 
-Son durum: **31 commit, 212 test geçiyor, çalışma ağacı temiz.**
+Son durum: **34 commit, 230 test geçiyor, çalışma ağacı temiz. Planın tüm fazları bitti.**
 
 ---
 
@@ -43,7 +43,7 @@ dönüşüyor. İşaret değişiyor.
 | 5 | Risk ve maliyet modülü | ✅ Bitti |
 | — | Pano yükseltmesi, zaman ekseni, toplu iş kuyruğu, frigo, xlsx | ✅ Bitti |
 | — | HVO / elektrik faktörleri (GLEC dışı kaynak) | ✅ Bitti |
-| 6 | Terminal etki alanı (izokron) haritası | ❌ Hiç başlanmadı |
+| 6 | Terminal etki alanı haritası | ✅ Bitti |
 | 7 | AIS katmanı (koşullu) | ⛔ Faz 0'da elenmesi gerektiği görüldü |
 | 8 | Paketleme / CI | ✅ Bitti |
 
@@ -165,11 +165,16 @@ frigo yükte **%11**. Km bazlı bir model bunu sıfır görürdü.
 
 ## 5. Kalan işler
 
-### 5.1 Faz 6 — terminal etki alanı (izokron) — **tek kalan faz**
+### 5.1 Terminal etki alanı — yapıldı, sınırı bilin
 
-Hiç başlanmadı. Hangi terminalin hangi bölgeyi kapsadığını gösteren izokron haritası.
-OSRM'in `/table` servisi ile yapılabilir; public demo sunucu bunun için yetersiz kalır,
-`docker compose --profile self-hosted up -d` ile kendi OSRM örneğinizi kaldırın.
+Sonuç bir **örnek ızgarasıdır, sınır değil**. İki örnek arasındaki cevap hesaplanmadı.
+Aralığı sıklaştırmak (`spacing_deg`) doğrusal olarak daha çok OSRM isteği demek; public
+demo sunucuda 1° için ~26 sn. Daha sıkı ızgara istiyorsanız kendi OSRM'inizi kaldırın:
+`docker compose --profile self-hosted up -d`.
+
+15 terminal, 6 doğrulanmış renk yuvası var; kalanı tek renkte toplanıyor. Renk döndürmek
+**yasak** — iki uzak terminal aynı renkte tek bir etki alanı gibi okunur. Yeni renk
+eklemek isteyen önce paleti doğrulasın (dataviz becerisinin `validate_palette` kontrolü).
 
 ### 5.2 Risk poligonlarının bağımsız doğrulanması (kısmen çözüldü)
 
