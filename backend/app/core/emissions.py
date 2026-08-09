@@ -29,6 +29,9 @@ class EmissionFactor:
     # correction gets applied twice: once by whoever published the factor, once by us.
     basis_load_factor: float = 1.0
     basis_empty_share: float = 0.0
+    # The row a caller gets when they name no fuel. Alternative fuels are opt-in, so
+    # adding one cannot change what an existing report means.
+    is_default: bool = False
 
     @property
     def value_at_full_load(self) -> float:
@@ -118,6 +121,7 @@ def load_emission_factors(path: Path | None = None) -> list[EmissionFactor]:
                 notes=row["notes"],
                 basis_load_factor=float(row["basis_load_factor"]),
                 basis_empty_share=float(row["basis_empty_share"]),
+                is_default=row.get("is_default", "").strip().lower() == "yes",
             )
             for row in csv.DictReader(f)
         ]
@@ -140,8 +144,13 @@ def find_factor(
 
     A miss is an error, never a quiet fall back to another set: a report that says it
     priced with GLEC while a leg came from somewhere else misstates its own source, and
-    that is the one thing a standards claim cannot survive. Ambiguity is refused for the
-    same reason — silently taking the first of several matches is a guess, not a lookup.
+    that is the one thing a standards claim cannot survive.
+
+    Where a mode offers alternative fuels, one row per set is marked `is_default` and a
+    caller who names no fuel gets it. That is a declaration in the data, not a guess in
+    the code: adding an HVO row must not silently change what "the road factor" means,
+    and asking for the road factor of a fleet that runs diesel is not an ambiguous
+    question. Genuine ambiguity — no default, or several — is still refused.
     """
     in_set = [f for f in factors if f.factor_set == factor_set and f.mode == mode]
     matches = [f for f in in_set if f.scope == scope]
@@ -154,6 +163,11 @@ def find_factor(
         raise FactorNotFoundError(
             f"no {scope} factor for mode={mode} fuel={fuel_type} in set={factor_set}{detail}"
         )
+    if len(matches) > 1 and fuel_type is None:
+        defaults = [f for f in matches if f.is_default]
+        if len(defaults) == 1:
+            return defaults[0]
+        matches = defaults or matches
     if len(matches) > 1:
         options = ", ".join(sorted(f"{f.vehicle_type}/{f.fuel_type}" for f in matches))
         raise FactorNotFoundError(

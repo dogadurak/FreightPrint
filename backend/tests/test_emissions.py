@@ -152,10 +152,14 @@ def test_unverified_factor_raises_a_warning_instead_of_passing_silently():
 
 
 def test_a_fuel_missing_from_the_requested_set_is_an_error_not_another_set():
-    """Falling back would price a leg from a set the report does not name."""
+    """Falling back would price a leg from a set the report does not name.
+
+    LNG is the example because GLEC's Table 42 lists it while our own `glec` set does
+    not carry it — exactly the gap that invites a silent substitution.
+    """
     with pytest.raises(FactorNotFoundError, match="diesel_b5"):
         calculate_route_emission(
-            _route("x", [_leg("road", 100)]), tonnage=24, road_fuel_type="hvo", factor_set="glec"
+            _route("x", [_leg("road", 100)]), tonnage=24, road_fuel_type="lng", factor_set="glec"
         )
 
 
