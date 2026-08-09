@@ -311,6 +311,22 @@ kimsenin hesaplamadığı bir kesinlik iddia ederdi. Aralık cevabın içinde d�
   olmayan bir etki alanı iddia etmektir.
 - İlk hesap public OSRM ile ~26 sn, sonrası önbellekten anında.
 
+## Belirsizlik — moda göre, tek bir band değil
+
+Emisyon aralığı Monte Carlo ile üretilir ve mesafe belirsizliği **her moda ayrı** uygulanır
+(`data/distance_uncertainty.csv`). Sebebi: karayolu mesafesini OSRM ile **bağımsız olarak
+kendimiz hesaplıyoruz** ve doğrulama setine göre MAPE %1,9; deniz ve demiryolu bacakları
+ise referans tablodan geliyor ve tek bir bağımsız kontrolü var (searoute, n=1, %4,2).
+
+Hepsine aynı %5'i vermek iki yönde birden yanlıştı: karayolunda band gereksiz geniş,
+denizde ise sahte dar. Ölçüldü — Gebze→Düsseldorf tam karayolu bandı **%7,0'dan %2,6'ya**
+indi, deniz içeren rotalar görece geniş kaldı. Karşılaştırmanın hangi tarafının daha
+sağlam temelli olduğu artık görünüyor.
+
+Her satır dayanağını taşır: neye karşı ölçüldüğü, kaç örneğe dayandığı ve **ölçüm olup
+olmadığı**. Demiryolu satırı açıkça "hiç kontrol edilmedi, deniz değeri ödünç alındı"
+diyor — sıfır olmayan bir yer tutucu, bulgu değil.
+
 ## Emisyon hesabı
 
 `bacak_emisyonu = mesafe_km × ton × faktör`, faktör doluluk oranı ve boş dönüş payına göre
@@ -393,6 +409,7 @@ Sistem, gerçek bir lojistik firmasının iki müşteri için hazırladığı ka
 | Emisyon tutarlılığı — tam karayolu | fark < %1 | **34/34 satır**, hata ≈ 0 | 34/34 |
 | Emisyon tutarlılığı — çok modlu | fark < %1 | **19/22 satır**, eşleşenlerde hata = 0 | 22/22 |
 | Karayolu mesafe sapması | raporlanabilir | MAPE **%1,9**, 30/30 satır %10 içinde | 30/34 |
+| Deniz referans tutarlılığı | raporlanabilir | medyan %0, MAPE %1,1, kuyruk %8,8 | 19 bacak |
 | Deniz mesafe sapması | raporlanabilir | temiz %4,2 — Korint geçen %21,9 | n=1 / n=5 |
 
 Eşleşmeyen üç satır, kendi bildirdiği km sütunlarının ürettiğinden **daha düşük** bir CO2
@@ -446,11 +463,15 @@ rotası ve mesafe geçer; sevkiyat satırları, müşteri adları ve tonajlar ge
   bulunamadı; 40 km/sa ortalamadan hesaplanıyor ve çıktıda "tahmin" olarak işaretli.
 - **Aktarma süreleri sektör tipik değerleri**, ölçüm değil. Gümrük ve sınır kapısı
   bekleme süreleri hiç dâhil değil — gerçek kapıdan kapıya süre daha uzun olabilir.
-- **Belirsizlik her moda aynı bandı uyguluyor.** Karayolu sapması %1,9 ölçüldü ama deniz
-  sapması %12–43; ikisine de aynı %5 verilmesi en belirsiz bacakta sahte güven üretiyor.
 - **`reference` seti WTW desteklemez.** Müşteri raporu yalnızca TTW değerleri verdiği için
   `--scope WTW` bu setle çalışmaz; `--factor-set glec` kullanın.
 - **Demiryolu için dizel çekiş varsayılıyor.** GLEC'in dizel satırı hem TTW hem WTW verdiği
   için tutarlı bir çift oluşturuyor. Trieste–Köln gibi elektrikli koridorlarda gerçek değer
   0,0091 WTW, yani mevcut varsayım muhafazakâr (yüksek) yönde.
-- **Yakıt tipi faktörleri kısmen doğrulanmamış.** HVO ve elektrik hâlâ `PLACEHOLDER`.
+- **HVO ve elektrik faktörleri türetme.** GLEC'te bu satırlar yok; DEFRA ve şebeke
+  yoğunluklarından GLEC dizel satırı üzerinden ölçeklendi ve `is_verified=no` taşıyorlar.
+  Türkiye şebeke faktörü ve HVO'nun atık/bitkisel ayrımı kaynaklandırılamadığı için
+  **hiç eklenmedi**.
+- **Deniz ve demiryolu belirsizliği ölçüm değil.** Deniz bandı tek bir bağımsız
+  karşılaştırmaya (searoute, n=1) dayanıyor; demiryolu hiç kontrol edilmedi ve deniz
+  değerini ödünç alıyor. `data/distance_uncertainty.csv` her satırda bunu yazıyor.

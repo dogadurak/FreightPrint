@@ -1,7 +1,10 @@
+import csv
 import random
 from dataclasses import dataclass
 from math import floor, log10
+from pathlib import Path
 
+from .network import DATA_DIR
 from .emissions import (
     DEFAULT_FACTOR_SET,
     DEFAULT_SCOPE,
@@ -14,6 +17,45 @@ from .emissions import (
 from .route import RouteAlternative
 
 DEFAULT_SAMPLES = 500
+
+
+@dataclass(frozen=True)
+class DistanceUncertainty:
+    mode: str
+    relative: float
+    sample_size: int
+    is_measured: bool
+    basis: str
+    notes: str
+
+
+def load_distance_uncertainty(path: Path | None = None) -> dict[str, DistanceUncertainty]:
+    """How far each mode's distance might be out, per mode rather than per route.
+
+    One band across every leg produces false confidence exactly where it is least
+    deserved. Road distance is computed independently by OSRM and lands within 1.9% of
+    the reported figure across thirty rows; the sea and rail legs use a reference table
+    that has never been recomputed against anything but a single searoute crossing. A
+    shared 5% was simultaneously too wide for road and too narrow for the leg the
+    product's whole finding rests on.
+
+    Like the emission factors, these live in a data file carrying their own provenance:
+    what each was measured against, how many samples back it, and whether it is a
+    measurement at all.
+    """
+    path = path or DATA_DIR / "distance_uncertainty.csv"
+    with open(path, encoding="utf-8") as f:
+        return {
+            row["mode"]: DistanceUncertainty(
+                mode=row["mode"],
+                relative=float(row["relative_uncertainty"]),
+                sample_size=int(row["sample_size"]),
+                is_measured=row["is_measured"].strip().lower() == "yes",
+                basis=row["basis"],
+                notes=row["notes"],
+            )
+            for row in csv.DictReader(f)
+        }
 
 
 @dataclass
@@ -55,7 +97,7 @@ def load_band(load_factor: float, load_uncertainty: float) -> tuple[float, float
 def simulate_emission_range(
     route: RouteAlternative,
     tonnage: float,
-    distance_uncertainty: float = 0.05,
+    distance_uncertainty: float | None = None,
     load_factor: float | None = None,
     load_uncertainty: float = 0.0,
     empty_return_share: float = 0.0,
@@ -71,10 +113,13 @@ def simulate_emission_range(
 
     The load band is centred on `load_factor` and clipped at full capacity, so the range
     brackets the point estimate rather than sitting entirely above it.
+
+    Distance uncertainty is taken per mode from `distance_uncertainty.csv` unless the
+    caller overrides it with a single figure for every leg.
     """
     if not 0 < confidence < 1:
         raise ValueError(f"confidence must be in (0, 1), got {confidence}")
-    if not 0 <= distance_uncertainty < 1:
+    if distance_uncertainty is not None and not 0 <= distance_uncertainty < 1:
         raise ValueError(f"distance_uncertainty must be in [0, 1), got {distance_uncertainty}")
     if load_factor is None and load_uncertainty:
         raise ValueError("load_uncertainty needs an explicit load_factor to vary around")
@@ -84,9 +129,20 @@ def simulate_emission_range(
     band = load_band(load_factor, load_uncertainty) if load_factor is not None else None
 
     factors = factors if factors is not None else load_emission_factors()
+    by_mode = load_distance_uncertainty() if distance_uncertainty is None else {}
+
+    def spread_for(mode: str) -> float:
+        if distance_uncertainty is not None:
+            return distance_uncertainty
+        entry = by_mode.get(mode)
+        # An unlisted mode gets the widest listed figure rather than zero: a mode nobody
+        # has characterised is the last one that should look certain.
+        return entry.relative if entry else max(e.relative for e in by_mode.values())
+
     leg_inputs = [
         (
             leg.distance_km,
+            spread_for(leg.mode),
             find_factor(
                 factors,
                 mode=leg.mode,
@@ -103,10 +159,10 @@ def simulate_emission_range(
     for _ in range(samples):
         sampled_load = rng.uniform(*band) if band is not None else None
         total = 0.0
-        for distance_km, factor in leg_inputs:
+        for distance_km, spread, factor in leg_inputs:
             sampled_km = rng.triangular(
-                distance_km * (1 - distance_uncertainty),
-                distance_km * (1 + distance_uncertainty),
+                distance_km * (1 - spread),
+                distance_km * (1 + spread),
                 distance_km,
             )
             total += sampled_km * tonnage * effective_factor_value(
