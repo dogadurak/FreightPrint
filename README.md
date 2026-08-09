@@ -264,6 +264,29 @@ türetilir ve "tahmin" işaretlenir.
 Gebze→Düsseldorf için sonuç: tam karayolu **3,1 gün**, çok modlu **5,5 gün** — ve farkın
 üçte biri hiç hareket edilmeyen süre (18 sa aktarma + 25 sa bekleme).
 
+## Terminal etki alanı
+
+Haritanın altındaki **Terminal etki alanı** düğmesi, hangi terminalin nereye hizmet
+ettiğini **sürüş süresiyle** gösterir. Alışıldık daire çizimi coğrafyanın olduğu her
+yerde yanlıştır: Marmara, Alpler ve Boğaz, haritada yakın duran yerleri karayoluyla
+saatlerce uzağa koyar. Ölçtük — noktaların **%14'ü** düz çizgi modelinin vereceğinden
+farklı terminale düşüyor.
+
+Sonuç bir **örnek ızgarasıdır, sınır değil.** İki örnek noktası arasındaki cevap
+hesaplanmadı, bu yüzden harita ölçülen aralıkta kareler çizer; düzgün bir poligon,
+kimsenin hesaplamadığı bir kesinlik iddia ederdi. Aralık cevabın içinde döner.
+
+- OSRM'in `/table` servisi kullanılır: tek istekte çok noktaya matris. Izgara bu sayede
+  kırk bin rota isteği yerine birkaç yüz tablo isteği eder.
+- Hiçbir servisin uğramadığı terminaller **dışarıda bırakılır** (`connected_only`).
+  Ambarlı'ya sürebilirsiniz ama gemiye binemezsiniz; ona etki alanı vermek, teslim edip
+  mahsur kalacağınız bir bölge çizmek olurdu.
+- OSRM'in rota bulamadığı nokta (açık deniz, ada) **atanmaz** — "en az kötü" terminale
+  verilmez, yoksa denizi bir terminalin rengine boyardık.
+- Süre sınırının ötesi de atanmaz; haritanın tamamını "en yakın" terminale boyamak
+  olmayan bir etki alanı iddia etmektir.
+- İlk hesap public OSRM ile ~26 sn, sonrası önbellekten anında.
+
 ## Emisyon hesabı
 
 `bacak_emisyonu = mesafe_km × ton × faktör`, faktör doluluk oranı ve boş dönüş payına göre

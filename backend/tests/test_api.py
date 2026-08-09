@@ -506,3 +506,57 @@ def test_a_derived_reefer_figure_carries_its_warning_into_every_scenario(client)
 
     assert total["reefer"] is not None
     assert any("derived, not published" in w for w in total["reefer"]["warnings"])
+
+
+def _stub_catchment(monkeypatch, cells=None, notes=None):
+    from app.api import routes as routes_module
+    from app.core.catchment import Catchment, CatchmentCell
+
+    cells = cells if cells is not None else [
+        CatchmentCell(lon=29.0, lat=40.0, terminal_id="pendik", duration_h=1.2),
+        CatchmentCell(lon=30.0, lat=40.0, terminal_id="yalova", duration_h=2.5),
+    ]
+    monkeypatch.setattr(
+        routes_module, "build_catchment",
+        lambda **kwargs: Catchment(
+            cells=cells, spacing_deg=kwargs.get("spacing_deg", 1.0),
+            bounds=(26.0, 36.0, 45.0, 42.0),
+            max_duration_h=kwargs.get("max_duration_h", 8.0),
+            sampled=10, unreachable=8, notes=notes or ["ornekleme notu"],
+        ),
+    )
+
+
+def test_the_catchment_says_how_coarsely_it_was_sampled(client, monkeypatch):
+    """The spacing is part of the answer: a client that drew a smooth boundary over
+    these cells would claim a precision that was never measured."""
+    _stub_catchment(monkeypatch)
+
+    body = client.get("/api/catchment", params={"spacing_deg": 1.0}).json()
+
+    assert body["spacing_deg"] == 1.0
+    assert body["sampled"] == 10 and body["unreachable"] == 8
+    assert body["cells_by_terminal"] == {"pendik": 1, "yalova": 1}
+    assert body["notes"]
+
+
+def test_a_spacing_finer_than_the_engine_allows_is_refused(client):
+    assert client.get("/api/catchment", params={"spacing_deg": 0.01}).status_code == 422
+
+
+def test_a_nonsense_time_limit_is_refused(client):
+    assert client.get("/api/catchment", params={"max_duration_h": 0}).status_code == 422
+
+
+def test_an_unroutable_catchment_reports_rather_than_crashing(client, monkeypatch):
+    from app.api import routes as routes_module
+    from app.core.road import RoadRoutingError
+
+    def unroutable(**kwargs):
+        raise RoadRoutingError("table limit reached")
+
+    monkeypatch.setattr(routes_module, "build_catchment", unroutable)
+
+    response = client.get("/api/catchment")
+    assert response.status_code == 422
+    assert "table limit" in response.json()["detail"]

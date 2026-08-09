@@ -281,3 +281,28 @@ class PlaceOut(BaseModel):
     lon: float
     lat: float
     kind: str = ""
+
+
+class CatchmentCellOut(BaseModel):
+    lon: float
+    lat: float
+    terminal_id: str
+    duration_h: float
+
+
+class CatchmentOut(BaseModel):
+    """Which terminal serves where, by road time rather than by straight line.
+
+    `spacing_deg` is part of the answer, not a detail: the cells are samples, and the
+    boundary between two of them was never measured. A client that draws a smooth
+    polygon over this claims a precision that does not exist.
+    """
+
+    cells: list[CatchmentCellOut]
+    spacing_deg: float
+    bounds: tuple[float, float, float, float]
+    max_duration_h: float
+    sampled: int
+    unreachable: int
+    cells_by_terminal: dict[str, int]
+    notes: list[str] = []

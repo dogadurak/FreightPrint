@@ -21,6 +21,11 @@ MAX_SNAP_DISTANCE_KM = 100
 # exactly the hammering the per-caller setting was meant to prevent. Raise it against
 # a self-hosted OSRM, where the ceiling is your own hardware.
 MAX_CONCURRENT_REQUESTS = int(os.environ.get("OSRM_MAX_CONCURRENCY", "4"))
+
+# Coordinates a single /table request may carry, sources and destinations together.
+# osrm-routed defaults to 100 and the public demo server currently allows more; 100 is
+# used so a catchment computed against the demo server still runs against your own.
+MAX_TABLE_COORDINATES = int(os.environ.get("OSRM_MAX_TABLE_SIZE", "100"))
 _request_slots = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
 
 
@@ -78,10 +83,49 @@ def _query_osrm(origin: tuple[float, float], destination: tuple[float, float]) -
         return _parse_osrm(_fetch(url), origin, destination)
 
 
-def _fetch(url: str):
+def table_durations(
+    sources: list[tuple[float, float]], destinations: list[tuple[float, float]]
+) -> list[list[float | None]]:
+    """Driving durations in hours from every source to every destination.
+
+    One request instead of len(sources) x len(destinations) route calls, which is the
+    only reason a catchment map is affordable at all: a grid that would be forty
+    thousand route requests is a few hundred table ones.
+
+    `None` where OSRM finds no route — open sea, an island with no ferry in the profile.
+    Callers must keep that distinct from zero rather than treating it as "close".
+    """
+    if not sources or not destinations:
+        return []
+    if len(sources) + len(destinations) > MAX_TABLE_COORDINATES:
+        raise RoadRoutingError(
+            f"{len(sources)} sources and {len(destinations)} destinations exceed the "
+            f"{MAX_TABLE_COORDINATES}-coordinate table limit; batch the destinations"
+        )
+
+    coordinates = list(sources) + list(destinations)
+    path = ";".join(f"{lon},{lat}" for lon, lat in coordinates)
+    url = f"{OSRM_BASE_URL}/table/v1/driving/{path}"
+    params = {
+        "sources": ";".join(str(i) for i in range(len(sources))),
+        "destinations": ";".join(str(i) for i in range(len(sources), len(coordinates))),
+    }
+
+    with _request_slots:
+        payload = _fetch(url, params)
+
+    if payload.get("code") != "Ok":
+        raise RoadRoutingError(f"OSRM table failed: {payload.get('code')}")
+    return [
+        [None if value is None else value / 3600.0 for value in row]
+        for row in payload["durations"]
+    ]
+
+
+def _fetch(url: str, params: dict | None = None):
     response = requests.get(
         url,
-        params={"overview": "simplified", "geometries": "geojson", "steps": "true"},
+        params=params or {"overview": "simplified", "geometries": "geojson", "steps": "true"},
         timeout=REQUEST_TIMEOUT_S,
     )
     response.raise_for_status()

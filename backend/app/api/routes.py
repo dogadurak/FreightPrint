@@ -11,6 +11,13 @@ from ..core.emissions import (
     lowest_emission_first,
     tree_equivalent,
 )
+from ..core.catchment import (
+    DEFAULT_BOUNDS,
+    DEFAULT_MAX_DURATION_H,
+    DEFAULT_SPACING_DEG,
+    MIN_SPACING_DEG,
+    build_catchment,
+)
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
 from ..core.geocode import GeocodingError, search
 from ..core.jobs import DEFAULT_CONCURRENCY, registry
@@ -31,6 +38,8 @@ from ..core.sea import BLOCKABLE_PASSAGES, DEFAULT_RESTRICTIONS, SeaRoutingError
 from ..core.uncertainty import load_band, round_to_significant, simulate_emission_range
 from .schemas import (
     AlternativeOut,
+    CatchmentOut,
+    CatchmentCellOut,
     CompareRequest,
     CompareResponse,
     EtsCostOut,
@@ -754,3 +763,59 @@ def find_places(q: str, country: str | None = None, limit: int = 5) -> list[Plac
         PlaceOut(name=c.name, lon=round(c.lon, 5), lat=round(c.lat, 5), kind=c.kind)
         for c in candidates
     ]
+
+
+@router.get("/catchment", response_model=CatchmentOut)
+def terminal_catchment(
+    spacing_deg: float = DEFAULT_SPACING_DEG,
+    max_duration_h: float = DEFAULT_MAX_DURATION_H,
+    connected_only: bool = True,
+    west: float = DEFAULT_BOUNDS[0],
+    south: float = DEFAULT_BOUNDS[1],
+    east: float = DEFAULT_BOUNDS[2],
+    north: float = DEFAULT_BOUNDS[3],
+) -> CatchmentOut:
+    """Which terminal serves where, by driving time.
+
+    Expensive the first time and cached after: a coarse grid is a few hundred OSRM
+    table calls. The defaults are deliberately coarse — this is a planning view, and a
+    finer grid costs linearly more for a boundary that was never surveyed anyway.
+    """
+    if spacing_deg < MIN_SPACING_DEG:
+        raise HTTPException(
+            status_code=422,
+            detail=f"spacing_deg must be at least {MIN_SPACING_DEG}, got {spacing_deg}",
+        )
+    if max_duration_h <= 0:
+        raise HTTPException(status_code=422, detail="max_duration_h must be positive")
+
+    try:
+        catchment = build_catchment(
+            bounds=(west, south, east, north),
+            spacing_deg=spacing_deg,
+            max_duration_h=max_duration_h,
+            connected_only=connected_only,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except RoadRoutingError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except requests.RequestException as error:
+        raise HTTPException(status_code=503, detail=f"road routing unavailable: {error}") from error
+
+    return CatchmentOut(
+        cells=[
+            CatchmentCellOut(
+                lon=cell.lon, lat=cell.lat,
+                terminal_id=cell.terminal_id, duration_h=cell.duration_h,
+            )
+            for cell in catchment.cells
+        ],
+        spacing_deg=catchment.spacing_deg,
+        bounds=catchment.bounds,
+        max_duration_h=catchment.max_duration_h,
+        sampled=catchment.sampled,
+        unreachable=catchment.unreachable,
+        cells_by_terminal=catchment.cells_by_terminal(),
+        notes=catchment.notes,
+    )

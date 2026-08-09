@@ -19,6 +19,17 @@
   --sea: #2a78d6;
   --rail: #1baf7a;
 
+  /* Terminal catchment. Assigned in fixed order and never cycled: a seventh terminal
+     folds into "diger" rather than reusing slot one, because a repeated colour reads
+     as the same terminal. Validated in both modes against the surface. */
+  --cat-1: #2a78d6;
+  --cat-2: #eb6834;
+  --cat-3: #1baf7a;
+  --cat-4: #a259d9;
+  --cat-5: #d4a017;
+  --cat-6: #e0559b;
+  --cat-other: #7c8797;
+
   --time-transit: #4a3aa7;
   --time-dwell: #e87ba4;
   --time-wait: #eda100;
@@ -56,6 +67,13 @@
     --road: #d95926;
     --sea: #3987e5;
     --rail: #199e70;
+    --cat-1: #3987e5;
+    --cat-2: #d95926;
+    --cat-3: #199e70;
+    --cat-4: #9d58d0;
+    --cat-5: #b8890c;
+    --cat-6: #d9498d;
+    --cat-other: #8b93a0;
     --time-transit: #9085e9;
     --time-dwell: #d55181;
     --time-wait: #c98500;
@@ -84,6 +102,13 @@
   --road: #d95926;
   --sea: #3987e5;
   --rail: #199e70;
+  --cat-1: #3987e5;
+  --cat-2: #d95926;
+  --cat-3: #199e70;
+  --cat-4: #9d58d0;
+  --cat-5: #b8890c;
+  --cat-6: #d9498d;
+  --cat-other: #8b93a0;
   --time-transit: #9085e9;
   --time-dwell: #d55181;
   --time-wait: #c98500;
@@ -286,6 +311,14 @@ button.ghost:hover { background: var(--surface-sunken); }
 .check-field input { width: auto; margin: 0; }
 .check-field span { font-weight: 500; }
 .check-field small { display: block; font-weight: 400; }
+
+/* Sits under the map rather than floating over it: the catchment is a whole-map
+   context layer, and a control on top of it would cover the thing it describes. */
+.map-toggle { width: auto; margin-top: 0.7rem; padding: 0.4rem 0.8rem; font-size: 0.84rem; }
+.map-toggle[aria-pressed="true"] {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+#catchment-legend { margin-top: 0.6rem; }
 
 .key { display: inline-flex; align-items: center; gap: 0.35rem; }
 .swatch { width: 0.8rem; height: 0.55rem; border-radius: 2px; }

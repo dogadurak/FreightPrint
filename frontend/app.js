@@ -9,6 +9,20 @@ const modeColour = (mode) =>
 const MODE_LABELS = { road: "karayolu", sea: "deniz", rail: "demiryolu" };
 const MODE_ORDER = ["road", "sea", "rail"];
 
+/** Read any palette token from the stylesheet, so the map follows the active theme. */
+const token = (name, fallback = "#6e7783") =>
+  getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim() || fallback;
+
+// Six categorical slots, assigned in fixed order and never cycled: a seventh terminal
+// becomes "diger" rather than reusing slot one, because a repeated colour reads as the
+// same terminal. Validated in both themes with the dataviz checks.
+const CATCHMENT_SLOTS = 6;
+let catchmentData = null;
+let catchmentVisible = false;
+// id -> display name, so the catchment legend and tooltip can name a terminal the
+// endpoint reports only by id.
+const terminalNames = new Map();
+
 const SET_LABELS = {
   reference: "Müşteri raporu",
   glec: "GLEC · refakatsiz",
@@ -204,8 +218,139 @@ function highlightCrossedZones(zoneIds) {
   });
 }
 
+/** Which terminal serves where, by driving time rather than by a circle on a map.
+ *
+ *  Drawn as squares at the spacing that was actually measured, deliberately not as
+ *  smoothed polygons: the boundary between two samples was never computed, and a clean
+ *  outline would claim a precision nobody paid for. Opacity carries the drive time, so
+ *  the edge of a catchment fades rather than ending in a line.
+ */
+async function toggleCatchment() {
+  const button = $("catchment-toggle");
+  catchmentVisible = !catchmentVisible;
+  button.setAttribute("aria-pressed", String(catchmentVisible));
+
+  if (!catchmentVisible) {
+    if (map.getLayer("catchment")) map.setLayoutProperty("catchment", "visibility", "none");
+    $("catchment-legend").hidden = true;
+    return;
+  }
+
+  if (!catchmentData) {
+    button.disabled = true;
+    // Measured at ~26s cold against the public OSRM demo server and instant afterwards,
+    // so the wait is stated rather than left to look like a hang.
+    button.textContent = "Hesaplanıyor — ilk sefer ~30 sn…";
+    try {
+      const response = await fetch("/api/catchment?spacing_deg=1&max_duration_h=10");
+      if (!response.ok) throw new Error((await response.json()).detail || response.statusText);
+      catchmentData = await response.json();
+    } catch (error) {
+      button.textContent = "Terminal etki alanı";
+      button.disabled = false;
+      catchmentVisible = false;
+      button.setAttribute("aria-pressed", "false");
+      $("catchment-legend").hidden = false;
+      $("catchment-legend").innerHTML =
+        `<p class="hint">Etki alanı hesaplanamadı: ${error.message}</p>`;
+      return;
+    }
+    button.textContent = "Terminal etki alanı";
+    button.disabled = false;
+    drawCatchment();
+  }
+
+  if (map.getLayer("catchment")) map.setLayoutProperty("catchment", "visibility", "visible");
+  $("catchment-legend").hidden = false;
+}
+
+function drawCatchment() {
+  const half = catchmentData.spacing_deg / 2;
+  // Rank terminals by how much they serve, so the busiest get the first slots and the
+  // colour a reader sees most is the one they learn first.
+  const ranked = Object.entries(catchmentData.cells_by_terminal)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id]) => id);
+  const slotOf = new Map(ranked.slice(0, CATCHMENT_SLOTS).map((id, i) => [id, i + 1]));
+  const colourFor = (id) =>
+    slotOf.has(id) ? token(`cat-${slotOf.get(id)}`) : token("cat-other");
+
+  const features = catchmentData.cells.map((cell) => ({
+    type: "Feature",
+    geometry: {
+      type: "Polygon",
+      coordinates: [[
+        [cell.lon - half, cell.lat - half], [cell.lon + half, cell.lat - half],
+        [cell.lon + half, cell.lat + half], [cell.lon - half, cell.lat + half],
+        [cell.lon - half, cell.lat - half],
+      ]],
+    },
+    properties: {
+      terminal: cell.terminal_id,
+      hours: cell.duration_h,
+      colour: colourFor(cell.terminal_id),
+    },
+  }));
+
+  map.addSource("catchment", {
+    type: "geojson", data: { type: "FeatureCollection", features },
+  });
+  // Under the risk zones and routes: this is context, not the answer.
+  map.addLayer({
+    id: "catchment", type: "fill", source: "catchment",
+    paint: {
+      "fill-color": ["get", "colour"],
+      // Near the terminal it is solid; at the time limit it has almost faded out.
+      "fill-opacity": [
+        "interpolate", ["linear"], ["get", "hours"],
+        0, 0.55,
+        catchmentData.max_duration_h, 0.12,
+      ],
+    },
+  }, "risk-zone-fill");
+
+  const hover = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 6 });
+  map.on("mousemove", "catchment", (event) => {
+    const { terminal, hours } = event.features[0].properties;
+    const name = terminalNames.get(terminal) || terminal;
+    hover.setLngLat(event.lngLat)
+      .setHTML(`<strong>${name}</strong>${nf1.format(hours)} saat sürüş`)
+      .addTo(map);
+  });
+  map.on("mouseleave", "catchment", () => hover.remove());
+
+  const named = ranked.slice(0, CATCHMENT_SLOTS);
+  const folded = ranked.slice(CATCHMENT_SLOTS);
+  const rows = named.map((id) => {
+    const name = terminalNames.get(id) || id;
+    return `<span class="key"><span class="swatch"
+      style="background:var(--cat-${slotOf.get(id)})"></span>${name} <span
+      class="card-note">${catchmentData.cells_by_terminal[id]}</span></span>`;
+  });
+  if (folded.length) {
+    const cells = folded.reduce((sum, id) => sum + catchmentData.cells_by_terminal[id], 0);
+    rows.push(`<span class="key"><span class="swatch"
+      style="background:var(--cat-other)"></span>diğer ${folded.length} terminal <span
+      class="card-note">${cells}</span></span>`);
+  }
+
+  // Say why the rest share one colour rather than leaving grey looking like a gap:
+  // reusing a hue would read as one catchment split across the map.
+  const foldNote = folded.length
+    ? `<p class="hint">En çok hizmet veren ${CATCHMENT_SLOTS} terminal ayrı renkte; kalan ${
+        folded.length} tanesi tek renkte toplandı — rengi tekrar kullanmak iki ayrı
+        terminali aynı etki alanı gibi gösterirdi. Hangi terminal olduğunu görmek için
+        hücrenin üzerine gelin: ${folded.map((id) => terminalNames.get(id) || id).join(", ")}.</p>`
+    : "";
+
+  $("catchment-legend").innerHTML = `<div class="legend-row">${rows.join("")}</div>
+    ${foldNote}
+    ${catchmentData.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
+}
+
 async function loadTerminals() {
   const terminals = await fetch("/api/terminals").then((r) => r.json());
+  terminals.forEach((t) => terminalNames.set(t.id, t.name));
   map.addSource("terminals", {
     type: "geojson",
     data: {
@@ -883,6 +1028,10 @@ placeQuery.addEventListener("blur", () => setTimeout(() => { placeResults.hidden
 
 $("pick-origin").addEventListener("click", () => setPicking("origin"));
 $("pick-destination").addEventListener("click", () => setPicking("destination"));
+$("catchment-toggle").addEventListener("click", () => {
+  // The map may have failed to load; the rest of the dashboard still works.
+  if (map) toggleCatchment();
+});
 [originInput, destinationInput].forEach((input) =>
   input.addEventListener("change", placeEndpointMarkers));
 
