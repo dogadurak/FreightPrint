@@ -75,7 +75,7 @@ muhasebe esasına ne kadar bağlı olduğu.
 | `GET /api/terminals` | Terminal listesi; servise bağlı olmayanlar işaretli |
 | `GET /api/factor-sets` | Seçilebilir faktör setleri ve her birinin deniz esası |
 | `POST /api/routes` | Sevkiyat → alternatifler, emisyon, tasarruf, belirsizlik |
-| `POST /api/report` | Toplu CSV → indirilebilir rapor |
+| `POST /api/report` | Toplu dosya → rapor (`output_format`: `csv`/`xlsx`/`pdf`) |
 | `GET /api/places` | Yer adı → aday konumlar (tek cevap değil, liste) |
 | `GET /api/risk-zones` | İlan edilmiş savaş riski bölgeleri (GeoJSON) |
 | `POST /api/report/jobs` | Toplu CSV → arka plan işi (202 + iş kimliği) |
@@ -102,6 +102,19 @@ indirir. Satırlar birbirinden bağımsız olduğu için dörder dörder işleni
 > kullanıcının birkaç dakika izlediği bir şey için veritabanı gereksiz. Ama işler yeniden
 > başlatmayı atlatmaz ve ikinci bir işçi süreci onları göremez — çok işçili dağıtım için
 > önce paylaşılan bir depo gerekir.
+
+**Çıktı biçimi.** Rapor üç biçimde indirilebilir ve üçü de aynı rakamları, aynı esas
+beyanıyla taşır:
+
+| Biçim | Ne için |
+|---|---|
+| **Excel** (`.xlsx`) | Lojistik biriminin düzenleyip dosyaladığı hâl. Veriler bir sayfada, **esas ve kaynaklar ayrı bir sayfada** — üstbilgi satırının üstüne yazılan bir not, veri sıralanıp kopyalandığında kaybolan ilk şeydir. |
+| **PDF** | Müşterinin kendi raporlamasına eklediği hâl. Yatay A4, hesap esası bloğu, uyarılar ve yöntem notu. |
+| **CSV** | Veri aktarımı. |
+
+PDF'te **Bitstream Vera** fontu gömülür (reportlab ile birlikte gelir). Sebebi: reportlab'in
+yerleşik fontları Latin-1'dir ve Latin-1'de **ı, ş, ğ, İ yoktur** — Türkçe bir rapor onlarla
+bozuk çıkar. Gömülü font sayesinde konteynerde sistem fontu gerekmez.
 
 Her sevkiyat için **en düşük emisyonlu** seçenek raporlanır — bu tam karayolu da olabilir.
 Rotalanamayan bir sevkiyat kendi satırında hatasıyla görünür, diğerlerini düşürmez.

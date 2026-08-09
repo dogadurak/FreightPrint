@@ -560,3 +560,76 @@ def test_an_unroutable_catchment_reports_rather_than_crashing(client, monkeypatc
     response = client.get("/api/catchment")
     assert response.status_code == 422
     assert "table limit" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "output_format,magic,media",
+    [
+        ("csv", b"# FreightPrint", "text/csv"),
+        ("xlsx", b"PK", "spreadsheetml"),
+        ("pdf", b"%PDF-", "application/pdf"),
+    ],
+)
+def test_the_report_is_served_in_the_format_that_was_asked_for(
+    client, output_format, magic, media
+):
+    """A spreadsheet handed back labelled as text opens as gibberish, so the media type
+    has to follow the format and not the other way round."""
+    response = _upload(client, output_format=output_format)
+
+    assert response.status_code == 200
+    assert response.content.startswith(magic)
+    assert media in response.headers["content-type"]
+    assert f".{output_format}" in response.headers["content-disposition"]
+
+
+def test_an_unknown_report_format_is_refused_rather_than_defaulted(client):
+    response = _upload(client, output_format="docx")
+
+    assert response.status_code == 422
+    assert "csv" in response.json()["detail"]
+
+
+def test_every_format_states_the_same_basis(client):
+    """The point of the deliverable formats is that the basis travels with them."""
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+    from pypdf import PdfReader
+
+    csv = _upload(client, factor_set="glec", scope="WTW", output_format="csv").text
+    xlsx = _upload(client, factor_set="glec", scope="WTW", output_format="xlsx").content
+    pdf = _upload(client, factor_set="glec", scope="WTW", output_format="pdf").content
+
+    assert "glec" in csv and "GLEC Framework" in csv
+
+    workbook = load_workbook(BytesIO(xlsx))
+    basis = " ".join(
+        str(c.value) for row in workbook["Esas ve kaynaklar"].iter_rows() for c in row if c.value
+    )
+    assert "glec" in basis and "GLEC Framework" in basis
+
+    text = " ".join((page.extract_text() or "") for page in PdfReader(BytesIO(pdf)).pages)
+    assert "glec" in text and "GLEC Framework" in text
+
+
+def test_a_background_job_returns_the_format_it_was_started_with(client):
+    started = client.post(
+        "/api/report/jobs",
+        files={"file": ("shipments.csv", SHIPMENT_CSV, "text/csv")},
+        data={"scope": "TTW", "factor_set": "reference", "output_format": "xlsx"},
+    )
+    assert started.status_code == 202
+    job = started.json()
+    assert job["filename"].endswith(".xlsx")
+
+    for _ in range(100):
+        status = client.get(f"/api/report/jobs/{job['id']}").json()
+        if status["status"] in {"done", "failed"}:
+            break
+        time.sleep(0.1)
+
+    assert status["status"] == "done", status.get("error")
+    downloaded = client.get(f"/api/report/jobs/{job['id']}/file")
+    assert downloaded.content.startswith(b"PK")
+    assert "spreadsheetml" in downloaded.headers["content-type"]

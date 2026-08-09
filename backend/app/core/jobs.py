@@ -33,7 +33,8 @@ class Job:
     status: str = "queued"  # queued | running | done | failed
     done: int = 0
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    result: str | None = None
+    # Bytes, not text: a report can come back as a spreadsheet or a PDF.
+    result: bytes | None = None
     error: str | None = None
     filename: str = "freightprint-rapor.csv"
 

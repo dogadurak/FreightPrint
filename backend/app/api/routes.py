@@ -1,6 +1,6 @@
 import requests
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 
 from ..core.emissions import (
     FactorNotFoundError,
@@ -19,6 +19,7 @@ from ..core.catchment import (
     build_catchment,
 )
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
+from ..core.deliverable import report_to_pdf, report_to_xlsx
 from ..core.geocode import GeocodingError, search
 from ..core.jobs import DEFAULT_CONCURRENCY, registry
 from ..core.network import build_network, load_terminals
@@ -63,6 +64,19 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api")
+
+# The forms a report can be handed back in. CSV stays the default because it is the one
+# anything can read; the other two exist because a carbon report is a document a customer
+# files, and neither a spreadsheet nor a PDF is optional in that setting.
+REPORT_FORMATS = {
+    "csv": (report_to_csv, "text/csv; charset=utf-8", "csv"),
+    "xlsx": (
+        report_to_xlsx,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "xlsx",
+    ),
+    "pdf": (report_to_pdf, "application/pdf", "pdf"),
+}
 
 FACTOR_SET_DESCRIPTIONS = {
     "reference": "The validation dataset's own basis, for comparison only",
@@ -494,10 +508,20 @@ def bulk_report(
     road_fuel_type: str | None = Form(None),
     load_factor: float | None = Form(None),
     empty_return_share: float | None = Form(None),
-) -> PlainTextResponse:
-    """Price a file of shipments and hand back the report as a downloadable CSV."""
+    output_format: str = Form("csv"),
+) -> Response:
+    """Price a file of shipments and hand back the report as a downloadable file.
+
+    CSV is the interchange format; xlsx and pdf are what a customer files and attaches.
+    All three carry the same figures and the same statement of the basis behind them.
+    """
     if scope not in {"TTW", "WTW"}:
         raise HTTPException(status_code=422, detail=f"scope must be TTW or WTW, got {scope!r}")
+    if output_format not in REPORT_FORMATS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"format must be one of {', '.join(REPORT_FORMATS)}, got {output_format!r}",
+        )
 
     try:
         shipments = parse_shipments(_read_upload(file))
@@ -521,10 +545,15 @@ def bulk_report(
         detail = report.rows[0].status if report.rows else "no shipment could be calculated"
         raise HTTPException(status_code=422, detail=detail)
 
-    return PlainTextResponse(
-        content=report_to_csv(report),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": 'attachment; filename="freightprint-report.csv"'},
+    render, media_type, extension = REPORT_FORMATS[output_format]
+    body = render(report)
+    return Response(
+        content=body.encode("utf-8") if isinstance(body, str) else body,
+        media_type=media_type,
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="freightprint-report.{extension}"',
+        },
     )
 
 
@@ -684,6 +713,7 @@ def start_report_job(
     road_fuel_type: str | None = Form(None),
     load_factor: float | None = Form(None),
     empty_return_share: float | None = Form(None),
+    output_format: str = Form("csv"),
 ) -> JobOut:
     """Start a report in the background and hand back a handle to poll.
 
@@ -693,12 +723,19 @@ def start_report_job(
     """
     if scope not in {"TTW", "WTW"}:
         raise HTTPException(status_code=422, detail=f"scope must be TTW or WTW, got {scope!r}")
+    if output_format not in REPORT_FORMATS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"format must be one of {', '.join(REPORT_FORMATS)}, got {output_format!r}",
+        )
     try:
         shipments = parse_shipments(_read_upload(file))
     except ReportInputError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
-    def work(job) -> str:
+    render, _, extension = REPORT_FORMATS[output_format]
+
+    def work(job) -> bytes:
         report = build_report(
             shipments,
             scope=scope,
@@ -711,9 +748,14 @@ def start_report_job(
         )
         if not report.calculated:
             raise RuntimeError(report.rows[0].status if report.rows else "nothing calculated")
-        return report_to_csv(report)
+        body = render(report)
+        return body.encode("utf-8") if isinstance(body, str) else body
 
-    return _job_out(registry().submit(len(shipments), work, "freightprint-rapor.csv"))
+    # The extension travels on the job, so the download route can name the file and
+    # its media type without being told again what was asked for.
+    return _job_out(
+        registry().submit(len(shipments), work, f"freightprint-rapor.{extension}")
+    )
 
 
 @router.get("/report/jobs/{job_id}", response_model=JobOut)
@@ -724,8 +766,8 @@ def report_job_status(job_id: str) -> JobOut:
     return _job_out(job)
 
 
-@router.get("/report/jobs/{job_id}/file", response_class=PlainTextResponse)
-def report_job_file(job_id: str) -> PlainTextResponse:
+@router.get("/report/jobs/{job_id}/file")
+def report_job_file(job_id: str) -> Response:
     job = registry().get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"unknown job {job_id}")
@@ -733,9 +775,13 @@ def report_job_file(job_id: str) -> PlainTextResponse:
         raise HTTPException(status_code=422, detail=job.error or "job failed")
     if job.status != "done":
         raise HTTPException(status_code=409, detail=f"job is {job.status}, not done")
-    return PlainTextResponse(
+    # The media type follows the extension the job was created with, so a spreadsheet
+    # is not handed back labelled as text and opened as gibberish.
+    extension = job.filename.rsplit(".", 1)[-1]
+    _, media_type, _ = REPORT_FORMATS.get(extension, REPORT_FORMATS["csv"])
+    return Response(
         content=job.result,
-        media_type="text/csv; charset=utf-8",
+        media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{job.filename}"'},
     )
 

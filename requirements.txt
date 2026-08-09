@@ -6,8 +6,11 @@ fastapi>=0.115
 uvicorn[standard]>=0.30
 python-multipart>=0.0.9
 openpyxl>=3.1
+reportlab>=4.0
 pytest>=8.0
 httpx>=0.27
+# Testler PDF ciktisini geri okuyup Turkce karakterleri dogruluyor.
+pypdf>=4.0
 
 # Faz 3 doğrulama defteri için
 matplotlib>=3.8

@@ -138,6 +138,13 @@
           <input type="file" name="file" required
                  accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         </label>
+        <label>Çıktı biçimi
+          <select name="output_format">
+            <option value="xlsx">Excel (.xlsx) — düzenlenebilir</option>
+            <option value="pdf">PDF — teslim edilebilir</option>
+            <option value="csv">CSV — veri aktarımı</option>
+          </select>
+        </label>
         <button type="submit" class="ghost" id="report-submit">Rapor indir</button>
         <p class="hint" id="report-status" role="status"></p>
         <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya</a></p>
