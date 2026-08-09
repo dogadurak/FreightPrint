@@ -288,6 +288,29 @@ türetilir ve "tahmin" işaretlenir.
 Gebze→Düsseldorf için sonuç: tam karayolu **3,1 gün**, çok modlu **5,5 gün** — ve farkın
 üçte biri hiç hareket edilmeyen süre (18 sa aktarma + 25 sa bekleme).
 
+## Korint Kanalı düzeltmesi
+
+searoute'un ağı, Marmara/Levant → Adriyatik rotalarını **Korint Kanalı'ndan** geçiriyordu.
+Hiçbir ro-ro ya da konteyner gemisi oradan geçemez: kanal tabanda 21 m genişliğinde.
+Kütüphanenin `restrictions` parametresi bunu engelleyemiyor, çünkü ağı yalnızca bildiği
+on üç geçidi etiketliyor ve Korint onlardan biri değil.
+
+Uzun süre bu yüzden yalnızca **işaretleniyordu**: mesafe referans tablodan alınıyor, iz
+"göstergesel" diye çiziliyordu. Ama harita yine de gemiyi karadan geçiriyor gösteriyordu.
+
+Çözüm: kanalı ağdan **çıkarmak**. Kıstağın üzerindeki tek düğüm — `(22.947, 37.961)` —
+Korint Körfezi ile Saronik Körfezi'ni birleştiren yegâne bağlantı; silindiğinde rota
+gerçek yoluna, Mora'nın güneyinden Malea Burnu'nu dolanarak İyon Denizi'ne çıkıyor.
+
+| | Pendik–Trieste |
+|---|---|
+| searoute, kanal açık | 2.002 km ❌ karadan geçiyor |
+| **searoute, kanal kapalı** | **2.193 km** ✅ Mora'yı dolanıyor |
+| Referans tablo | 2.500 km |
+
+Düzeltilmiş iz referansa da daha yakın. Kanal kutusunu kesen rota kalmadığını üç bacakta
+sınayan kalıcı bir test var; bir gün yine keserse ağın altımızdan değiştiği anlaşılır.
+
 ## Yolculuk oynatıcı
 
 Haritanın altındaki oynat düğmesi sevkiyatı rotası boyunca yürütür: saat ilerler, CO2
@@ -487,11 +510,10 @@ rotası ve mesafe geçer; sevkiyat satırları, müşteri adları ve tonajlar ge
 
 ## Bilinen sınırlar
 
-- **searoute Korint Kanalı'ndan geçiyor.** Kütüphane, gerçek ro-ro/konteyner gemilerinin
-  geçemeyeceği Korint Kanalı'nı kullanan kısayollar üretiyor ve bu `restrictions`
-  parametresiyle engellenemiyor. Bu yüzden servis bacaklarında referans mesafe esas
-  alınır; searoute değeri yalnızca karşılaştırma için hesaplanır ve kanaldan geçen
-  rotalar "kullanılamaz" olarak işaretlenir.
+- **Deniz mesafesi hâlâ referans tablodan alınır.** Korint sorunu çözüldükten sonra
+  searoute'un kendi mesafesi (Pendik–Trieste 2.193 km) referansa (2.500 km) yaklaştı ama
+  eşitlenmedi; hangisinin doğru olduğunu ayırt edecek üçüncü bir kaynak yok, bu yüzden
+  esas hâlâ referanstır ve searoute karşılaştırma için hesaplanır.
 - **Demiryolu mesafeleri yalnızca referans tablodan gelir.** TEN-T/OpenRailwayMap
   entegrasyonu henüz yok, bu yüzden demiryolu bacağı hesaplanmıyor.
 - **Karayolu için public OSRM demo sunucusu kullanılıyor.** Hız sınırlı; prodüksiyon

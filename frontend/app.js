@@ -1483,6 +1483,7 @@ function resetPlayer(alternative) {
   stopPlaying();
   playback = alternative?.playback ?? null;
   playHead = 0;
+  lastMovingMode = null;
   const panel = $("player");
   if (!panel) return;
   if (!playback || !playback.segments.length) { panel.hidden = true; return; }
@@ -1563,6 +1564,7 @@ function drawPlayHead() {
   const hours = Math.round(playHead % 24);
   const moving = segment.kind === "transit";
 
+  if (moving) lastMovingMode = segment.mode ?? lastMovingMode;
   const zone = zoneAt(point);
   $("player-readout").innerHTML = `
     <span class="play-clock">${days} gün ${hours} sa</span>
@@ -1583,11 +1585,51 @@ function drawPlayHead() {
     } else {
       playMarker.setLngLat(point);
     }
-    playMarker.getElement().classList.toggle("stopped", !moving);
+    const element = playMarker.getElement();
+    element.classList.toggle("stopped", !moving);
+    // The vehicle is the mode currently carrying the box. Parked, it keeps the mode it
+    // arrived on rather than becoming a generic dot: it is a trailer sitting on a quay,
+    // not nothing.
+    element.dataset.mode = moving ? (segment.mode ?? "road") : (lastMovingMode ?? "road");
+    element.innerHTML = VEHICLE[element.dataset.mode] ?? VEHICLE.road;
+    // Point the vehicle the way it is travelling. Heading west would otherwise turn it
+    // upside down, which reads as a bug rather than as a bearing, so it is mirrored
+    // instead and stays upright.
+    const bearing = bearingAt(segment, playHead);
+    element.style.setProperty("--bearing", `${bearing}deg`);
+    element.style.setProperty("--flip", Math.abs(bearing) > 90 ? -1 : 1);
   }
 }
 
 let playMarker = null;
+let lastMovingMode = null;
+
+/* Simple silhouettes rather than emoji: emoji render differently on every platform and
+   several of them carry a colour the palette does not control. */
+const VEHICLE = {
+  road: `<svg viewBox="0 0 32 20" aria-hidden="true">
+    <path d="M1 5h17v10H1z"/><path d="M18 8h6l4 4v3h-10z"/>
+    <circle cx="7" cy="16" r="2.6"/><circle cx="23" cy="16" r="2.6"/></svg>`,
+  sea: `<svg viewBox="0 0 32 20" aria-hidden="true">
+    <path d="M3 12h26l-3 5H6z"/><path d="M8 6h13v6H8z"/><path d="M13 2h3v4h-3z"/></svg>`,
+  rail: `<svg viewBox="0 0 32 20" aria-hidden="true">
+    <path d="M4 4h16v11H4z"/><path d="M20 7h5l3 4v4h-8z"/>
+    <circle cx="9" cy="17" r="2"/><circle cx="16" cy="17" r="2"/><circle cx="24" cy="17" r="2"/></svg>`,
+};
+
+/** Heading along the current segment, in degrees clockwise from east. */
+function bearingAt(segment, hours) {
+  const track = segment.geometry;
+  if (!track || track.length < 2) return 0;
+  const done = segment.hours > 0 ? (hours - segment.start_h) / segment.hours : 1;
+  const index = Math.min(
+    track.length - 2,
+    Math.max(0, Math.floor(done * (track.length - 1))),
+  );
+  const [x1, y1] = track[index];
+  const [x2, y2] = track[index + 1];
+  return (Math.atan2(y1 - y2, x2 - x1) * 180) / Math.PI;
+}
 
 /** Which listed area the shipment is inside, if any. Point-in-rectangle is enough:
  *  the zones are digitised as boxes and the README says so. */
