@@ -1,7 +1,28 @@
 import pytest
+import requests
 
 from app.core import road, sea
 from app.core.cache import DiskCache
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch, request):
+    """Fail any test that reaches the network instead of letting it reach OSRM.
+
+    A test that quietly makes a real request passes on a developer's machine and then
+    fails in CI, or worse, passes there too and hides that its mock stopped being used.
+    Mark a test `@pytest.mark.network` to opt out; nothing does today.
+    """
+    if request.node.get_closest_marker("network"):
+        return
+
+    def refuse(self, method, url, *args, **kwargs):
+        raise AssertionError(
+            f"test tried to reach the network: {method} {url}. "
+            "Mock the client, or mark the test with @pytest.mark.network."
+        )
+
+    monkeypatch.setattr(requests.sessions.Session, "request", refuse)
 
 
 @pytest.fixture(autouse=True)

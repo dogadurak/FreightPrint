@@ -57,3 +57,34 @@ def test_clear_empties_the_cache(cache):
     cache.clear()
 
     assert cache.get("k") is None
+
+
+def test_the_cache_can_be_moved_off_the_reference_data():
+    """A deployment keeps its route cache on a volume. If that volume sat on the same
+    directory as the factor tables, it would pin them too, and a corrected emission
+    factor would never reach a redeployed container. The two must be separable.
+    """
+    import importlib
+    import os
+
+    from app.core import network
+
+    original = os.environ.get("FREIGHTPRINT_CACHE_DIR")
+    os.environ["FREIGHTPRINT_CACHE_DIR"] = "/somewhere/else"
+    try:
+        reloaded = importlib.reload(network)
+        assert str(reloaded.CACHE_DIR) != str(reloaded.DATA_DIR)
+        assert reloaded.DATA_DIR.name == "data", "reference data must not follow the cache"
+    finally:
+        if original is None:
+            del os.environ["FREIGHTPRINT_CACHE_DIR"]
+        else:
+            os.environ["FREIGHTPRINT_CACHE_DIR"] = original
+        importlib.reload(network)
+
+
+def test_the_cache_sits_with_the_data_when_nothing_says_otherwise():
+    """Local development should not need configuration to work."""
+    from app.core import network
+
+    assert network.CACHE_DIR == network.DATA_DIR

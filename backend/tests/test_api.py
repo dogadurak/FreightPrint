@@ -431,9 +431,26 @@ def test_an_unknown_job_is_a_404(client):
     assert client.get("/api/report/jobs/deadbeef/file").status_code == 404
 
 
-def test_a_place_search_returns_candidates_not_one_answer(client):
+def test_a_place_search_returns_candidates_not_one_answer(client, monkeypatch):
     """Resolving a name behind the user's back is how a shipment lands in the wrong
-    province; the endpoint hands back the choice instead."""
+    province; the endpoint hands back the choice instead.
+
+    Nominatim is stubbed: this asserts our contract, not theirs, and a live call here
+    made the suite depend on a rate-limited third party that CI cannot rely on.
+    """
+    from app.api import routes as routes_module
+    from app.core.geocode import Candidate
+
+    monkeypatch.setattr(
+        routes_module,
+        "search",
+        lambda query, country=None, limit=5: [
+            Candidate(name=f"Santa Maria {n}", lon=lon, lat=lat, kind="city", importance=i)
+            for n, (lon, lat, i) in enumerate(
+                [(-121.0, 34.9, 0.6), (-8.6, 41.2, 0.5), (13.4, 45.3, 0.4)]
+            )
+        ][:limit],
+    )
     response = client.get("/api/places", params={"q": "Santa Maria", "limit": 5})
 
     assert response.status_code == 200

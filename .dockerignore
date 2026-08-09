@@ -1,0 +1,17 @@
+# Customer data must never enter an image layer, whatever .gitignore says: an image is
+# shipped further than a repository and its layers keep whatever they were built with.
+dogrulama_veriseti.csv
+*.xlsx
+notebooks/
+
+# Caches are per-deployment state, not build inputs; baking one in ships stale routes.
+data/route_cache.sqlite
+data/geocode_cache.json
+osrm-data/
+
+.git/
+.github/
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/

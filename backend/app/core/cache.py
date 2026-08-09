@@ -5,9 +5,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from .network import DATA_DIR
+from .network import CACHE_DIR
 
-DEFAULT_CACHE_PATH = DATA_DIR / "route_cache.sqlite"
+DEFAULT_CACHE_PATH = CACHE_DIR / "route_cache.sqlite"
 
 _local = threading.local()
 

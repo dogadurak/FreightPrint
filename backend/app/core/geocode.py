@@ -5,7 +5,7 @@ from pathlib import Path
 
 import requests
 
-from .network import DATA_DIR
+from .network import CACHE_DIR
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 # Nominatim's usage policy: identify the caller and stay under one request per second.
@@ -13,7 +13,7 @@ USER_AGENT = "FreightPrint/0.1 (multimodal freight carbon research)"
 MIN_REQUEST_INTERVAL_S = 1.1
 REQUEST_TIMEOUT_S = 30
 
-CACHE_PATH = DATA_DIR / "geocode_cache.json"
+CACHE_PATH = CACHE_DIR / "geocode_cache.json"
 
 # The validation dataset mixes ISO codes, English names and Turkish spellings.
 COUNTRY_ALIASES = {

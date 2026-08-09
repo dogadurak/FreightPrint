@@ -67,3 +67,27 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # The engine itself. Started on its own it uses the public OSRM demo server, which is
+  # fine for a look around; with the `osrm` service up it is pointed at that instead.
+  #
+  #   docker compose up -d app                 # public OSRM, no preprocessing needed
+  #   docker compose --profile self-hosted up -d   # with the local OSRM above
+  app:
+    build: .
+    ports:
+      - "8100:8000"
+    environment:
+      # Overridden to the local service under the self-hosted profile below.
+      OSRM_BASE_URL: ${OSRM_BASE_URL:-https://router.project-osrm.org}
+      OSRM_MAX_CONCURRENCY: ${OSRM_MAX_CONCURRENCY:-4}
+    volumes:
+      # Route and geocode caches survive a restart; without this every container start
+      # pays the cold-route cost again, and one route request is seven OSRM calls.
+      # Mounted at /app/var, not /app/data: reference data must come from the image, so
+      # that a corrected emission factor actually reaches a redeployed container.
+      - freight-cache:/app/var
+    restart: unless-stopped
+
+volumes:
+  freight-cache:

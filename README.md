@@ -141,6 +141,34 @@ cd backend
 python -m pytest tests/ -q
 ```
 
+Takım **ağa çıkmaz**: `conftest.py` her testin ağ erişimini kapatır ve dışarı çıkmaya
+çalışan test başarısız olur (`@pytest.mark.network` ile muaf tutulabilir; şu an hiçbiri
+değil). Bu bilinçli — canlı bir servise bağlı test, geliştiricinin makinesinde geçip
+CI'da rastgele kırılır, ya da daha kötüsü orada da geçip taklidinin devre dışı kaldığını
+gizler. Nitekim bu koruma eklenirken Nominatim'e gerçekten istek atan bir test bulundu.
+
+## Konteyner ve CI
+
+```bash
+docker compose up -d app          # public OSRM ile, ön işleme gerekmez -> :8100
+docker compose --profile self-hosted up -d   # yukarıdaki yerel OSRM ile
+```
+
+Önbellek `/app/var` altında, **`/app/data` altında değil**. Sebebi önemli: `data/`
+referans veriyi taşır (faktörler, terminaller, risk bölgeleri) ve kodla birlikte
+değişir. Önbelleği orada tutmak için oraya volume bağlarsanız referans veri de sabitlenir
+ve düzeltilmiş bir emisyon faktörü yeniden dağıtılan konteynere hiç ulaşmaz.
+`FREIGHTPRINT_CACHE_DIR` ile taşınabilir; verilmezse yerel geliştirme için `data/` olur.
+
+`.github/workflows/ci.yml` üç iş koşar: hassas dosya kontrolü, testler, ve imajın
+kurulup `/health` cevaplaması. Sır veya dış servis gerekmez.
+
+Gizlilik kancasını kurun — elle hatırlamak kontrol sayılmaz:
+
+```bash
+python scripts/install_hooks.py
+```
+
 ## Mimari (Faz 1 kapsamı)
 
 | Dosya | Sorumluluk |

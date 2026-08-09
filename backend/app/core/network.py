@@ -1,4 +1,5 @@
 import csv
+import os
 from functools import lru_cache
 import json
 from dataclasses import dataclass
@@ -8,6 +9,14 @@ from pathlib import Path
 import networkx as nx
 
 DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+
+# Where the route and geocode caches are written. Kept separate from DATA_DIR because
+# that directory holds reference data — factors, terminals, risk zones — that ships with
+# the code and must be replaced when the code is. A deployment that mounted a volume
+# over DATA_DIR to keep its cache would pin the reference data too, and a corrected
+# emission factor would never reach it. Defaults alongside the data for local work.
+CACHE_DIR = Path(os.environ.get("FREIGHTPRINT_CACHE_DIR", DATA_DIR))
+
 EARTH_RADIUS_KM = 6371.0088
 
 
