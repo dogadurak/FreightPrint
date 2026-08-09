@@ -23,8 +23,11 @@ let catchmentVisible = false;
 // endpoint reports only by id.
 const terminalNames = new Map();
 
+// `reference` is the dataset's own basis, kept as a comparison point. Named for what it
+// is rather than whose it is: the brief scopes this tool as a calculation engine, not an
+// audit of anyone's report.
 const SET_LABELS = {
-  reference: "Müşteri raporu",
+  reference: "Karşılaştırma esası",
   glec: "GLEC · refakatsiz",
   glec_accompanied: "GLEC · refakatli",
   glec_freight_average: "GLEC · filo ort.",

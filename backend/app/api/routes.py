@@ -65,7 +65,7 @@ from .schemas import (
 router = APIRouter(prefix="/api")
 
 FACTOR_SET_DESCRIPTIONS = {
-    "reference": "Customer report's own values, for comparison only",
+    "reference": "The validation dataset's own basis, for comparison only",
     "glec": "GLEC Framework, unaccompanied ro-ro (trailer only)",
     "glec_accompanied": "GLEC Framework, accompanied ro-ro (tractor and driver travel)",
     "glec_freight_average": "GLEC Framework, ro-ro freight-only fleet average",

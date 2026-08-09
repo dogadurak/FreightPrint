@@ -15,14 +15,22 @@ Gebze → Düsseldorf; deniz bacağı Pendik → Trieste ro-ro.
 
 Ayrıntılı brifing: `PROJE_FreightPrint.md` (Türkçe, 552 satır).
 
-### Ürünün asıl bulgusu — bunu kaybetmeyin
+### Ürünün duruşu — bunu kaybetmeyin
 
-Müşterinin elindeki raporda deniz bacağı **0,012 kg CO2/ton-km** ile hesaplanmış. Bu bir
-**konteyner gemisi** değeridir, ama servis **ro-ro**'dur. GLEC Framework 2019 (Tem 2022)
-Tablo 45'e göre ro-ro treyler değeri **0,063** (refakatsiz) / **0,093** (refakatli).
+**Önce sınır:** brifing §3 bu sistemin "mevcut raporların hatasını bulan bir denetim
+aracı" olmadığını açıkça yazıyor ve şunu ekliyor: *"Ajan ve ileride README yazılırken bu
+çerçeve korunmalı."* Eldeki gerçek raporlar yalnızca **kendi hesabımızın tutarlılığını
+ölçmek** için kullanılır; dışarıya "şu firmanın raporu hatalı" diye sunulmaz. Bunu bir
+kez ihlal ettim (README ve bu dosya "müşterinin iddia ettiği tasarruf" dilini kullanıyordu)
+ve düzeltildi — aynı hataya düşmeyin.
 
-Sonuç: müşterinin iddia ettiği **%83 tasarruf**, GLEC ile hesaplandığında **%19 ceza**ya
-dönüşüyor. İşaret değişiyor.
+Teknik nokta şu: ro-ro ile konteyner gemisi aynı emisyon esasına sahip değil. Konteyner
+gemisi büyüklüğündeki bir değer (~0,012 kg CO2/ton-km) ro-ro servisine uygulanırsa esas
+hatası olur; GLEC Tablo 45'e göre ro-ro treyler değeri **0,063** (refakatsiz) /
+**0,093** (refakatli).
+
+Sonucun **işareti seçilen esasa bağlı**: aynı sevkiyat `reference` esasıyla %83 fark
+verirken `glec` TTW ile **−%19** veriyor.
 
 > Bu yüzden ürün "tasarruf satmıyor", **hangi esasla hesaplandığını beyan ediyor.**
 > Panoda faktör seti seçimi gizli bir varsayım değil, öne çıkan bir kontrol.

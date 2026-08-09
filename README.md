@@ -3,7 +3,7 @@
 Çok modlu yük taşımacılığı karbon ve rota analiz motoru.
 Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
-**Durum:** Faz 5 — risk, maliyet ve süre modülü çalışıyor.
+**Durum:** Planın tüm fazları (0–8) tamamlandı. 230 test geçiyor.
 
 ## Kurulum
 
@@ -51,7 +51,7 @@ Pano dört bölümden oluşur:
 
 | Bölüm | Ne gösterir |
 |---|---|
-| **Senaryo çubuğu** | Faktör esası (refakatsiz / refakatli / filo ort. / müşteri raporu) ve kapsam (TTW/WTW). Değiştirmek **anında** — yeniden rotalama yok |
+| **Senaryo çubuğu** | Faktör esası (refakatsiz / refakatli / filo ort. / karşılaştırma esası) ve kapsam (TTW/WTW). Değiştirmek **anında** — yeniden rotalama yok |
 | **KPI kartları** | Seçilen rotanın emisyonu · tam karayoluna işaretli fark · Monte Carlo belirsizlik aralığı · ro-ro esasına duyarlılık |
 | **Harita + karşılaştırma** | Rota çizimi ve alternatiflerin moda göre yığılı emisyon çubukları |
 | **Duyarlılık paneli** | Aynı rota, her faktör esası altında — noktalar tam karayolu çizgisini geçtiğinde karar değişir |
@@ -64,8 +64,8 @@ yanlış vilayete göndermenin yoludur ve fark kendini belli etmez: doğrulama s
 adın iki okuması rota mesafesinde **7 puan** fark veriyordu, ikisi de ekranda gayet normal
 görünüyordu. Arama bu yüzden adayları listeler, seçim kullanıcınındır.
 
-**Manşet KPI neden "tasarruf" değil?** Bu koridorda doğru GLEC ro-ro faktörleriyle tasarruf
-negatif çıkıyor (aşağıdaki bulgu). Manşeti "tasarruf" diye kurmak ya negatif sayıyı yanlış
+**Manşet KPI neden "tasarruf" değil?** Bu koridorda GLEC ro-ro faktörleriyle fark negatif
+çıkıyor (aşağıdaki bölüm). Manşeti "tasarruf" diye kurmak ya negatif sayıyı yanlış
 çerçevede gösterir ya da kullanıcıyı yaltaklanan faktörlere iter. Onun yerine manşet
 **emisyon + işaretli fark**, dördüncü kart ise bu ürünün asıl bildiği şey: cevabın
 muhasebe esasına ne kadar bağlı olduğu.
@@ -200,12 +200,19 @@ python scripts/install_hooks.py
 Rota arama, kalkış ve varış noktalarını grafa geçici düğüm olarak ekleyip k-en-kısa-yol
 çalıştırır; böylece tam karayolu seçeneği doğal olarak karşılaştırma temeli hâline gelir.
 
-## ⚠️ Deniz faktörü bulgusu — ro-ro, konteyner gemisi değildir
+## Deniz faktörünün seçimi — ro-ro, konteyner gemisi değildir
 
-Doğrulama veri setindeki firma deniz bacağı için **0,012 kg CO2/ton-km** kullanmış. Bu bir
-konteyner gemisi büyüklüğünde bir değer — ama raporladığı servisler (Pendik, Yalova, Bari,
-Patras, Sète) **ro-ro**. Ro-ro gemisi treyler taşır: yükün yanında treylerin darasını da
-taşır, doluluk oranı düşüktür (%40) ve daha hızlı seyreder.
+> Bu bölüm bir denetim sonucu değil. Proje brifingi (§3) sistemin "mevcut raporların
+> hatasını bulan bir denetim aracı" olmadığını açıkça söylüyor; eldeki gerçek raporlar
+> yalnızca **kendi hesabımızın tutarlılığını ölçmek** için kullanılıyor. Aşağıdaki
+> karşılaştırma, motorun farklı faktör esasları altında nasıl davrandığını gösterir —
+> herhangi bir firmanın raporu hakkında bir iddia değildir.
+
+Ro-ro ile konteyner gemisi aynı emisyon esasına sahip değil. Ro-ro gemisi treyler taşır:
+yükün yanında treylerin darasını da taşır, doluluk oranı düşüktür (%40) ve daha hızlı
+seyreder. Konteyner gemisi büyüklüğündeki bir değeri (**~0,012 kg CO2/ton-km**) ro-ro
+servisine uygulamak, bu yüzden esas hatasıdır — ve doğrulama veri setindeki hesaplar bu
+esasla kurulmuş olduğu için bizim sayılarımızla kıyaslanabilir bir referans oluşturuyor.
 
 GLEC Framework'ün ro-ro değerleri (Tablo 45, g CO2e/ton-km, TTW/WTW):
 
@@ -215,22 +222,26 @@ GLEC Framework'ün ro-ro değerleri (Tablo 45, g CO2e/ton-km, TTW/WTW):
 | **Sadece treyler** (bu sistemin varsayılanı) | **63** | **68** |
 | Çekici + treyler | 93 | 100 |
 
-Aynı anda karayolu faktörü de ters yönde sapıyor: rapor 0,121 kullanmış, GLEC'in 40 tonluk
-çekicisi (konteyner esası, doluluk ve boş dönüş dâhil) **0,060**. İki sapma da aynı yöne,
-çok modlu taşımayı olduğundan iyi gösterme yönüne çalışıyor.
+Karayolu tarafında da esas farkı var: `reference` seti 0,121 taşırken GLEC'in 40 tonluk
+çekicisi (konteyner esası, doluluk ve boş dönüş dâhil) **0,060**. İki fark da aynı yöne,
+çok modlu taşımayı görece iyi gösterme yönüne çalışıyor.
 
-Aynı sevkiyat, Pendik–Trieste–Köln (24 ton):
+Aynı sevkiyat, Pendik–Trieste–Köln (24 ton), üç esas altında:
 
-| Faktör seti | Çok modlu | Tam karayolu | Tasarruf |
+| Faktör seti | Çok modlu | Tam karayolu | Fark |
 |---|---|---|---|
-| `reference` (müşteri raporu) | 1.262 kg | 7.304 kg | %83 |
+| `reference` (karşılaştırma esası) | 1.262 kg | 7.304 kg | %83 |
 | `glec` TTW | 4.324 kg | 3.622 kg | **−%19** |
 | `glec` WTW | 4.760 kg | 4.527 kg | −%5 |
 
-**Sonuç: bu koridorda "çok modlu taşıma karbon kazandırır" iddiası GLEC faktörleriyle
-savunulamıyor.** Demiryolu bacağı hâlâ net kazanç (tren 0,020'ye karşı karayolu 0,060),
-sorun ro-ro deniz bacağında. Sistem bu yüzden hangi faktör setiyle hesap yaptığını her
-çıktıda yazar ve tasarruf negatifse ağaç eşdeğerini sıfır döndürür.
+**Sonucun işareti, seçilen esasa bağlı.** Bu koridorda GLEC faktörleriyle çok modlu
+taşıma karbon kazandırmıyor; demiryolu bacağı hâlâ net kazanç (tren 0,020'ye karşı
+karayolu 0,060), fark ro-ro deniz bacağından geliyor.
+
+Ürünün duruşu buradan çıkıyor: sistem **bir tasarruf vaat etmiyor, hangi esasla hesap
+yaptığını beyan ediyor.** Her çıktıda faktör seti ve kapsam yazılı, faktör seti panoda
+gizli bir varsayım değil öne çıkan bir kontrol, ve fark negatifse ağaç eşdeğeri sıfır
+döner.
 
 ## Risk, maliyet ve süre
 
