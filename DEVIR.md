@@ -3,7 +3,7 @@
 Bu belge projeyi başka bir asistanla sürdürecek biri için yazıldı. Kodun anlattığını
 tekrar etmez; **kodda görünmeyen kararları, bulguları ve tuzakları** anlatır.
 
-Son durum: **27 commit, 200 test geçiyor, çalışma ağacı temiz.**
+Son durum: **28 commit, 210 test geçiyor, çalışma ağacı temiz.**
 
 ---
 
@@ -42,6 +42,7 @@ dönüşüyor. İşaret değişiyor.
 | 4 | API + web arayüzü | ✅ Bitti |
 | 5 | Risk ve maliyet modülü | ✅ Bitti |
 | — | Pano yükseltmesi, zaman ekseni, toplu iş kuyruğu, frigo, xlsx | ✅ Bitti |
+| — | HVO / elektrik faktörleri (GLEC dışı kaynak) | ✅ Bitti |
 | 6 | Terminal etki alanı (izokron) haritası | ❌ Hiç başlanmadı |
 | 7 | AIS katmanı (koşullu) | ⛔ Faz 0'da elenmesi gerektiği görüldü |
 | 8 | Paketleme / CI | ❌ Hiç başlanmadı |
@@ -95,7 +96,38 @@ dönüşüyor. İşaret değişiyor.
 
 ---
 
-## 3. Frigo kararı — neden oran değil, saat
+## 3. Alternatif yakıtlar — neden GLEC satırından ölçekleniyor
+
+GLEC'te HVO ve bataryalı elektrik **yok** (Tablo 42 yalnızca Diesel, CNG, LNG, Bio-LNG).
+Bu yüzden dışarıdan gelmeleri gerekiyor — ama nasıl geldikleri kritik.
+
+Bir kamyonun kWh/km'sini ve yükünü bağımsız varsayarsanız, GLEC dizel satırının ima
+ettiğinden farklı bir yük esasına oturursunuz. Bu depoda tam olarak bu olmuştu: elektrik
+satırları ~21 t, GLEC dizeli ise ~14 t ima ediyordu; elektrik yarı yarıya avantajlı
+görünüyordu ve dosyada bunu söyleyen hiçbir şey yoktu.
+
+Çözüm: **GLEC faktörünü DEFRA'nın litre başı dizel değerine bölün.** Çıkan sayı GLEC'in
+kendi yakıt yoğunluğudur (0,02348 L/ton-km) — yük ve boş dönüş sadeleşir, türetilen
+satırlar GLEC'in esasını *inşa gereği* devralır.
+
+- **HVO**: aynı motor, aynı yük → litre oranı geçerli; HVO'nun düşük hacimsel enerjisi
+  için düzeltilir (35,8 vs 34,4 MJ/L). Dizelin **%19'u**.
+- **Elektrik**: farklı aktarma organı → verim oranı gerekli (0,375 tank→tekerlek,
+  0,78 şebeke→tekerlek). Bu varsayım gömülü değil, `notes` içinde yazılı.
+
+Şebeke sonucu belirliyor: İsveç dizelin %6'sı, **Polonya %94'ü** — yani orada bataryalı
+kamyonun kazancı neredeyse yok. Tek bir "AB ortalaması" bu yüzden reddedildi.
+
+Kaynaklandıramadığım iki şey **atıldı**: Türkiye şebeke faktörü ve HVO'nun atık/bitkisel
+ayrımı (DEFRA tek jenerik değer veriyor). Standart iddiası taşıyan bir üründe kaynaksız
+sayı, boşluktan kötüdür. HVO satırı bunun yerine besleme stoğu uyarısı taşıyor.
+
+Elektrik satırları **üretimin kendi yakıt tedarik zincirini içermiyor**; bunu `notes`
+açıkça söylüyor, yani dizel WTW ile karşılaştırmada elektrik lehine hafif eksik tahmindir.
+
+---
+
+## 4. Frigo kararı — neden oran değil, saat
 
 Devralan kişi bunu değiştirmeye kalkabilir, o yüzden gerekçe burada.
 
@@ -131,34 +163,20 @@ frigo yükte **%11**. Km bazlı bir model bunu sıfır görürdü.
 
 ---
 
-## 4. Kalan işler
+## 5. Kalan işler
 
-### 4.1 HVO / elektrik faktörleri (sıradaki iş)
-
-`data/emission_factors.csv` içinde hâlâ `PLACEHOLDER`. **GLEC'te bu değerler yok** —
-doğruladım: "HVO", "hydrotreated", "battery electric" ifadeleri belgede hiç geçmiyor;
-Tablo 42 yalnızca Diesel, CNG, LNG, Bio-LNG listeliyor.
-
-Yapılması gereken:
-- GLEC dışı bir kaynak bulun (DEFRA/BEIS dönüşüm faktörleri, veya JEC/CONCAWE WTW)
-- Kaynağı `source` sütununa **açıkça** yazın, `is_verified` bayrağını dürüst kurun
-- **Elektrik tek bir "AB ortalaması" olarak girilmemeli.** Şebeke karbon yoğunluğu
-  ülkeye göre 5 kattan fazla değişiyor (İsveç ~30 g/kWh, Polonya ~700 g/kWh).
-  Parametreleştirin, yoksa sayı yanıltıcı olur.
-- HVO'da atık-yağ mı bitkisel mi ayrımı sonucu ciddi değiştirir; hangisi olduğunu yazın.
-
-### 4.2 Faz 6 — terminal etki alanı (izokron)
+### 5.1 Faz 6 — terminal etki alanı (izokron)
 
 Hiç başlanmadı. Hangi terminalin hangi bölgeyi kapsadığını gösteren izokron haritası.
 OSRM'in `/table` veya `/isochrone` servisi ile yapılabilir; public demo sunucu bunun için
 yetersiz kalır, kendi OSRM örneğiniz gerekir.
 
-### 4.3 Faz 8 — paketleme / CI
+### 5.2 Faz 8 — paketleme / CI
 
 Hiç başlanmadı. `docker-compose.yml` OSRM için var ama uygulama için yok. Test takımı
-(200 test) CI'da koşmuyor.
+(210 test) CI'da koşmuyor.
 
-### 4.4 Risk poligonlarının bağımsız doğrulanması (kısmen çözüldü)
+### 5.3 Risk poligonlarının bağımsız doğrulanması (kısmen çözüldü)
 
 `data/risk_zones.geojson` **elle sayısallaştırılmış basitleştirilmiş dikdörtgenler**.
 JWC sınırlarıyla satır satır karşılaştırılmadı — JWLA-033 yalnızca PDF olarak yayımlanıyor,
@@ -171,7 +189,7 @@ ediyordu). Yine de **tam doğrulama değil** — sınır çizgileri hâlâ yakla
 
 ---
 
-## 5. Tekrarlanmaması gereken hatalar
+## 6. Tekrarlanmaması gereken hatalar
 
 Bu projede çıkan ve **her biri sessizce yanlış sayı üreten** hatalar. Kod değişikliği
 yaparken bunlara dikkat:
@@ -194,22 +212,36 @@ yaparken bunlara dikkat:
 6. **İç içe havuzlar.** İş kuyruğu (4) × rapor havuzu (4) = public OSRM'e aynı anda 16
    istek. Limit artık çağıranda değil, **istemcide**: `road.py` içinde `BoundedSemaphore`.
 7. **Belirsizlik bandının kendi nokta tahminini dışlaması.** Band artık ortalanıyor.
-8. **Testin totolojik olması.** Bir testin, hesabı yarıya indirseniz bile geçtiği ortaya
+8. **Faktör setine yakıt eklemek çıplak aramayı belirsizleştirir.** `find_factor(road)`
+   birden çok satır bulunca -- doğru biçimde -- hata verir. Çözüm testleri yakıt adı
+   verecek şekilde yeniden yazmak **değildi**; veri artık set ve mod başına bir satırı
+   `is_default` ile işaretliyor. Alternatif yakıtlar opt-in: yeni bir satır eklemek
+   mevcut bir raporun anlamını değiştiremez. Varsayılanı olmayan set (`placeholder`)
+   hâlâ reddediyor.
+9. **Testin totolojik olması.** Bir testin, hesabı yarıya indirseniz bile geçtiği ortaya
    çıktı. Değiştirildi. **Yazdığınız testin mutasyonu yakaladığını doğrulayın.**
 
 ---
 
-## 6. Çalışma yöntemi — işe yaradı, sürdürün
+## 7. Çalışma yöntemi — işe yaradı, sürdürün
 
 - **Her fazdan sonra bağımsız bir doğrulama ajanı** koştu. Yukarıdaki hataların çoğu
   böyle bulundu. "Hata çok çıktı" demek yöntemin bozuk olduğu anlamına gelmiyor —
   tersine, hataların **yüzeye çıktığı** anlamına geliyor.
 - **Her sayı kaynağını taşır.** Kaynağı olmayan sayı `PLACEHOLDER` olur ve uyarı üretir.
 - **Belirsizlik gizlenmez.** Tahminse "tahmin" yazar, türetmeyse "türetme" yazar.
+- **Test kırıldığında testi değil sebebi düzeltin.** Bu depoda bir kez, kırılan testleri
+  geçecek şekilde yeniden yazan bir betik (`fix_tests.py`) üretildi. Test kırılması
+  genelde tasarımda eksik bir kavrama işaret eder -- burada "varsayılan yakıt"
+  kavramıydı. Assertion'ı gevşetmek o kavramı bulmanızı engeller.
+- **Aynı depoda aynı anda iki ajan çalıştırmayın.** 8 Ağustos akşamı ile 9 Ağustos
+  arasında depoya başka bir araç dokunmuş: HVO/elektrik satırları eklenmiş, `placeholder`
+  seti silinmiş, testler kırık bırakılmıştı. Commit edilmemiş olduğu için hangi kararın
+  kime ait olduğu ancak `git diff` ile çözülebildi. **Devretmeden önce commit alın.**
 
 ---
 
-## 7. Gizlilik / güvenlik — dikkat
+## 8. Gizlilik / güvenlik — dikkat
 
 - `scripts/check_privacy.py` her commit öncesi koşuyor: gerçek müşteri şehir adları,
   posta kodları ve rakamları hazırlanmış diff'te arıyor. **Bu betiği devre dışı
@@ -224,7 +256,7 @@ yaparken bunlara dikkat:
 
 ---
 
-## 8. Çalıştırma
+## 9. Çalıştırma
 
 ```bash
 pip install -r requirements.txt
