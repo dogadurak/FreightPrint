@@ -391,3 +391,32 @@ class PortfolioOut(BaseModel):
     addressable_co2_kg: float
     failed: list[list[str]] = []
     notes: list[str] = []
+
+
+class ConformanceCheckOut(BaseModel):
+    id: str
+    clause: str
+    requirement: str
+    status: str
+    evidence: str
+    gap: str = ""
+    is_blocking: bool = False
+
+
+class ConformanceOut(BaseModel):
+    """A self-assessment against ISO 14083 — explicitly not a certification.
+
+    The gaps are the product. Two of them can never close from this engine's own data:
+    hub emissions are not computed at all, and every factor is a published default where
+    the standard ranks operator-measured fuel above them. Both are reported as absent
+    rather than dropped from the checklist.
+    """
+
+    factor_set: str
+    scope: str
+    verdict: str
+    verdict_tr: str
+    data_quality: float
+    data_quality_note: str
+    checks: list[ConformanceCheckOut]
+    notes: list[str] = []

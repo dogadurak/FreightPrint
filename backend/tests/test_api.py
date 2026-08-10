@@ -712,3 +712,27 @@ def test_a_portfolio_from_a_bad_file_is_refused(client):
 
     assert response.status_code == 422
     assert "missing column" in response.json()["detail"]
+
+
+def test_the_conformance_endpoint_reports_the_gaps(client):
+    body = client.get("/api/conformance", params={"factor_set": "glec", "scope": "WTW"}).json()
+
+    assert body["verdict"] in {"reportable", "reportable-not-verifiable", "not-reportable"}
+    ids = {c["id"] for c in body["checks"]}
+    assert {"hub_emissions", "primary_data"} <= ids
+    for check in body["checks"]:
+        if check["id"] in {"hub_emissions", "primary_data"}:
+            assert check["status"] == "missing", "a gap must never quietly start passing"
+
+
+def test_a_tank_to_wheel_basis_is_reported_unreportable(client):
+    body = client.get("/api/conformance", params={"factor_set": "glec", "scope": "TTW"}).json()
+
+    assert body["verdict"] == "not-reportable"
+    assert any(c["is_blocking"] for c in body["checks"])
+
+
+def test_a_basis_that_cannot_price_is_refused(client):
+    response = client.get("/api/conformance", params={"factor_set": "reference", "scope": "WTW"})
+
+    assert response.status_code == 422

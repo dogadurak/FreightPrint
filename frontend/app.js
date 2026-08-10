@@ -831,6 +831,7 @@ function applyScenario() {
   drawAlternative(shown, scenario, chosen);
   // The player belongs to one alternative; switching scenario or route reloads it.
   resetPlayer(shown);
+  loadConformance(scenario);
 }
 
 /* ── requests ────────────────────────────────────────────────────────── */
@@ -1777,5 +1778,70 @@ function renderPortfolio(data) {
     ${data.failed.length
       ? `<p class="hint">Rotalanamayan ${data.failed.length} sevkiyat hiçbir hatta sayılmadı.</p>`
       : ""}
+    ${data.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
+}
+
+/* ── ISO 14083 self-assessment ───────────────────────────────────────── */
+
+/** What the figure on screen can and cannot be used for.
+ *
+ *  Reloaded whenever the scenario changes, because the answer depends on it: the same
+ *  shipment priced tank-to-wheel is not reportable under the standard at all, and the
+ *  dashboard should say that where the choice is made rather than in a footnote.
+ *
+ *  The gaps are the point. Two of them never close from our own data — hub emissions
+ *  are not computed, and every factor is a published default where the standard ranks
+ *  the carrier's own fuel measurements above them — so they are shown as absent rather
+ *  than dropped from the list.
+ */
+const CONFORMANCE_STATUS = {
+  met: { mark: "✓", label: "karşılanıyor", css: "met" },
+  partial: { mark: "~", label: "kısmen", css: "partial" },
+  missing: { mark: "✗", label: "eksik", css: "missing" },
+};
+
+async function loadConformance(scenario) {
+  const card = $("conformance-card");
+  if (!card || !scenario) return;
+  const params = new URLSearchParams({
+    factor_set: scenario.factor_set,
+    scope: scenario.scope,
+  });
+  const fuel = new FormData(form).get("road_fuel_type");
+  if (fuel) params.set("road_fuel_type", fuel);
+
+  try {
+    const response = await fetch(`/api/conformance?${params}`);
+    if (!response.ok) { card.hidden = true; return; }
+    renderConformance(await response.json());
+  } catch {
+    card.hidden = true;   // an assessment that cannot load must not block the dashboard
+  }
+}
+
+function renderConformance(data) {
+  $("conformance-card").hidden = false;
+  $("conformance-note").textContent = `${data.factor_set} · ${data.scope}`;
+
+  const verdictClass = data.verdict === "reportable"
+    ? "good" : data.verdict === "not-reportable" ? "bad" : "warn";
+
+  const rows = data.checks.map((check) => {
+    const state = CONFORMANCE_STATUS[check.status] ?? CONFORMANCE_STATUS.missing;
+    return `<li class="check ${state.css}${check.is_blocking ? " blocking" : ""}">
+      <span class="check-mark" aria-hidden="true">${state.mark}</span>
+      <span class="check-body">
+        <span class="check-req">${check.requirement}</span>
+        <span class="card-note">${check.clause} · ${check.evidence}</span>
+        ${check.gap ? `<span class="check-gap">Eksik: ${check.gap}</span>` : ""}
+      </span>
+    </li>`;
+  }).join("");
+
+  $("conformance").innerHTML = `
+    <p class="verdict ${verdictClass}">${data.verdict_tr}</p>
+    <p class="hint">Veri kalitesi <strong>${nf1.format(data.data_quality)}/5</strong> —
+      ${data.data_quality_note}</p>
+    <ul class="check-list">${rows}</ul>
     ${data.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
 }

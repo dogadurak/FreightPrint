@@ -18,6 +18,7 @@ from ..core.catchment import (
     MIN_SPACING_DEG,
     build_catchment,
 )
+from ..core.conformance import assess as assess_conformance
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
 from ..core.deliverable import report_to_pdf, report_to_xlsx
 from ..core.geocode import GeocodingError, search
@@ -45,6 +46,8 @@ from .schemas import (
     CatchmentCellOut,
     CompareRequest,
     CompareResponse,
+    ConformanceCheckOut,
+    ConformanceOut,
     EtsCostOut,
     EtsLegOut,
     FactorSetOut,
@@ -1012,4 +1015,38 @@ def lane_portfolio(
         addressable_co2_kg=round_to_significant(portfolio.addressable_co2_kg),
         failed=[list(f) for f in portfolio.failed],
         notes=portfolio.notes,
+    )
+
+
+@router.get("/conformance", response_model=ConformanceOut)
+def conformance(
+    factor_set: str = "glec",
+    scope: str = "WTW",
+    road_fuel_type: str | None = None,
+) -> ConformanceOut:
+    """What a report priced on this basis can and cannot claim under ISO 14083.
+
+    Costs nothing: it reads the factor file rather than routing anything.
+    """
+    try:
+        result = assess_conformance(factor_set, scope, road_fuel_type=road_fuel_type)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    return ConformanceOut(
+        factor_set=result.factor_set,
+        scope=result.scope,
+        verdict=result.verdict,
+        verdict_tr=result.verdict_tr,
+        data_quality=result.data_quality,
+        data_quality_note=result.data_quality_note,
+        checks=[
+            ConformanceCheckOut(
+                id=c.id, clause=c.clause, requirement=c.requirement,
+                status=c.status, evidence=c.evidence, gap=c.gap,
+                is_blocking=c.is_blocking,
+            )
+            for c in result.checks
+        ],
+        notes=result.notes,
     )

@@ -75,6 +75,7 @@ muhasebe esasına ne kadar bağlı olduğu.
 | `GET /api/terminals` | Terminal listesi; servise bağlı olmayanlar işaretli |
 | `GET /api/factor-sets` | Seçilebilir faktör setleri ve her birinin deniz esası |
 | `POST /api/routes` | Sevkiyat → alternatifler, emisyon, tasarruf, belirsizlik |
+| `GET /api/conformance` | Seçili esasın ISO 14083 öz değerlendirmesi |
 | `POST /api/portfolio` | Toplu dosya → hat portföyü ve azaltım sıralaması |
 | `POST /api/report` | Toplu dosya → rapor (`output_format`: `csv`/`xlsx`/`pdf`) |
 | `GET /api/places` | Yer adı → aday konumlar (tek cevap değil, liste) |
@@ -288,6 +289,33 @@ türetilir ve "tahmin" işaretlenir.
 
 Gebze→Düsseldorf için sonuç: tam karayolu **3,1 gün**, çok modlu **5,5 gün** — ve farkın
 üçte biri hiç hareket edilmeyen süre (18 sa aktarma + 25 sa bekleme).
+
+## ISO 14083 öz değerlendirmesi — bu rakam denetimden geçer mi
+
+Pano, seçili faktör esasının standarda göre nerede durduğunu gösterir. **Belgelendirme
+değildir**; motorun kendi verisinden kontrol edilebilen maddeleri kapsar ve değeri
+işaretlediği kutucuklarda değil, **adını koyduğu eksiklerdedir.** Yaptığı şeyleri kontrol
+edip "uygun" diyen bir araç, rakamı aklayan bir araçtır.
+
+Esas değişince karar değişir:
+
+| Esas | Karar |
+|---|---|
+| `glec` / **WTW** | Beyan edilebilir, doğrulanamaz — veri kalitesi 3/5 |
+| `glec` / TTW | **Raporlanamaz** — ISO kuyudan-tekere ister, TTW yakıt üretimini hiç saymaz |
+| `reference` / TTW | **Raporlanamaz** — üstelik boş dönüş payı da yok |
+
+İki eksik bu motorun kendi verisiyle **hiç kapanmaz** ve dürüst manşet budur:
+
+- **Hub emisyonları hesaplanmıyor.** ISO terminal ve depo enerjisini ister; burada hiç
+  yok. Kapatmak için işletmeciden liman başına kWh gerekir.
+- **Birincil veri yok.** Her faktör yayımlanmış varsayılan. Standart, taşıyıcının kendi
+  ölçtüğü yakıt verisini bunların üstünde sayar; o gelmeden veri kalitesi 3'ün üstüne
+  çıkamaz (4 ve 5 yalnızca ölçülmüş veriyle mümkündür).
+
+Değerlendirme yalnızca raporun **gerçekten kullandığı** faktörlere bakar — dizelle
+fiyatlanan bir rapor, aynı sette duran ama hiç dokunulmayan HVO satırları yüzünden
+düşmez.
 
 ## Hat portföyü — nerede hareket etmeye değer
 

@@ -312,6 +312,31 @@ button.ghost:hover { background: var(--surface-sunken); }
 .check-field span { font-weight: 500; }
 .check-field small { display: block; font-weight: 400; }
 
+/* ── ISO 14083 self-assessment ───────────────────────────────────────── */
+.verdict {
+  margin: 0 0 0.5rem; padding: 0.45rem 0.7rem; border-radius: var(--r-sm);
+  font-weight: 640; font-size: 0.88rem;
+}
+.verdict.good { background: var(--good-wash); color: var(--good); }
+.verdict.warn { background: var(--warn-wash); color: var(--warn-ink); }
+.verdict.bad  { background: var(--bad-wash); color: var(--bad); }
+
+.check-list { list-style: none; margin: 0.7rem 0 0; padding: 0; display: grid; gap: 0.45rem; }
+.check { display: flex; gap: 0.55rem; align-items: baseline; font-size: 0.84rem; }
+.check-mark { flex: none; width: 1rem; text-align: center; font-weight: 700; }
+.check-body { display: grid; gap: 0.1rem; }
+.check-req { font-weight: 550; }
+.check.met .check-mark { color: var(--good); }
+.check.partial .check-mark { color: var(--warn-ink); }
+.check.missing .check-mark { color: var(--bad); }
+/* A blocking gap is the one that stops the figure being reportable at all, rather than
+   merely weakening it, so it is set apart from the ordinary misses. */
+.check.blocking {
+  padding: 0.4rem 0.55rem; border-radius: var(--r-sm);
+  background: var(--bad-wash); border: 1px solid var(--bad);
+}
+.check-gap { color: var(--ink-secondary); font-size: 0.79rem; }
+
 /* ── lane portfolio ──────────────────────────────────────────────────── */
 .table-scroll { overflow-x: auto; }
 .lane-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
