@@ -32,6 +32,16 @@ class Leg:
     track_is_indicative: bool = False
     notes: list[str] = field(default_factory=list)
 
+    @property
+    def driving_km(self) -> float:
+        """The part of a road leg actually spent on a road.
+
+        OSRM reports a ferry crossing inside the driving distance, so anything charged
+        to the road — its factor, a toll, a country split — has to net it out. Named to
+        match `RoadRoute.driving_km`, which answers the same question one layer down.
+        """
+        return self.distance_km - self.ferry_km
+
 
 @dataclass
 class RouteAlternative:

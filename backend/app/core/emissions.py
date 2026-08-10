@@ -60,6 +60,11 @@ class ResolvedLeg:
     duration_h: float | None = None
     geometry: tuple[tuple[float, float], ...] = ()
     track_is_indicative: bool = False
+    # The terminals this leg runs between, carried so anything that has to line up with
+    # the priced legs — the allowance scope, above all — can read the pairing off the
+    # same expansion that produced them instead of replaying the ferry rule itself.
+    from_id: str | None = None
+    to_id: str | None = None
 
 
 @dataclass
@@ -191,11 +196,13 @@ def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
             resolved.append(
                 ResolvedLeg(
                     mode="road",
-                    distance_km=leg.distance_km - leg.ferry_km,
+                    distance_km=leg.driving_km,
                     from_name=leg.from_name,
                     to_name=leg.to_name,
                     duration_h=leg.duration_h,
                     geometry=leg.geometry,
+                    from_id=leg.from_id,
+                    to_id=leg.to_id,
                 )
             )
             resolved.append(
@@ -205,6 +212,8 @@ def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
                     from_name=f"feribot ({leg.from_name}",
                     to_name=f"{leg.to_name} icinde)",
                     is_ferry=True,
+                    from_id=leg.from_id,
+                    to_id=leg.to_id,
                 )
             )
         else:
@@ -217,9 +226,32 @@ def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
                     duration_h=leg.duration_h,
                     geometry=leg.geometry,
                     track_is_indicative=leg.track_is_indicative,
+                    from_id=leg.from_id,
+                    to_id=leg.to_id,
                 )
             )
     return resolved
+
+
+def leg_countries(route: RouteAlternative) -> list[tuple[str | None, str | None]]:
+    """The country pair for each **priced** leg, in the order they are priced.
+
+    `calculate_ets` matches its country pairs to the priced legs by position and refuses
+    a list of the wrong length, so this has to follow the ferry split rather than
+    `route.legs`. It is derived from `expand_route_legs` for that reason: two callers
+    were replaying the split rule by hand, and a rule written down twice is one that
+    only has to be changed once to make the dashboard and the portfolio disagree about
+    which voyages the scheme covers.
+    """
+    from .network import load_terminals
+
+    terminals = load_terminals()
+
+    def country(node: str | None) -> str | None:
+        terminal = terminals.get(node) if node else None
+        return terminal.country if terminal else None
+
+    return [(country(leg.from_id), country(leg.to_id)) for leg in expand_route_legs(route)]
 
 
 def effective_factor_value(

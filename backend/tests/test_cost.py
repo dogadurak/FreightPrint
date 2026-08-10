@@ -7,7 +7,7 @@ from app.core.cost import (
     phase_in_share,
     voyage_coverage_share,
 )
-from app.core.emissions import calculate_route_emission
+from app.core.emissions import calculate_route_emission, leg_countries
 from app.core.route import Leg, RouteAlternative
 
 CARBON_PRICE = 80.0
@@ -116,6 +116,31 @@ def test_reroute_reports_what_avoiding_the_zone_cost():
     assert reroute.extra_duration_h == pytest.approx(208)
     assert reroute.extra_co2_kg == pytest.approx(31_000)
     assert reroute.total_eur == pytest.approx(310 + 4000)
+
+
+def test_country_pairs_line_up_with_the_priced_legs_through_a_ferry_split():
+    """`calculate_ets` matches pairs to legs by position, so a route whose road leg
+    carries a ferry must produce one pair for the road and one for the crossing. Two
+    callers used to replay that rule by hand; deriving it from the same expansion means
+    the dashboard and the portfolio cannot come to differ on what the scheme covers."""
+    route = RouteAlternative(
+        legs=[
+            Leg("road", "Gebze", "Pendik", 60, from_id=None, to_id="pendik"),
+            Leg("sea", "Pendik", "Trieste", 2500, from_id="pendik", to_id="trieste"),
+            Leg("road", "Trieste", "Ancona", 400, from_id="trieste", to_id="ancona",
+                ferry_km=150),
+        ],
+        label="with a ferry",
+    )
+    shipment = calculate_route_emission(route, tonnage=24)
+
+    pairs = leg_countries(route)
+
+    assert len(pairs) == len(shipment.legs) == 4, "the ferry did not become its own leg"
+    # Refused outright if they had drifted apart, which is the guarantee that matters.
+    calculate_ets(shipment, pairs)
+    modes = [leg.mode for leg in shipment.legs]
+    assert modes == ["road", "sea", "road", "sea"]
 
 
 def test_a_missing_duration_leaves_the_difference_unknown_rather_than_zero():

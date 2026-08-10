@@ -6,6 +6,7 @@ from ..core.emissions import (
     FactorNotFoundError,
     calculate_route_emission,
     calculate_shipment,
+    leg_countries,
     load_emission_factors,
     load_tree_factors,
     lowest_emission_first,
@@ -343,26 +344,11 @@ def _toll_out(route, shipment) -> TollOut | None:
     )
 
 
-def _leg_countries(route, terminals) -> list[tuple[str | None, str | None]]:
-    """Country pair per priced leg, in the order `expand_route_legs` produces them.
-
-    A ferry inside a road leg becomes a second, sea-mode leg, so the list is built the
-    same way the pricing is rather than from `route.legs` directly.
-    """
-    pairs: list[tuple[str | None, str | None]] = []
-    country = lambda node: terminals[node].country if node in terminals else None
-    for leg in route.legs:
-        if leg.mode == "road" and leg.ferry_km > 0:
-            pairs.append((country(leg.from_id), country(leg.to_id)))
-        pairs.append((country(leg.from_id), country(leg.to_id)))
-    return pairs
-
-
 def _ets_out(shipment, route, terminals, request: RouteRequest) -> EtsCostOut | None:
     try:
         cost = calculate_ets(
             shipment,
-            _leg_countries(route, terminals),
+            leg_countries(route),
             carbon_price_eur=request.carbon_price_eur,
             year=request.ets_year,
         )

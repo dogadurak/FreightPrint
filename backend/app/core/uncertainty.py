@@ -100,7 +100,12 @@ def simulate_emission_range(
     distance_uncertainty: float | None = None,
     load_factor: float | None = None,
     load_uncertainty: float = 0.0,
-    empty_return_share: float = 0.0,
+    # None, not 0.0, and the difference is the whole range. `effective_factor_value`
+    # reads 0.0 as "this vehicle never returns empty" and strips the empty-return
+    # uplift the published factor already carries — 30% on GLEC road, 17% on rail. A
+    # simulation defaulting to that put the all-road baseline's range at 3,705-3,804 kg
+    # beside a headline of 4,882 kg: a band that does not contain the number it belongs to.
+    empty_return_share: float | None = None,
     scope: str = DEFAULT_SCOPE,
     road_fuel_type: str | None = None,
     factor_set: str = DEFAULT_FACTOR_SET,
@@ -110,6 +115,11 @@ def simulate_emission_range(
     factors: list[EmissionFactor] | None = None,
 ) -> EmissionRange:
     """Turn distance and load-factor uncertainty into a range instead of one exact number.
+
+    **Every argument this shares with `calculate_route_emission` has to default the same
+    way there and here**, because the two describe one shipment: the point estimate and
+    the band drawn around it. Where they disagree the band stops containing the number
+    it is drawn around, which reads as a bug even when each function is right on its own.
 
     The load band is centred on `load_factor` and clipped at full capacity, so the range
     brackets the point estimate rather than sitting entirely above it.

@@ -262,12 +262,21 @@ def test_tree_equivalent_is_zero_when_the_alternative_emits_more():
     assert set(tree_equivalent(-500, load_tree_factors()).values()) == {0.0}
 
 
-def test_uncertainty_range_brackets_the_point_estimate():
-    """A reported range that excludes the number printed beside it reads as a bug."""
-    route = _route("via sea", [_leg("road", 60), _leg("sea", 2500), _leg("rail", 990)])
-    point = calculate_route_emission(route, tonnage=24).total_co2_kg
+@pytest.mark.parametrize(
+    "factor_set", ["reference", "glec", "glec_accompanied", "glec_freight_average"]
+)
+def test_uncertainty_range_brackets_the_point_estimate(factor_set):
+    """A reported range that excludes the number printed beside it reads as a bug.
 
-    result = simulate_emission_range(route, tonnage=24, seed=0)
+    Every set, not just the default one. `reference` is the only set whose factors carry
+    no empty-return basis, so it is the only set on which a simulation that dropped that
+    uplift still bracketed correctly — which is exactly how one did, unnoticed, while
+    putting the GLEC all-road baseline's band 23% below its own headline figure.
+    """
+    route = _route("via sea", [_leg("road", 60), _leg("sea", 2500), _leg("rail", 990)])
+    point = calculate_route_emission(route, tonnage=24, factor_set=factor_set).total_co2_kg
+
+    result = simulate_emission_range(route, tonnage=24, factor_set=factor_set, seed=0)
 
     assert result.low_co2_kg < point < result.high_co2_kg
 
@@ -301,14 +310,36 @@ def test_load_band_is_clipped_at_full_capacity():
     assert load_band(0.9, 0.1) == pytest.approx((0.81, 0.99))
 
 
-def test_uncertainty_and_point_estimate_agree_on_ferry_distance():
+@pytest.mark.parametrize("factor_set", ["reference", "glec"])
+def test_uncertainty_and_point_estimate_agree_on_ferry_distance(factor_set):
     """Both paths must read the route through the same ferry split, or they disagree."""
     route = _route("crete", [_leg("road", 643, ferry_km=137)])
-    point = calculate_route_emission(route, tonnage=24).total_co2_kg
+    point = calculate_route_emission(route, tonnage=24, factor_set=factor_set).total_co2_kg
 
-    result = simulate_emission_range(route, tonnage=24, seed=0)
+    result = simulate_emission_range(route, tonnage=24, factor_set=factor_set, seed=0)
 
     assert result.low_co2_kg <= point <= result.high_co2_kg
+
+
+def test_the_two_paths_default_every_shared_argument_the_same_way():
+    """The point estimate and the band around it describe one shipment, so an argument
+    that means "unset" in one must mean it in the other. `empty_return_share` once
+    defaulted to 0.0 here and None there, and 0.0 does not mean unset — it means this
+    vehicle never returns empty, which strips the 30% uplift GLEC's road factor carries."""
+    import inspect
+
+    from app.core import uncertainty
+
+    point = inspect.signature(calculate_route_emission).parameters
+    band = inspect.signature(uncertainty.simulate_emission_range).parameters
+
+    for name in set(point) & set(band):
+        if point[name].default is inspect.Parameter.empty:
+            continue
+        assert point[name].default == band[name].default, (
+            f"{name} defaults to {point[name].default!r} when pricing and "
+            f"{band[name].default!r} when simulating; the band will not contain the point"
+        )
 
 
 def test_uncertainty_range_is_reproducible_with_a_seed():

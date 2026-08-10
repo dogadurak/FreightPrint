@@ -121,6 +121,13 @@ def road_distance_by_country(route) -> list[CountryLeg]:
     Road only. A sea leg's track comes from a shipping network rather than a survey and
     these polygons describe land borders, not territorial waters, so splitting one would
     produce a number that looks authoritative and means nothing.
+
+    Ferry distance is taken out for the same reason. OSRM's driving profile routes over
+    ferries and reports the crossing inside a road leg's distance, but a trailer on a
+    ship is not on anybody's road: `expand_route_legs` already charges those kilometres
+    at the sea factor, so counting them here would spread a road leg's carbon over a
+    distance that includes the crossing and hand the countries either side of it a share
+    of a toll no authority levies.
     """
     totals: dict[str, float] = {}
     names: dict[str, str] = {}
@@ -129,9 +136,9 @@ def road_distance_by_country(route) -> list[CountryLeg]:
             continue
         parts = distance_by_country(leg.geometry)
         drawn = sum(part.distance_km for part in parts)
-        if drawn <= 0:
+        if drawn <= 0 or leg.driving_km <= 0:
             continue
-        scale = leg.distance_km / drawn
+        scale = leg.driving_km / drawn
         for part in parts:
             totals[part.iso] = totals.get(part.iso, 0.0) + part.distance_km * scale
             names[part.iso] = part.name

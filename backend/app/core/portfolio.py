@@ -29,10 +29,10 @@ from .emissions import (
     DEFAULT_SCOPE,
     FactorNotFoundError,
     calculate_shipment,
+    leg_countries,
     load_emission_factors,
     lowest_emission_first,
 )
-from .network import load_terminals
 from .report import ShipmentRow
 from .road import RoadRoutingError
 from .route import find_route_alternatives
@@ -150,21 +150,15 @@ def lane_key(shipment: ShipmentRow) -> str:
     return f"{shipment.origin_name} → {shipment.destination_name}"
 
 
-def _options(routes, shipment, scope, factor_set, terminals) -> list[LaneOption]:
+def _options(routes, shipment, scope, factor_set) -> list[LaneOption]:
     """Every alternative for one shipment, priced and timed under one basis."""
     priced = calculate_shipment(
         routes, tonnage=shipment.tonnage, scope=scope, factor_set=factor_set
     )
     options = []
     for route, emission in lowest_emission_first(routes, priced):
-        country = lambda node: terminals[node].country if node in terminals else None
-        pairs = []
-        for leg in route.legs:
-            if leg.mode == "road" and leg.ferry_km > 0:
-                pairs.append((country(leg.from_id), country(leg.to_id)))
-            pairs.append((country(leg.from_id), country(leg.to_id)))
         try:
-            ets = calculate_ets(emission, pairs).cost_eur
+            ets = calculate_ets(emission, leg_countries(route)).cost_eur
         except CostInputError:
             ets = 0.0
         options.append(
@@ -192,7 +186,6 @@ def build_portfolio(
     every basis, which costs nothing. Robustness comes free from that.
     """
     factors = load_emission_factors()
-    terminals = load_terminals()
     tested = [s for s in factor_sets if any(f.factor_set == s for f in factors)]
 
     lanes: dict[str, Lane] = {}
@@ -206,7 +199,7 @@ def build_portfolio(
                 origin_name=shipment.origin_name,
                 destination_name=shipment.destination_name,
             )
-            primary = _options(routes, shipment, scope, factor_set, terminals)
+            primary = _options(routes, shipment, scope, factor_set)
         except (RoadRoutingError, LookupError, ValueError) as error:
             failed.append((shipment.reference, str(error)))
             if on_progress:
@@ -248,7 +241,7 @@ def build_portfolio(
         wins = []
         for candidate in tested:
             try:
-                options = _options(routes, shipment, scope, candidate, terminals)
+                options = _options(routes, shipment, scope, candidate)
             except (FactorNotFoundError, ValueError):
                 continue
             base = next((o for o in options if o.is_all_road), None)
