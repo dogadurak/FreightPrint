@@ -1679,3 +1679,103 @@ function togglePlay() {
     drawPlayHead();
   }, tick * 1000);
 }
+
+/* ── lane portfolio ──────────────────────────────────────────────────── */
+
+/** Read the uploaded shipment file as a portfolio of lanes.
+ *
+ *  The bulk report answers what a shipment emitted. This answers the question a carrier
+ *  with thousands of movements actually asks: which lanes are worth changing, and what
+ *  would changing them cost. Totals say where the mass is, intensity says where a lane
+ *  is run badly, and the robustness column says whether the saving survives a change of
+ *  accounting basis — which is the one thing that decides if it can be defended.
+ */
+$("portfolio-submit").addEventListener("click", async () => {
+  const file = reportForm.querySelector('input[type="file"]');
+  if (!file.files.length) {
+    reportStatus.textContent = "Önce bir sevkiyat dosyası seçin.";
+    return;
+  }
+
+  const body = new FormData();
+  body.set("file", file.files[0]);
+  const scenario = currentScenario();
+  body.set("scope", scenario?.scope ?? "WTW");
+  body.set("factor_set", scenario?.factor_set ?? "glec");
+
+  const button = $("portfolio-submit");
+  button.disabled = true;
+  reportStatus.textContent = "Hatlar çıkarılıyor — her sevkiyat bir kez rotalanır…";
+  try {
+    const response = await fetch("/api/portfolio", { method: "POST", body });
+    const data = await response.json();
+    if (!response.ok) {
+      reportStatus.textContent = data.detail ?? `İstek başarısız (${response.status}).`;
+      return;
+    }
+    renderPortfolio(data);
+    reportStatus.textContent = `${data.lanes.length} hat çıkarıldı.`;
+  } catch (error) {
+    reportStatus.textContent = `Sunucuya ulaşılamadı: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+function renderPortfolio(data) {
+  $("portfolio-card").hidden = false;
+  $("portfolio-note").textContent =
+    `${data.factor_set} · ${data.scope} · ${data.tested_sets.length} esasa karşı sınandı`;
+
+  const worst = Math.max(...data.lanes.map((l) => l.baseline_co2_kg), 1);
+  const rows = data.lanes.map((lane) => {
+    // Three states, and the middle one is the point: a saving that only holds under
+    // some bases is not a saving anyone can act on without an argument.
+    const state = lane.is_robust
+      ? `<span class="lane-tag robust">her esasta kazanıyor</span>`
+      : lane.is_contested
+        ? `<span class="lane-tag contested">yalnız ${lane.wins_under.length}/${
+            lane.tested_under.length} esasta</span>`
+        : `<span class="lane-tag none">kazanç yok</span>`;
+
+    const cost = lane.saving_kg > 0
+      ? `<span class="lane-cost">${signed(-lane.extra_hours)} sa · ${
+          lane.ets_delta_eur >= 0 ? "+" : "−"}€${nf.format(Math.abs(lane.ets_delta_eur))}${
+          lane.eur_per_tonne_abated !== null
+            ? ` · €${nf.format(lane.eur_per_tonne_abated)}/ton` : ""}</span>`
+      : "";
+
+    return `<tr>
+      <td class="lane-name">${lane.key}<br><span class="card-note">${
+        lane.shipments} sevkiyat · ${nf.format(lane.tonne_km)} ton-km</span></td>
+      <td class="num">${nf3.format(lane.intensity_kg_per_tonne_km)}</td>
+      <td class="num">${nf.format(lane.baseline_co2_kg)}
+        <span class="lane-bar" style="width:${(lane.baseline_co2_kg / worst) * 100}%"></span></td>
+      <td class="num ${lane.saving_kg > 0 ? "good" : "bad"}">${signed(lane.saving_kg)}</td>
+      <td>${state}${cost}</td>
+    </tr>`;
+  }).join("");
+
+  const headline = data.addressable_co2_kg > 0
+    ? `Her esasta kazanan hatlarda toplam <strong>${
+        nf.format(data.addressable_co2_kg)} kg</strong> azaltım var.`
+    : `<strong>Hiçbir hat her esasta kazanmıyor.</strong> Test edilen GLEC esasları
+       altında çok modlu alternatif, denetimde savunulabilir bir azaltım vermiyor —
+       bu bir hesap hatası değil, ro-ro deniz bacağının faktörünün sonucu.`;
+
+  $("portfolio").innerHTML = `
+    <p class="hint">${headline}</p>
+    <div class="table-scroll">
+      <table class="lane-table">
+        <thead><tr>
+          <th>Hat</th><th class="num">kg/ton-km</th><th class="num">Toplam kg</th>
+          <th class="num">Fark kg</th><th>Dayanıklılık</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    ${data.failed.length
+      ? `<p class="hint">Rotalanamayan ${data.failed.length} sevkiyat hiçbir hatta sayılmadı.</p>`
+      : ""}
+    ${data.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
+}

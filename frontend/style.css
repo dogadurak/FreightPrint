@@ -312,6 +312,36 @@ button.ghost:hover { background: var(--surface-sunken); }
 .check-field span { font-weight: 500; }
 .check-field small { display: block; font-weight: 400; }
 
+/* ── lane portfolio ──────────────────────────────────────────────────── */
+.table-scroll { overflow-x: auto; }
+.lane-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+.lane-table th, .lane-table td {
+  padding: 0.5rem 0.6rem; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.lane-table th { font-size: 0.78rem; color: var(--ink-muted); font-weight: 600; }
+.lane-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lane-table .good { color: var(--good); font-weight: 640; }
+.lane-table .bad { color: var(--bad); font-weight: 640; }
+.lane-name { font-weight: 550; }
+
+/* A bar under the total, so the eye finds the heavy lanes without reading every row. */
+.lane-bar {
+  display: block; height: 3px; margin-top: 0.25rem; margin-left: auto;
+  background: var(--accent); border-radius: 2px; opacity: 0.55;
+}
+
+.lane-tag {
+  display: inline-block; padding: 0.1rem 0.45rem; border-radius: 999px;
+  font-size: 0.74rem; white-space: nowrap;
+}
+/* Three states and the middle one carries the message: a saving that holds under some
+   accounting bases and not others cannot be acted on without an argument. */
+.lane-tag.robust { background: var(--good-wash); color: var(--good); border: 1px solid var(--good); }
+.lane-tag.contested { background: var(--warn-wash); color: var(--warn-ink); border: 1px solid var(--warn-border); }
+.lane-tag.none { background: var(--surface-sunken); color: var(--ink-muted); border: 1px solid var(--border); }
+.lane-cost { display: block; margin-top: 0.25rem; font-size: 0.75rem; color: var(--ink-muted); }
+
 /* ── journey player ──────────────────────────────────────────────────── */
 /* Under the map, not over it: the marker it drives is the thing worth watching. */
 .player { margin-top: 0.8rem; }

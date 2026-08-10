@@ -32,6 +32,7 @@ from ..core.report import (
 )
 from ..core.risk import assess_route, load_risk_zones
 from ..core.playback import PlaybackMismatch, build_playback
+from ..core.portfolio import build_portfolio
 from ..core.reefer import ReeferFactorError, calculate_reefer
 from ..core.schedule import build_timeline
 from ..core.road import RoadRoutingError
@@ -48,10 +49,12 @@ from .schemas import (
     EtsLegOut,
     FactorSetOut,
     JobOut,
+    LaneOut,
     PlaceOut,
     LegOut,
     PlaybackOut,
     PlaybackSegmentOut,
+    PortfolioOut,
     RangeOut,
     ReeferOut,
     RoadFuelOut,
@@ -943,4 +946,70 @@ def terminal_catchment(
         unreachable=catchment.unreachable,
         cells_by_terminal=catchment.cells_by_terminal(),
         notes=catchment.notes,
+    )
+
+
+@router.post("/portfolio", response_model=PortfolioOut)
+def lane_portfolio(
+    file: UploadFile = File(..., description="Shipments as CSV or .xlsx"),
+    scope: str = Form("WTW"),
+    factor_set: str = Form("glec"),
+) -> PortfolioOut:
+    """Read a shipment file as a portfolio of lanes and rank where acting on it pays.
+
+    Routing is the expensive part and happens once per shipment; pricing under every
+    basis afterwards is free, which is what makes the robustness column affordable.
+    """
+    if scope not in {"TTW", "WTW"}:
+        raise HTTPException(status_code=422, detail=f"scope must be TTW or WTW, got {scope!r}")
+
+    try:
+        shipments = parse_shipments(_read_upload(file))
+        portfolio = build_portfolio(shipments, scope=scope, factor_set=factor_set)
+    except ReportInputError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except (FactorNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except requests.RequestException as error:
+        raise HTTPException(status_code=503, detail=f"road routing unavailable: {error}") from error
+
+    if shipments and not portfolio.lanes:
+        detail = portfolio.failed[0][1] if portfolio.failed else "no lane could be built"
+        raise HTTPException(status_code=422, detail=detail)
+
+    return PortfolioOut(
+        lanes=[
+            LaneOut(
+                key=lane.key,
+                origin_name=lane.origin_name,
+                destination_name=lane.destination_name,
+                shipments=lane.shipments,
+                tonnes=round(lane.tonnes, 1),
+                tonne_km=round(lane.tonne_km),
+                intensity_kg_per_tonne_km=round(lane.intensity_kg_per_tonne_km, 4),
+                baseline_co2_kg=round_to_significant(lane.baseline_co2_kg),
+                best_co2_kg=round_to_significant(lane.best_co2_kg),
+                best_label=lane.best_label,
+                saving_kg=round_to_significant(lane.saving_kg),
+                extra_hours=round(lane.extra_hours, 1),
+                ets_delta_eur=round(lane.ets_delta_eur, 2),
+                eur_per_tonne_abated=(
+                    round(lane.eur_per_tonne_abated, 2)
+                    if lane.eur_per_tonne_abated is not None
+                    else None
+                ),
+                wins_under=lane.wins_under,
+                tested_under=lane.tested_under,
+                is_robust=lane.is_robust,
+                is_contested=lane.is_contested,
+            )
+            for lane in portfolio.by_total()
+        ],
+        scope=portfolio.scope,
+        factor_set=portfolio.factor_set,
+        tested_sets=portfolio.tested_sets,
+        total_co2_kg=round_to_significant(portfolio.total_co2_kg),
+        addressable_co2_kg=round_to_significant(portfolio.addressable_co2_kg),
+        failed=[list(f) for f in portfolio.failed],
+        notes=portfolio.notes,
     )

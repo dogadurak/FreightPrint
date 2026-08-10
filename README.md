@@ -75,6 +75,7 @@ muhasebe esasına ne kadar bağlı olduğu.
 | `GET /api/terminals` | Terminal listesi; servise bağlı olmayanlar işaretli |
 | `GET /api/factor-sets` | Seçilebilir faktör setleri ve her birinin deniz esası |
 | `POST /api/routes` | Sevkiyat → alternatifler, emisyon, tasarruf, belirsizlik |
+| `POST /api/portfolio` | Toplu dosya → hat portföyü ve azaltım sıralaması |
 | `POST /api/report` | Toplu dosya → rapor (`output_format`: `csv`/`xlsx`/`pdf`) |
 | `GET /api/places` | Yer adı → aday konumlar (tek cevap değil, liste) |
 | `GET /api/risk-zones` | İlan edilmiş savaş riski bölgeleri (GeoJSON) |
@@ -287,6 +288,29 @@ türetilir ve "tahmin" işaretlenir.
 
 Gebze→Düsseldorf için sonuç: tam karayolu **3,1 gün**, çok modlu **5,5 gün** — ve farkın
 üçte biri hiç hareket edilmeyen süre (18 sa aktarma + 25 sa bekleme).
+
+## Hat portföyü — nerede hareket etmeye değer
+
+Toplu rapor "bu sevkiyat ne saldı" sorusunu cevaplar. Binlerce hareketi olan bir taşıyıcı
+başka bir şey sorar: **hangi hatları değiştirmeye değer, ve değiştirmek neye mal olur?**
+Aynı dosyayı yükleyip "Hat portföyünü çıkar" derseniz üç şey gelir:
+
+- **Ton-km ve yoğunluk.** Toplam, uzun ve yoğun hatları öne çıkarır; `kg/ton-km` ise
+  hattın nasıl işletildiğini söyler. İkisi birlikte durur, çünkü yılda iki sevkiyat
+  taşıyan bir hattın yoğunluğunu düzeltmenin karşılığı yoktur.
+- **Kazancın bedeli.** İki gün uzayan transit bedelsiz değildir ve ETS faturası iki yöne
+  de gidebilir; süre ve € farkı her azaltım rakamının yanında durur.
+- **Dayanıklılık — bu motorun tek başına verebileceği şey.** Aynı koridor bir faktör
+  esasında karbon kazandırıp diğerinde kaybettirebilir. Bir hattın avantajı **test
+  edilen her esas altında** da geçerliyse "dayanıklı" sayılır; yalnız birinde geçerliyse
+  denetimde tartışılacak demektir ve yanına konmaz, işaretlenir.
+
+Rotalama pahalıdır ve sevkiyat başına bir kez yapılır; sonrasında her esas altında
+fiyatlamak bedava — dayanıklılık sütununu ödenebilir kılan budur.
+
+> Pilot veriyle çalıştırıldığında **hiçbir hat dayanıklı çıkmıyor.** Bu bir hesap hatası
+> değil: GLEC'in yayınlanmış ro-ro faktörleriyle çok modlu alternatif, denetimde
+> savunulabilir bir azaltım vermiyor. Ürünün duruşu da tam olarak bu.
 
 ## Korint Kanalı düzeltmesi
 

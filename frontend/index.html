@@ -149,6 +149,7 @@
           </select>
         </label>
         <button type="submit" class="ghost" id="report-submit">Rapor indir</button>
+        <button type="button" class="ghost" id="portfolio-submit">Hat portföyünü çıkar</button>
         <p class="hint" id="report-status" role="status"></p>
         <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya</a></p>
       </form>
@@ -174,6 +175,15 @@
     <section class="kpi-row" id="kpi-row" aria-label="Özet göstergeler"></section>
 
     <div class="notice-slot" id="notice-slot"></div>
+
+    <!-- Hat portföyü: yüklenen dosya hat hat okunur -->
+    <section class="card" id="portfolio-card" hidden>
+      <div class="card-head">
+        <h2 class="card-title">Hat portföyü</h2>
+        <span class="card-note" id="portfolio-note"></span>
+      </div>
+      <div id="portfolio"></div>
+    </section>
 
     <!-- Harita + karşılaştırma grafiği -->
     <section class="panel-grid">

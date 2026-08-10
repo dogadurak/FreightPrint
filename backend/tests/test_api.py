@@ -670,3 +670,45 @@ def test_the_feedstock_choice_reaches_the_answer(client):
     road_palm = next(a for a in palm["alternatives"] if a["is_all_road"])["total_co2_kg"]
 
     assert road_palm > road_uco * 3
+
+
+def test_the_portfolio_groups_shipments_into_lanes(client):
+    response = client.post(
+        "/api/portfolio",
+        files={"file": ("shipments.csv", SHIPMENT_CSV, "text/csv")},
+        data={"scope": "WTW", "factor_set": "glec"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["lanes"]
+    assert body["total_co2_kg"] > 0
+    assert len(body["tested_sets"]) > 1, "robustness against one basis is not robustness"
+
+
+def test_every_lane_says_which_bases_it_wins_under(client):
+    """The column that decides whether a saving can be defended, so it must never be
+    absent or silently empty when the lane claims to be robust."""
+    body = client.post(
+        "/api/portfolio",
+        files={"file": ("shipments.csv", SHIPMENT_CSV, "text/csv")},
+        data={"scope": "WTW", "factor_set": "glec"},
+    ).json()
+
+    for lane in body["lanes"]:
+        assert lane["tested_under"]
+        assert set(lane["wins_under"]) <= set(lane["tested_under"])
+        if lane["is_robust"]:
+            assert set(lane["wins_under"]) == set(lane["tested_under"])
+        assert not (lane["is_robust"] and lane["is_contested"])
+
+
+def test_a_portfolio_from_a_bad_file_is_refused(client):
+    response = client.post(
+        "/api/portfolio",
+        files={"file": ("shipments.csv", "origin_lon,origin_lat\n29.43,40.78\n", "text/csv")},
+        data={"scope": "WTW", "factor_set": "glec"},
+    )
+
+    assert response.status_code == 422
+    assert "missing column" in response.json()["detail"]

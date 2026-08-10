@@ -354,3 +354,40 @@ class CatchmentOut(BaseModel):
     unreachable: int
     cells_by_terminal: dict[str, int]
     notes: list[str] = []
+
+
+class LaneOut(BaseModel):
+    """One lane of the portfolio, with the cost of acting on it beside the gain."""
+
+    key: str
+    origin_name: str
+    destination_name: str
+    shipments: int
+    tonnes: float
+    tonne_km: float
+    intensity_kg_per_tonne_km: float
+    baseline_co2_kg: float
+    best_co2_kg: float
+    best_label: str
+    saving_kg: float
+    extra_hours: float
+    ets_delta_eur: float
+    eur_per_tonne_abated: float | None = None
+    # Which accounting bases the alternative actually beats the road baseline under.
+    # A lane that wins under all of them can be acted on and defended; one that wins
+    # under some is flagged rather than ranked beside it.
+    wins_under: list[str] = []
+    tested_under: list[str] = []
+    is_robust: bool = False
+    is_contested: bool = False
+
+
+class PortfolioOut(BaseModel):
+    lanes: list[LaneOut]
+    scope: str
+    factor_set: str
+    tested_sets: list[str]
+    total_co2_kg: float
+    addressable_co2_kg: float
+    failed: list[list[str]] = []
+    notes: list[str] = []
