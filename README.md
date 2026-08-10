@@ -290,6 +290,38 @@ türetilir ve "tahmin" işaretlenir.
 Gebze→Düsseldorf için sonuç: tam karayolu **3,1 gün**, çok modlu **5,5 gün** — ve farkın
 üçte biri hiç hareket edilmeyen süre (18 sa aktarma + 25 sa bekleme).
 
+## CO2 geçiş ücreti — karbonun faturaya döndüğü yer
+
+Almanya 1 Aralık 2023'ten beri kamyon geçiş ücretinde karbonu fiyatlıyor: **ton başına
+200 €**, yani bu motorun deniz için kullandığı tahsis fiyatının iki buçuk katı. Türkiye–
+Almanya koridorunda karayolu kilometrelerinin **680'i Almanya'da**, dolayısıyla bu bir
+yuvarlama kalemi değil — karbon rakamının taşıyıcının zaten aldığı bir faturaya
+dönüştüğü ilk yer.
+
+Ölçüldü, Gebze→Düsseldorf 24 t:
+
+| Rota | CO2 geçiş ücreti |
+|---|---|
+| Tam karayolu | **245 €** |
+| Pendik–Trieste–Köln | 15 € |
+
+Yani GLEC karbonunda **kaybeden** çok modlu seçenek, Alman CO2 geçiş ücretinde **230 €
+kazanıyor.** İki rakam yan yana durmalı; taşıyıcının kararı ikisinden birine değil,
+toplamına bakar.
+
+Bunu mümkün kılan yeni yetenek: **rotanın hangi ülkede kaç km geçtiği**
+(`data/countries.geojson`, Natural Earth 50m, koridora kırpılmış). Paylar geometriden,
+toplam OSRM'in gerçek mesafesinden gelir — OSRM'in sadeleştirilmiş çizgisi gerçek yoldan
+%8 kısadır ve çizgiyi ölçmek Türkiye–Almanya koşusunun 200 km'sini sessizce kaybettirirdi.
+
+**Yalnızca Almanya fiyatlanıyor** ve sebebi önemli. Avusturya (Ocak 2024) ve Çekya (Mart
+2024) CO2 sınıfına göre ücretlendiriyor ama ton başına karbon fiyatı **yayınlamıyorlar**;
+sınıf başına km ücreti belirliyorlar. Çarpılacak bir karbon fiyatı olmadığı için
+uydurmak yerine "ücretlendirilmedi, sebebi şu" diye gösteriliyorlar — sıfır değil.
+
+> Bu, geçiş ücretinin **yalnızca CO2 bileşenidir.** Altyapı, gürültü ve hava kirliliği
+> bileşenleri Alman faturasının çok daha büyük kısmıdır ve karbonla değişmez.
+
 ## ISO 14083 öz değerlendirmesi — bu rakam denetimden geçer mi
 
 Pano, seçili faktör esasının standarda göre nerede durduğunu gösterir. **Belgelendirme

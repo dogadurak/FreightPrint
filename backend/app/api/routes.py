@@ -36,6 +36,7 @@ from ..core.playback import PlaybackMismatch, build_playback
 from ..core.portfolio import build_portfolio
 from ..core.reefer import ReeferFactorError, calculate_reefer
 from ..core.schedule import build_timeline
+from ..core.tolls import estimate_tolls
 from ..core.road import RoadRoutingError
 from ..core.route import Leg, RouteAlternative, find_route_alternatives
 from ..core.sea import BLOCKABLE_PASSAGES, DEFAULT_RESTRICTIONS, SeaRoutingError, sea_route
@@ -68,8 +69,10 @@ from .schemas import (
     ScheduleStepOut,
     ScenarioOut,
     ScenarioTotalOut,
+    CountryTollOut,
     TerminalOut,
     TimelineOut,
+    TollOut,
     ZoneCrossingOut,
 )
 
@@ -317,6 +320,29 @@ def _playback_out(route, shipment, reefer_emission) -> PlaybackOut | None:
     )
 
 
+def _toll_out(route, shipment) -> TollOut | None:
+    """The CO2 toll component, or nothing when the route has no road distance to charge."""
+    estimate = estimate_tolls(route, shipment.co2_by_mode.get("road", 0.0))
+    if not estimate.countries:
+        return None
+    return TollOut(
+        countries=[
+            CountryTollOut(
+                iso=c.iso, country=c.country,
+                distance_km=round(c.distance_km, 1),
+                co2_kg=round_to_significant(c.co2_kg),
+                cost_eur=round(c.cost_eur, 2),
+                priced=c.priced, reason=c.reason,
+            )
+            for c in estimate.countries
+        ],
+        total_eur=round(estimate.total_eur, 2),
+        priced_co2_kg=round_to_significant(estimate.priced_co2_kg),
+        unpriced_co2_kg=round_to_significant(estimate.unpriced_co2_kg),
+        notes=estimate.notes,
+    )
+
+
 def _leg_countries(route, terminals) -> list[tuple[str | None, str | None]]:
     """Country pair per priced leg, in the order `expand_route_legs` produces them.
 
@@ -437,6 +463,10 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals)
                 # Allowance cost follows the emissions, so it belongs to the scenario;
                 # risk follows the track and is reported once on the alternative.
                 ets=_ets_out(shipment, route, terminals, request),
+                # Carbon priced by a road authority rather than by the allowance market:
+                # Germany charges 200 EUR a tonne in its truck toll, two and a half times
+                # the shipping allowance price, so this moves the money answer.
+                co2_toll=_toll_out(route, shipment),
                 reefer=reefer,
                 total_with_reefer_co2_kg=(
                     round_to_significant(shipment.total_co2_kg + reefer.co2_kg)

@@ -312,6 +312,11 @@ button.ghost:hover { background: var(--surface-sunken); }
 .check-field span { font-weight: 500; }
 .check-field small { display: block; font-weight: 400; }
 
+/* A country that charges by CO2 class without publishing a per-tonne rate is shown
+   quietly rather than as a zero — it is unpriced, not free. */
+.muted-row td { color: var(--ink-muted); }
+.span-2 { grid-column: 1 / -1; }
+
 /* ── ISO 14083 self-assessment ───────────────────────────────────────── */
 .verdict {
   margin: 0 0 0.5rem; padding: 0.45rem 0.7rem; border-radius: var(--r-sm);

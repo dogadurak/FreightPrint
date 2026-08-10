@@ -736,3 +736,35 @@ def test_a_basis_that_cannot_price_is_refused(client):
     response = client.get("/api/conformance", params={"factor_set": "reference", "scope": "WTW"})
 
     assert response.status_code == 422
+
+
+def test_the_co2_toll_component_reaches_the_dashboard(client):
+    body = _post(client, factor_set="glec", scope="WTW",
+                 scenarios=[{"factor_set": "glec", "scope": "WTW"}]).json()
+    totals = body["scenarios"][0]["totals"]
+
+    road = next(t for t in totals if t["is_all_road"])
+    assert road["co2_toll"]["total_eur"] > 0
+    assert any(c["iso"] == "DE" and c["priced"] for c in road["co2_toll"]["countries"])
+
+
+def test_a_country_without_a_published_carbon_price_is_unpriced_not_free(client):
+    body = _post(client, factor_set="glec", scope="WTW",
+                 scenarios=[{"factor_set": "glec", "scope": "WTW"}]).json()
+    road = next(t for t in body["scenarios"][0]["totals"] if t["is_all_road"])
+
+    austria = next(c for c in road["co2_toll"]["countries"] if c["iso"] == "AT")
+    assert not austria["priced"]
+    assert austria["cost_eur"] == 0
+    assert austria["reason"], "an unpriced country must say why"
+
+
+def test_staying_off_german_roads_shows_up_as_money(client):
+    body = _post(client, factor_set="glec", scope="WTW",
+                 scenarios=[{"factor_set": "glec", "scope": "WTW"}]).json()
+    totals = body["scenarios"][0]["totals"]
+
+    road = next(t for t in totals if t["is_all_road"])
+    multimodal = next(t for t in totals if not t["is_all_road"])
+
+    assert road["co2_toll"]["total_eur"] > multimodal["co2_toll"]["total_eur"] * 5

@@ -223,6 +223,32 @@ class PlaybackOut(BaseModel):
     stationary_hours: float = 0.0
 
 
+class CountryTollOut(BaseModel):
+    iso: str
+    country: str
+    distance_km: float
+    co2_kg: float
+    cost_eur: float
+    priced: bool
+    reason: str = ""
+
+
+class TollOut(BaseModel):
+    """The CO2 component of the road tolls a route attracts, country by country.
+
+    Not the toll: infrastructure, noise and air pollution are the larger part of a
+    German bill and none of them follow carbon. Countries that charge by CO2 class
+    without publishing a per-tonne rate appear unpriced with the reason attached, never
+    as zero.
+    """
+
+    countries: list[CountryTollOut]
+    total_eur: float
+    priced_co2_kg: float
+    unpriced_co2_kg: float
+    notes: list[str] = []
+
+
 class ScenarioTotalOut(BaseModel):
     """One alternative priced under one scenario. Geometry is deliberately absent —
     it is identical across scenarios and already carried by `alternatives`."""
@@ -236,6 +262,7 @@ class ScenarioTotalOut(BaseModel):
     ets: EtsCostOut | None = None
     reefer: ReeferOut | None = None
     total_with_reefer_co2_kg: float | None = None
+    co2_toll: TollOut | None = None
 
 
 class ScenarioOut(BaseModel):

@@ -1280,9 +1280,33 @@ function renderRiskCost(scenario) {
       </table>
       ${ets.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
 
+  // Carbon priced by a road authority rather than by the allowance market. Germany
+  // charges 200 EUR a tonne in its truck toll — two and a half times the shipping
+  // allowance price — so the route that loses on carbon can still win on the invoice,
+  // and a carrier needs both numbers side by side.
+  const toll = total.co2_toll;
+  const tollBlock = !toll
+    ? `<p class="hint">Bu rotanın karayolu bacağı yok.</p>`
+    : `<table>
+        <thead><tr><th>Ülke</th><th>km</th><th>kg CO2</th><th>€</th></tr></thead>
+        <tbody>${toll.countries.map((c) => `<tr class="${c.priced ? "" : "muted-row"}">
+          <td>${c.country}${c.priced ? "" : `<br><span class="card-note">${c.reason}</span>`}</td>
+          <td class="num">${nf.format(c.distance_km)}</td>
+          <td class="num">${nf.format(c.co2_kg)}</td>
+          <td class="num">${c.priced ? eur.format(c.cost_eur) : "—"}</td>
+        </tr>`).join("")}</tbody>
+        <tfoot><tr>
+          <td>Ücretlendirilen ${nf.format(toll.priced_co2_kg)} kg</td>
+          <td></td><td></td>
+          <td class="num">${eur.format(toll.total_eur)}</td>
+        </tr></tfoot>
+      </table>
+      ${toll.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
+
   $("risk-cost").innerHTML = `<div class="risk-grid">
       <section><h3 class="sub-title">Güzergâh riski</h3>${riskBlock}${passages}${untracked}</section>
       <section><h3 class="sub-title">ETS yükümlülüğü</h3>${etsBlock}</section>
+      <section class="span-2"><h3 class="sub-title">CO2 geçiş ücreti — ülkeye göre</h3>${tollBlock}</section>
     </div>`;
 
   $("risk-note").textContent = risk?.is_exposed
