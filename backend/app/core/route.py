@@ -80,6 +80,12 @@ def _build_routing_graph(
         duration_h=direct.duration_h,
         ferry_km=direct.ferry_km,
         geometry=direct.geometry,
+        # Which end the geometry was computed from. The graph is undirected, so an edge
+        # is stored once and can be walked either way; without this the track comes back
+        # in whichever direction it happened to be routed. It draws the same line either
+        # way, which is why this went unseen until the journey player walked along it and
+        # the truck jumped to the destination and drove backwards to the terminal.
+        geometry_from=ORIGIN_NODE,
     )
 
     for endpoint_node, point in ((ORIGIN_NODE, origin), (DESTINATION_NODE, destination)):
@@ -93,6 +99,9 @@ def _build_routing_graph(
                 duration_h=leg.duration_h,
                 ferry_km=leg.ferry_km,
                 geometry=leg.geometry,
+                # Routed outward from the endpoint, including for the destination, where
+                # the leg is actually travelled terminal-to-door.
+                geometry_from=endpoint_node,
             )
     return graph
 
@@ -109,6 +118,12 @@ def _leg_from_edge(
     def name(node: str) -> str:
         return endpoint_names.get(node) or terminals[node].name
 
+    # Walk the track the way the leg is travelled. An undirected edge holds one geometry
+    # and both directions use it, so half of them would otherwise run backwards.
+    geometry = edge.get("geometry", ())
+    if geometry and edge.get("geometry_from") not in (None, from_node):
+        geometry = tuple(reversed(geometry))
+
     return Leg(
         mode=edge["mode"],
         from_name=name(from_node),
@@ -120,7 +135,7 @@ def _leg_from_edge(
         ref_distance_km=edge.get("ref_distance_km"),
         computed_distance_km=edge["distance_km"] if edge["mode"] == "road" else None,
         ferry_km=edge.get("ferry_km", 0.0),
-        geometry=edge.get("geometry", ()),
+        geometry=geometry,
     )
 
 

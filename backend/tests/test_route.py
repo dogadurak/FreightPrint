@@ -302,3 +302,44 @@ def test_the_shipped_concurrency_limit_is_small():
     from app.core import road
 
     assert 1 <= road.MAX_CONCURRENT_REQUESTS <= 8
+
+
+def test_every_leg_track_runs_the_way_the_leg_is_travelled(monkeypatch):
+    """The graph is undirected, so an edge holds one geometry and both directions read
+    it. The last-mile leg is routed outward from the door but travelled terminal-to-door,
+    so without reversing it the track runs backwards.
+
+    A reversed polyline draws the same line, which is why this survived until the journey
+    player walked along one and the truck jumped to the destination and drove back to the
+    terminal.
+    """
+    # Geometry runs from whichever end OSRM was asked from, exactly as the real client
+    # returns it — which is the condition the bug lived in.
+    def fake_road_route(origin, destination):
+        km = haversine_km(origin, destination) * 1.3
+        return RoadRoute(distance_km=km, duration_h=km / 70, geometry=(origin, destination))
+
+    monkeypatch.setattr(route, "road_route", fake_road_route)
+
+    routes = find_route_alternatives((29.4306, 40.7889), (6.7735, 51.2277))
+    terminals = load_terminals()
+
+    checked = 0
+    for alternative in routes:
+        for leg in alternative.legs:
+            if not leg.geometry or len(leg.geometry) < 2:
+                continue
+            start, end = leg.geometry[0], leg.geometry[-1]
+            for node, point in ((leg.from_id, start), (leg.to_id, end)):
+                if node not in terminals:
+                    continue
+                near = haversine_km(terminals[node].coords, point)
+                far = haversine_km(
+                    terminals[node].coords, end if point is start else start
+                )
+                assert near < far, (
+                    f"{leg.from_name} -> {leg.to_name} track runs backwards: "
+                    f"{node} is {near:.0f} km from its own end and {far:.0f} from the other"
+                )
+                checked += 1
+    assert checked, "no leg had a terminal at either end; the test proved nothing"
