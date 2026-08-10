@@ -1590,14 +1590,22 @@ function drawPlayHead() {
     // The vehicle is the mode currently carrying the box. Parked, it keeps the mode it
     // arrived on rather than becoming a generic dot: it is a trailer sitting on a quay,
     // not nothing.
-    element.dataset.mode = moving ? (segment.mode ?? "road") : (lastMovingMode ?? "road");
-    element.innerHTML = VEHICLE[element.dataset.mode] ?? VEHICLE.road;
+    const mode = (moving ? segment.mode : lastMovingMode) ?? "road";
+    // Rewritten only when the vehicle actually changes. Rebuilding the SVG on every
+    // frame restarts its animation thirty times a second, which reads as a twitch.
+    if (element.dataset.mode !== mode) {
+      element.dataset.mode = mode;
+      element.innerHTML = `<span class="play-vehicle">${VEHICLE[mode] ?? VEHICLE.road}</span>`;
+    }
     // Point the vehicle the way it is travelling. Heading west would otherwise turn it
     // upside down, which reads as a bug rather than as a bearing, so it is mirrored
     // instead and stays upright.
     const bearing = bearingAt(segment, playHead);
-    element.style.setProperty("--bearing", `${bearing}deg`);
-    element.style.setProperty("--flip", Math.abs(bearing) > 90 ? -1 : 1);
+    const svg = element.querySelector("svg");
+    if (svg) {
+      svg.style.setProperty("--bearing", `${bearing}deg`);
+      svg.style.setProperty("--flip", Math.abs(bearing) > 90 ? -1 : 1);
+    }
   }
 }
 

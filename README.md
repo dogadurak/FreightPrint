@@ -311,6 +311,27 @@ gerçek yoluna, Mora'nın güneyinden Malea Burnu'nu dolanarak İyon Denizi'ne �
 Düzeltilmiş iz referansa da daha yakın. Kanal kutusunu kesen rota kalmadığını üç bacakta
 sınayan kalıcı bir test var; bir gün yine keserse ağın altımızdan değiştiği anlaşılır.
 
+### Dar boğazlarda iz düzeltmesi
+
+Kanal kapandıktan sonra ikinci bir sorun kaldı: searoute'un ağı **topolojik bir graf,
+deniz haritası değil.** Kenarları 170 km'ye varan aralıklarla düz çizgiler, bu yüzden
+birkaçı burunları ve boğazları kesiyordu — en kötüsü Pendik–Trieste izinin **29 km'sini
+Gelibolu Yarımadası'nın üzerinden** geçiriyordu.
+
+`data/sea_track_refinements.json` bu kenarları sudan geçen nokta zincirleriyle
+değiştirir. Çanakkale, 0,01 derecelik bir su ızgarası üzerinde en kısa yol aranarak
+çıkarıldı; diğerleri elle yazılıp aynı kıyı verisiyle doğrulandı.
+
+| | kara teması |
+|---|---|
+| Düzeltme öncesi | 55,2 km |
+| **Düzeltme sonrası** | **10,9 km** (Mersin–Trieste'de 0) |
+
+Kalan pay Çanakkale'de: searoute'un `(26.2, 40.1)` düğümü Natural Earth kıyısına göre
+~1 km karada kalıyor, boğaz ise yalnızca 4 km geniş. Bu artık rotalamayla giderilemez.
+`backend/tests/fixtures/coastline.geojson` (koridora kırpılmış, sadeleştirilmiş) ile
+üç bacakta kalıcı olarak sınanıyor.
+
 ## Yolculuk oynatıcı
 
 Haritanın altındaki oynat düğmesi sevkiyatı rotası boyunca yürütür: saat ilerler, CO2

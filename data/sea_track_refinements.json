@@ -1,0 +1,147 @@
+{
+  "_note": "searoute's network is a topological graph, not a chart: its edges are straight lines between nodes up to 170 km apart, so a few of them cut across capes and straits. These chains replace those edges with a path through the water. Each was traced against Natural Earth 10m coastline -- the Dardanelles by a shortest path over a 0.01-degree water grid, the rest by hand and verified the same way -- and together they take the pilot corridor's land contact from 55.2 km to 6.6 km. What is left is at the Dardanelles, where searoute's own node (26.2, 40.1) sits on land by about a kilometre; the strait is 4 km wide and the coastline is accurate to roughly one, so that residue cannot be routed away.",
+  "dardanelles": {
+    "from": [
+      26.768188,
+      40.440676
+    ],
+    "to": [
+      26.2,
+      40.1
+    ],
+    "via": [
+      [
+        26.74,
+        40.44
+      ],
+      [
+        26.71,
+        40.41
+      ],
+      [
+        26.65,
+        40.39
+      ],
+      [
+        26.62,
+        40.36
+      ],
+      [
+        26.59,
+        40.33
+      ],
+      [
+        26.56,
+        40.31
+      ],
+      [
+        26.5,
+        40.29
+      ],
+      [
+        26.47,
+        40.26
+      ],
+      [
+        26.44,
+        40.23
+      ],
+      [
+        26.41,
+        40.2
+      ],
+      [
+        26.39,
+        40.17
+      ],
+      [
+        26.37,
+        40.14
+      ],
+      [
+        26.34,
+        40.12
+      ],
+      [
+        26.31,
+        40.1
+      ],
+      [
+        26.28,
+        40.09
+      ],
+      [
+        26.25,
+        40.07
+      ],
+      [
+        26.22,
+        40.06
+      ]
+    ]
+  },
+  "dardanelles_mouth": {
+    "from": [
+      26.2,
+      40.1
+    ],
+    "to": [
+      25.766724,
+      39.666724
+    ],
+    "via": [
+      [
+        26.1,
+        40.02
+      ],
+      [
+        25.95,
+        39.85
+      ]
+    ]
+  },
+  "cape_malea": {
+    "from": [
+      23.6,
+      36.5
+    ],
+    "to": [
+      22.39158,
+      36.372798
+    ],
+    "via": [
+      [
+        23.3,
+        36.2
+      ],
+      [
+        22.95,
+        36.02
+      ],
+      [
+        22.6,
+        36.1
+      ]
+    ]
+  },
+  "marmara_west": {
+    "from": [
+      28.449481,
+      40.805825
+    ],
+    "to": [
+      27.277634,
+      40.60495
+    ],
+    "via": [
+      [
+        28.0,
+        40.62
+      ],
+      [
+        27.6,
+        40.55
+      ]
+    ]
+  }
+}

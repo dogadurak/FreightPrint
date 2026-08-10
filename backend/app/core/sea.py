@@ -5,6 +5,7 @@ import searoute as sr
 from shapely.geometry import LineString, box
 
 from .cache import DiskCache
+from .network import haversine_km
 
 # searoute's network lets routes cut through the Corinth Canal, which no ro-ro or
 # container ship can transit: the canal is 21 m wide at the bottom and takes vessels up
@@ -85,17 +86,28 @@ def sea_route(
     Cached on disk as well as in process: searoute rebuilds a large graph per process and
     the answer for a fixed pair never changes.
     """
-    # The sea2 prefix retires every entry computed while the Corinth Canal was still in
-    # the network: those tracks cross the isthmus and their distances are short by the
-    # length of the detour they skipped.
+    # The version prefix retires stale tracks whenever the network is corrected: sea2
+    # dropped everything computed while the Corinth Canal was still in it, sea3
+    # everything from before the straits and capes were refined.
     key = (
-        f"sea2|{origin[0]},{origin[1]}|{destination[0]},{destination[1]}"
+        f"sea3|{origin[0]},{origin[1]}|{destination[0]},{destination[1]}"
         f"|{speed_knot}|{','.join(sorted(restrictions))}"
     )
     cached = _cache().get_or_compute(
         key, lambda: asdict(_query_searoute(origin, destination, speed_knot, restrictions))
     )
     return SeaRoute(**cached)
+
+
+@lru_cache(maxsize=1)
+def _refinements() -> dict:
+    """Waypoint chains that pull a few network edges off the land they cut."""
+    import json
+
+    from .network import DATA_DIR
+
+    with open(DATA_DIR / "sea_track_refinements.json", encoding="utf-8") as f:
+        return {k: v for k, v in json.load(f).items() if not k.startswith("_")}
 
 
 @lru_cache(maxsize=1)
@@ -113,7 +125,22 @@ def _network():
     marnet.load_geojson(os.path.join(os.path.dirname(sr.__file__), "data", "marnet_searoute.geojson"))
     if marnet.has_node(CORINTH_CANAL_NODE):
         marnet.remove_node(CORINTH_CANAL_NODE)
-        marnet.update_kdtree()
+
+    # searoute's edges are straight lines between nodes as much as 170 km apart, so a
+    # handful of them cut across capes and straits — the worst put 29 km of the
+    # Pendik-Trieste track over the Gallipoli peninsula. Each is replaced by a chain of
+    # waypoints through the water, which corrects the drawn track and the distance
+    # together rather than leaving the two disagreeing.
+    for chain in _refinements().values():
+        start, end = tuple(chain["from"]), tuple(chain["to"])
+        if not marnet.has_edge(start, end):
+            continue  # the network changed; leave it alone rather than guess
+        marnet.remove_edge(start, end)
+        points = [start, *(tuple(p) for p in chain["via"]), end]
+        for a, b in zip(points, points[1:]):
+            marnet.add_edge(a, b, weight=haversine_km(a, b))
+
+    marnet.update_kdtree()
     return marnet
 
 
