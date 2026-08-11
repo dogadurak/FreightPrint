@@ -87,7 +87,13 @@ def _print_route(shipment, route, tree_factors) -> None:
 
     for leg in shipment.legs:
         connection = f"{leg.mode:<5} {leg.from_name} -> {leg.to_name}"
-        print(f"    {connection:<44} {leg.distance_km:>8,.0f} km {leg.co2_kg:>10,.0f} kg CO2")
+        # Rounded the same way the total below is, and the same way the CSV report and
+        # the API round every figure they publish. Printing a leg at full precision
+        # under a total cut to three significant figures made an all-road route — one
+        # leg, one total — show 4,527 above 4,530 and claim more precision for the part
+        # than for the whole.
+        co2 = round_to_significant(leg.co2_kg)
+        print(f"    {connection:<44} {leg.distance_km:>8,.0f} km {co2:>10,.0f} kg CO2")
 
     total = round_to_significant(shipment.total_co2_kg)
     print(f"    {'TOPLAM':<44} {route.total_distance_km:>8,.0f} km {total:>10,.0f} kg CO2")

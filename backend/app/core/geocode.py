@@ -1,5 +1,7 @@
 import json
+import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import requests
@@ -11,6 +13,15 @@ NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 USER_AGENT = "FreightPrint/0.1 (multimodal freight carbon research)"
 MIN_REQUEST_INTERVAL_S = 1.1
 REQUEST_TIMEOUT_S = 30
+
+# How many callers may queue for their turn. The throttle serialises requests, so a
+# burst of autocomplete queries would otherwise park a threadpool worker each and stall
+# the routing endpoints that share the pool. Past this, say so rather than queue.
+MAX_WAITING = 8
+
+_turn = threading.Lock()
+_waiting = threading.BoundedSemaphore(MAX_WAITING)
+_earliest_next_request = 0.0
 
 CACHE_PATH = CACHE_DIR / "geocode_cache.json"
 
@@ -38,6 +49,45 @@ CASE_FOLD = str.maketrans({"İ": "I", "ı": "i", "Ş": "S", "ş": "s", "Ğ": "G"
 
 class GeocodingError(RuntimeError):
     pass
+
+
+class GeocodingBusy(GeocodingError):
+    """Too many callers already waiting their turn at the public geocoder."""
+
+
+@contextmanager
+def rate_limited():
+    """Hold Nominatim to one request per interval, across every caller and every outcome.
+
+    The spacing used to be a `time.sleep` **after** the response had been read, which
+    got both halves wrong. It did not run when the request raised, so precisely the run
+    that was erroring hammered the service unthrottled; and it spaced nothing between
+    concurrent callers, who all left at once and then all slept. It also charged every
+    caller 1.1s of latency for a courtesy owed to the *next* request, so the dashboard's
+    autocomplete could never answer in under a second however idle the service was.
+
+    Waiting before the request instead means an idle service answers immediately and a
+    busy one queues, which is what the policy actually asks for.
+    """
+    global _earliest_next_request
+
+    if not _waiting.acquire(blocking=False):
+        raise GeocodingBusy(
+            f"{MAX_WAITING} geocoding requests are already queued; try again shortly"
+        )
+    try:
+        with _turn:
+            delay = _earliest_next_request - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            try:
+                yield
+            finally:
+                # Set from when this request finished, and set even if it failed: a
+                # server returning errors is the one that least wants to be retried fast.
+                _earliest_next_request = time.monotonic() + MIN_REQUEST_INTERVAL_S
+    finally:
+        _waiting.release()
 
 
 def normalise_country(value: str) -> str:
@@ -93,20 +143,20 @@ def geocode(place: str, country: str, cache: dict | None = None) -> tuple[float,
         return tuple(hit) if hit else None
 
     query = {"postalcode" if looks_like_postal_code(place) else "q": place.strip()}
-    response = requests.get(
-        NOMINATIM_URL,
-        params={
-            **query,
-            "countrycodes": country_code.lower(),
-            "format": "json",
-            "limit": 1,
-        },
-        headers={"User-Agent": USER_AGENT},
-        timeout=REQUEST_TIMEOUT_S,
-    )
-    response.raise_for_status()
-    results = response.json()
-    time.sleep(MIN_REQUEST_INTERVAL_S)
+    with rate_limited():
+        response = requests.get(
+            NOMINATIM_URL,
+            params={
+                **query,
+                "countrycodes": country_code.lower(),
+                "format": "json",
+                "limit": 1,
+            },
+            headers={"User-Agent": USER_AGENT},
+            timeout=REQUEST_TIMEOUT_S,
+        )
+        response.raise_for_status()
+        results = response.json()
 
     coords = [float(results[0]["lon"]), float(results[0]["lat"])] if results else None
     cache[key] = coords
@@ -142,13 +192,13 @@ def search(query: str, country: str | None = None, limit: int = 5) -> list[Candi
     if country:
         params["countrycodes"] = normalise_country(country).lower()
 
-    response = requests.get(
-        NOMINATIM_URL, params=params, headers={"User-Agent": USER_AGENT},
-        timeout=REQUEST_TIMEOUT_S,
-    )
-    response.raise_for_status()
-    results = response.json()
-    time.sleep(MIN_REQUEST_INTERVAL_S)
+    with rate_limited():
+        response = requests.get(
+            NOMINATIM_URL, params=params, headers={"User-Agent": USER_AGENT},
+            timeout=REQUEST_TIMEOUT_S,
+        )
+        response.raise_for_status()
+        results = response.json()
 
     return [
         Candidate(

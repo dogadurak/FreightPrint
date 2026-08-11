@@ -22,7 +22,7 @@ from ..core.catchment import (
 from ..core.conformance import assess as assess_conformance
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
 from ..core.deliverable import report_to_pdf, report_to_xlsx
-from ..core.geocode import GeocodingError, search
+from ..core.geocode import GeocodingBusy, GeocodingError, search
 from ..core.jobs import DEFAULT_CONCURRENCY, registry
 from ..core.network import build_network, load_terminals
 from ..core.report import (
@@ -900,6 +900,12 @@ def find_places(q: str, country: str | None = None, limit: int = 5) -> list[Plac
         raise HTTPException(status_code=422, detail="q must not be empty")
     try:
         candidates = search(q, country=country, limit=limit)
+    except GeocodingBusy as error:
+        # Ours to fix by waiting, not the caller's by rewriting the query, so 503 with a
+        # retry hint rather than the 422 an unusable country code earns.
+        raise HTTPException(
+            status_code=503, detail=str(error), headers={"Retry-After": "2"}
+        ) from error
     except GeocodingError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except requests.RequestException as error:
