@@ -134,18 +134,28 @@ function initMap() {
   map.on("click", onMapClick);
 }
 
+/** Origin hollow, destination filled — the same pair of shapes the form's dots use, so
+ *  the sidebar and the map say the endpoints are the same thing.
+ *
+ *  The destination used to be `#b3261e`, which on this map already means "risk zone
+ *  crossed": one colour cannot carry a status and an identity at once. Distinguishing
+ *  them by fill rather than by hue frees the red and survives colour-blind reading.
+ */
 function endpointMarker(kind, lngLat) {
   const element = document.createElement("div");
+  const isOrigin = kind === "origin";
   element.style.cssText =
-    "width:15px;height:15px;border-radius:50%;box-shadow:0 0 0 2px #fff,0 1px 3px rgba(0,0,0,.4);"
-    + `background:${kind === "origin" ? "#10141a" : "#b3261e"}`;
+    "width:15px;height:15px;border-radius:50%;box-sizing:border-box;"
+    + "box-shadow:0 0 0 2px #fff,0 1px 3px rgba(0,0,0,.4);"
+    + (isOrigin ? "background:#fff;border:3.5px solid #10141a" : "background:#10141a");
   const marker = new maplibregl.Marker({ element, draggable: true })
     .setLngLat(lngLat)
     .setPopup(new maplibregl.Popup({ offset: 14, closeButton: false })
-      .setText(kind === "origin" ? "Kalkış — sürükleyin" : "Varış — sürükleyin"))
+      .setText(isOrigin ? "Kalkış — sürükleyin" : "Varış — sürükleyin"))
     .addTo(map);
   marker.on("dragend", () => {
-    (kind === "origin" ? originInput : destinationInput).value = formatPoint(marker.getLngLat());
+    (isOrigin ? originInput : destinationInput).value = formatPoint(marker.getLngLat());
+    validatePoints();
   });
   return marker;
 }
@@ -171,7 +181,170 @@ function onMapClick(event) {
   if (!picking) return;
   (picking === "origin" ? originInput : destinationInput).value = formatPoint(event.lngLat);
   placeEndpointMarkers();
+  validatePoints();
   setPicking(null);
+}
+
+/* ── shipment form ───────────────────────────────────────────────────── */
+
+/** Say a coordinate is unusable while it is being typed, not on submit.
+ *
+ *  `parsePoint` already refuses anything outside the globe, but it did so silently
+ *  until the request went out, so a transposed lat/lon looked accepted right up to
+ *  the point it failed. Returns whether the form can be sent.
+ */
+function validatePoints() {
+  const problems = [];
+  for (const [label, input] of [["Kalkış", originInput], ["Varış", destinationInput]]) {
+    const ok = parsePoint(input.value) !== null;
+    input.classList.toggle("is-invalid", !ok);
+    if (!ok) problems.push(label);
+  }
+  const error = $("point-error");
+  error.hidden = problems.length === 0;
+  error.textContent = problems.length
+    ? `${problems.join(" ve ")} için "boylam, enlem" bekleniyor — boylam ±180, enlem ±90.`
+    : "";
+  return problems.length === 0;
+}
+
+/** Send the freight the other way, names and coordinates together.
+ *
+ *  Swapping the coordinates alone would leave Gebze labelling Düsseldorf's point, and
+ *  the label is what every chart, the report and the map popup then carry.
+ */
+function swapEndpoints() {
+  const fields = [
+    [originInput, destinationInput],
+    [form.elements.origin_name, form.elements.destination_name],
+  ];
+  for (const [from, to] of fields) [from.value, to.value] = [to.value, from.value];
+  placeEndpointMarkers();
+  validatePoints();
+}
+
+/* ── terminal picker ─────────────────────────────────────────────────── */
+
+const TERMINAL_KINDS = {
+  roro_port: "ro-ro limanı",
+  port: "liman",
+  rail_terminal: "demiryolu terminali",
+  roro_rail_hub: "ro-ro + demiryolu",
+};
+
+/** Fetched once and shared by both endpoints, and deliberately not through the map's
+ *  loader: `loadTerminals` runs inside `map.on("load")`, so a browser that could not
+ *  load MapLibre would leave the picker permanently empty. The picker is exactly what
+ *  such a browser needs most, since clicking the map is not available to it. */
+let terminalsPromise = null;
+const knownTerminals = () => (
+  terminalsPromise ??= fetch("/api/terminals").then((r) => (r.ok ? r.json() : []))
+);
+
+/** Fill an endpoint from a terminal: name and coordinates together.
+ *
+ *  Setting only the name would leave the label describing one place and the coordinate
+ *  another, and the label is what the report, the charts and the map popups then carry.
+ */
+function useTerminal(terminal, isOrigin) {
+  (isOrigin ? originInput : destinationInput).value = `${terminal.lon}, ${terminal.lat}`;
+  form.elements[isOrigin ? "origin_name" : "destination_name"].value = terminal.name;
+  placeEndpointMarkers();
+  validatePoints();
+  if (map) map.flyTo({ center: [terminal.lon, terminal.lat], zoom: 6, duration: 800 });
+}
+
+function terminalRow(terminal, isOrigin, close) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "terminal-row";
+
+  const name = document.createElement("span");
+  name.className = "terminal-name";
+  name.textContent = terminal.name;
+
+  const kind = document.createElement("span");
+  kind.className = "terminal-kind";
+  kind.textContent = TERMINAL_KINDS[terminal.type] ?? terminal.type.replace(/_/g, " ");
+
+  row.append(name, kind);
+  // A terminal the network cannot route through is still a perfectly good door to
+  // collect from; saying so beats hiding it and beats offering it as if it were a hub.
+  if (!terminal.is_connected) {
+    row.classList.add("is-unconnected");
+    row.title = "Ağa bağlı değil — uç nokta olur, aktarma merkezi olmaz";
+  }
+  row.addEventListener("click", () => { useTerminal(terminal, isOrigin); close(); });
+  return row;
+}
+
+function setUpTerminalPicker(kind) {
+  const isOrigin = kind === "origin";
+  const caret = $(`terminals-${kind}`);
+  const list = $(`terminal-list-${kind}`);
+
+  const close = () => {
+    list.hidden = true;
+    caret.setAttribute("aria-expanded", "false");
+  };
+
+  caret.addEventListener("click", async () => {
+    if (!list.hidden) { close(); return; }
+    // Only one picker open at a time; two lists over one narrow sidebar overlap.
+    document.querySelectorAll(".terminal-list").forEach((other) => { other.hidden = true; });
+    document.querySelectorAll(".terminal-caret")
+      .forEach((other) => other.setAttribute("aria-expanded", "false"));
+
+    list.hidden = false;
+    caret.setAttribute("aria-expanded", "true");
+    list.textContent = "Yükleniyor…";
+    try {
+      const terminals = await knownTerminals();
+      if (!terminals.length) { list.textContent = "Terminal listesi alınamadı."; return; }
+      // Grouped by country, because a picker sorted only by name asks the reader to
+      // know which country every port is in before they can find one.
+      const byCountry = new Map();
+      for (const terminal of terminals) {
+        if (!byCountry.has(terminal.country)) byCountry.set(terminal.country, []);
+        byCountry.get(terminal.country).push(terminal);
+      }
+      const groups = [...byCountry.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      list.replaceChildren(...groups.flatMap(([country, members]) => {
+        const heading = document.createElement("p");
+        heading.className = "terminal-country";
+        heading.textContent = country;
+        return [
+          heading,
+          ...members
+            .sort((a, b) => a.name.localeCompare(b.name, "tr"))
+            .map((terminal) => terminalRow(terminal, isOrigin, close)),
+        ];
+      }));
+    } catch {
+      list.textContent = "Terminal listesi alınamadı.";
+    }
+  });
+
+  // Clicking anywhere else, or pressing Escape, puts it away.
+  document.addEventListener("click", (event) => {
+    if (!list.hidden && !list.contains(event.target) && event.target !== caret) close();
+  });
+  list.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+}
+
+/** Count the assumptions in use, so collapsing the section cannot hide one.
+ *
+ *  A load factor left set from an earlier run changes every figure on the dashboard.
+ *  Tucking it behind a closed `<details>` without a mark would be the interface quietly
+ *  keeping a number the user cannot see.
+ */
+function markAdvancedInUse() {
+  const inUse = ["load_factor", "empty_return_share"]
+    .filter((name) => form.elements[name].value.trim() !== "").length
+    + (form.elements.road_fuel_type.value ? 1 : 0);
+  const tag = $("advanced-tag");
+  tag.hidden = inUse === 0;
+  tag.textContent = `${inUse} değişti`;
 }
 
 /** Draw the listed areas under everything else, so a route line stays readable over
@@ -873,8 +1046,10 @@ form.addEventListener("submit", async (event) => {
   const data = new FormData(form);
   const origin = parsePoint(data.get("origin"));
   const destination = parsePoint(data.get("destination"));
-  if (!origin || !destination) {
-    statusLine.textContent = "Kalkış ve varış 'boylam, enlem' biçiminde olmalı.";
+  if (!validatePoints()) {
+    // The inline message names which endpoint is wrong; this one only says why nothing
+    // happened when the button was pressed.
+    statusLine.textContent = "Koordinatlar düzeltilmeden hesaplanamaz.";
     return;
   }
 
@@ -1014,42 +1189,99 @@ let placeTimer;
  *  differ by seven points of route distance — both perfectly ordinary on screen. The
  *  choice is the user's to make.
  */
+const placeMessage = (text) => {
+  const note = document.createElement("p");
+  note.className = "place-empty";
+  note.textContent = text;
+  placeResults.replaceChildren(note);
+};
+
+/** One candidate, built as nodes rather than interpolated into innerHTML.
+ *
+ *  Two reasons. A display name comes from OpenStreetMap, so it is a stranger's text
+ *  and does not belong in innerHTML. And the name needs splitting anyway: Nominatim
+ *  answers with five levels of address — town, province, region, postal code, country —
+ *  which as one line wraps to three rows in a 320px sidebar and buries the word the
+ *  user is actually looking for.
+ *
+ *  The kind — city, town, village, port — is shown because it is the whole reason this
+ *  control offers a list at all. Two readings of one name in the validation set differ
+ *  by seven points of route distance, and "village" against "city" is what tells them
+ *  apart; without it the user picks the first row and the choice is decorative.
+ */
+function placeHit(hit, index, choose) {
+  const [head, ...rest] = hit.name.split(",");
+
+  const row = document.createElement("div");
+  row.className = "place-hit";
+  row.dataset.index = String(index);
+  row.setAttribute("role", "option");
+
+  const title = document.createElement("span");
+  title.className = "place-title";
+  const name = document.createElement("strong");
+  name.className = "place-name";
+  name.textContent = head.trim();
+  title.append(name);
+  if (hit.kind) {
+    const kind = document.createElement("span");
+    kind.className = "place-kind";
+    kind.textContent = hit.kind.replace(/_/g, " ");
+    title.append(kind);
+  }
+
+  const where = document.createElement("span");
+  where.className = "place-where";
+  where.textContent = rest.join(",").trim();
+
+  const actions = document.createElement("span");
+  actions.className = "place-actions";
+  for (const [target, label] of [["origin", "kalkış"], ["destination", "varış"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ghost";
+    button.textContent = label;
+    button.addEventListener("click", () => choose(hit, target === "origin"));
+    actions.append(button);
+  }
+
+  row.append(title, where, actions);
+  return row;
+}
+
 async function searchPlaces(query) {
   if (query.trim().length < 2) { placeResults.hidden = true; return; }
   placeResults.hidden = false;
-  placeResults.innerHTML = '<p class="place-empty">Aranıyor…</p>';
+  placeMessage("Aranıyor…");
   try {
-    const found = await fetch(`/api/places?q=${encodeURIComponent(query)}&limit=5`)
-      .then((r) => (r.ok ? r.json() : []));
-    if (!found.length) {
-      placeResults.innerHTML = '<p class="place-empty">Sonuç yok.</p>';
+    const response = await fetch(`/api/places?q=${encodeURIComponent(query)}&limit=5`);
+    if (response.status === 503) {
+      placeMessage("Arama servisi şu an meşgul, birkaç saniye sonra tekrar deneyin.");
       return;
     }
-    placeResults.innerHTML = found.map((place, index) => `
-      <div class="place-hit" data-index="${index}" role="option" tabindex="0">
-        <span class="place-name">${place.name}</span>
-        <span class="place-actions">
-          <button type="button" class="ghost" data-target="origin">kalkış</button>
-          <button type="button" class="ghost" data-target="destination">varış</button>
-        </span>
-      </div>`).join("");
+    const found = response.ok ? await response.json() : [];
+    if (!found.length) {
+      placeMessage("Sonuç yok.");
+      return;
+    }
 
-    placeResults.querySelectorAll("[data-target]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const hit = found[Number(button.closest(".place-hit").dataset.index)];
-        const isOrigin = button.dataset.target === "origin";
-        (isOrigin ? originInput : destinationInput).value = `${hit.lon}, ${hit.lat}`;
-        // The first part of the display name is the place itself.
-        form.elements[isOrigin ? "origin_name" : "destination_name"].value =
-          hit.name.split(",")[0];
-        placeEndpointMarkers();
-        if (map) map.flyTo({ center: [hit.lon, hit.lat], zoom: 6, duration: 800 });
-        placeResults.hidden = true;
-        placeQuery.value = "";
-      });
-    });
+    const choose = (hit, isOrigin) => {
+      (isOrigin ? originInput : destinationInput).value = `${hit.lon}, ${hit.lat}`;
+      // The first part of the display name is the place itself.
+      form.elements[isOrigin ? "origin_name" : "destination_name"].value =
+        hit.name.split(",")[0].trim();
+      placeEndpointMarkers();
+      validatePoints();
+      if (map) map.flyTo({ center: [hit.lon, hit.lat], zoom: 6, duration: 800 });
+      placeResults.hidden = true;
+      placeQuery.value = "";
+    };
+
+    placeResults.replaceChildren(
+      ...found.map((hit, index) => placeHit(hit, index, choose))
+    );
   } catch (error) {
-    placeResults.innerHTML = `<p class="place-empty">Arama başarısız: ${error.message}</p>`;
+    placeMessage(`Arama başarısız: ${error.message}`);
   }
 }
 
@@ -1062,6 +1294,9 @@ placeQuery.addEventListener("blur", () => setTimeout(() => { placeResults.hidden
 
 $("pick-origin").addEventListener("click", () => setPicking("origin"));
 $("pick-destination").addEventListener("click", () => setPicking("destination"));
+$("swap-endpoints").addEventListener("click", swapEndpoints);
+setUpTerminalPicker("origin");
+setUpTerminalPicker("destination");
 $("player-play").addEventListener("click", togglePlay);
 $("player-speed").addEventListener("change", (event) => {
   playSpeed = Number(event.target.value);
@@ -1077,8 +1312,16 @@ $("catchment-toggle").addEventListener("click", () => {
   // The map may have failed to load; the rest of the dashboard still works.
   if (map) toggleCatchment();
 });
-[originInput, destinationInput].forEach((input) =>
-  input.addEventListener("change", placeEndpointMarkers));
+[originInput, destinationInput].forEach((input) => {
+  input.addEventListener("change", placeEndpointMarkers);
+  // On every keystroke, not only on change: a coordinate that cannot be used should
+  // say so while it is being typed rather than at submit.
+  input.addEventListener("input", validatePoints);
+});
+["load_factor", "empty_return_share", "road_fuel_type"].forEach((name) =>
+  form.elements[name].addEventListener("input", markAdvancedInUse));
+validatePoints();
+markAdvancedInUse();
 
 /* ── theme ───────────────────────────────────────────────────────────── */
 

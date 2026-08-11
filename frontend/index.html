@@ -30,52 +30,108 @@
     <section class="card">
       <h2 class="card-title">Sevkiyat</h2>
       <form id="shipment-form">
-        <p class="hint">Haritaya tıklayarak seçebilir, işaretleri sürükleyebilirsiniz.</p>
-        <div class="pick-row">
-          <button type="button" class="ghost" id="pick-origin" aria-pressed="false">
-            Kalkışı seç
-          </button>
-          <button type="button" class="ghost" id="pick-destination" aria-pressed="false">
-            Varışı seç
-          </button>
-        </div>
         <div class="place-search">
           <input type="search" id="place-query" placeholder="Şehir veya liman ara…"
                  aria-label="Yer ara" autocomplete="off">
-          <div class="place-results" id="place-results" role="listbox" hidden></div>
+          <!-- Not a listbox: each result carries its own "kalkış"/"varış" buttons, so it
+               is a set of choices rather than one selectable value. Announced politely
+               instead, which is what a search-as-you-type control owes a screen reader. -->
+          <div class="place-results" id="place-results" aria-live="polite"
+               aria-label="Arama sonuçları" hidden></div>
         </div>
-        <div class="field-grid">
-          <label>Kalkış <small>boylam, enlem</small>
-            <input name="origin" id="origin" value="29.4306, 40.7889" required>
-          </label>
-          <label>Adı
-            <input name="origin_name" value="Gebze">
-          </label>
-          <label>Varış <small>boylam, enlem</small>
-            <input name="destination" id="destination" value="6.7735, 51.2277" required>
-          </label>
-          <label>Adı
-            <input name="destination_name" value="Düsseldorf">
-          </label>
+
+        <!-- Kalkış ve varış, iki ayrı alan yığını değil, bir güzergâh olarak okunur.
+             Ada ve koordinat aynı bloktadır: eskiden ikisi de "Adı" diye ayrı satırdaydı
+             ve hangisinin hangi uca ait olduğu formdan anlaşılmıyordu. -->
+        <div class="route-input">
+          <div class="endpoint">
+            <span class="endpoint-dot origin" aria-hidden="true"></span>
+            <div class="endpoint-body">
+              <div class="endpoint-top">
+                <span class="endpoint-role">Kalkış</span>
+                <button type="button" class="pin-btn" id="pick-origin" aria-pressed="false"
+                        title="Haritaya tıklayarak seç">haritadan seç</button>
+              </div>
+              <!-- Type any place, or take one the engine already knows from the caret.
+                   A terminal fills the name and the coordinates together, so the two
+                   cannot end up describing different places. -->
+              <div class="name-row">
+                <input class="endpoint-name" name="origin_name" value="Gebze"
+                       placeholder="Yer adı" aria-label="Kalkış adı" autocomplete="off">
+                <button type="button" class="terminal-caret" id="terminals-origin"
+                        aria-expanded="false" aria-label="Bilinen terminallerden seç"
+                        title="Terminal listesi">▾</button>
+                <div class="terminal-list" id="terminal-list-origin"
+                     aria-label="Terminaller" hidden></div>
+              </div>
+              <input class="endpoint-coords" name="origin" id="origin"
+                     value="29.4306, 40.7889" required spellcheck="false"
+                     aria-label="Kalkış koordinatı: boylam, enlem">
+            </div>
+          </div>
+
+          <button type="button" class="swap-btn" id="swap-endpoints"
+                  title="Kalkış ile varışı yer değiştir"
+                  aria-label="Kalkış ile varışı yer değiştir">⇅</button>
+
+          <div class="endpoint">
+            <span class="endpoint-dot destination" aria-hidden="true"></span>
+            <div class="endpoint-body">
+              <div class="endpoint-top">
+                <span class="endpoint-role">Varış</span>
+                <button type="button" class="pin-btn" id="pick-destination" aria-pressed="false"
+                        title="Haritaya tıklayarak seç">haritadan seç</button>
+              </div>
+              <div class="name-row">
+                <input class="endpoint-name" name="destination_name" value="Düsseldorf"
+                       placeholder="Yer adı" aria-label="Varış adı" autocomplete="off">
+                <button type="button" class="terminal-caret" id="terminals-destination"
+                        aria-expanded="false" aria-label="Bilinen terminallerden seç"
+                        title="Terminal listesi">▾</button>
+                <div class="terminal-list" id="terminal-list-destination"
+                     aria-label="Terminaller" hidden></div>
+              </div>
+              <input class="endpoint-coords" name="destination" id="destination"
+                     value="6.7735, 51.2277" required spellcheck="false"
+                     aria-label="Varış koordinatı: boylam, enlem">
+            </div>
+          </div>
+        </div>
+        <p class="field-error" id="point-error" role="alert" hidden></p>
+        <p class="hint route-hint">İşaretleri harita üzerinde sürükleyebilirsiniz.</p>
+
+        <div class="essentials">
           <label>Tonaj <small>ton</small>
             <input name="tonnage" type="number" value="24" min="0.1" step="0.1" required>
-          </label>
-          <label>Doluluk <small>boş: yayın bazı</small>
-            <input name="load_factor" type="number" min="0.05" max="1" step="0.01"
-                   placeholder="—">
-          </label>
-          <label>Boş dönüş <small>boş: yayın bazı</small>
-            <input name="empty_return_share" type="number" min="0" max="1" step="0.01"
-                   placeholder="—">
-          </label>
-          <label>Karayolu yakıtı
-            <select name="road_fuel_type" id="road-fuel"></select>
           </label>
           <label class="check-field">
             <input name="is_reefer" type="checkbox">
             <span>Frigo yük <small>soğutma saatle işler, km ile değil</small></span>
           </label>
         </div>
+
+        <!-- Çoğu sevkiyat bunlara dokunmaz; dokunulanlar özetle görünür kalır, çünkü
+             kapalı bir bölümde saklanan bir varsayım rakamı sessizce değiştirir. -->
+        <details class="advanced" id="advanced">
+          <summary>
+            <span>Gelişmiş varsayımlar</span>
+            <span class="advanced-tag" id="advanced-tag" hidden></span>
+          </summary>
+          <div class="field-grid">
+            <label>Doluluk <small>boş: yayın bazı</small>
+              <input name="load_factor" type="number" min="0.05" max="1" step="0.01"
+                     placeholder="—">
+            </label>
+            <label>Boş dönüş <small>boş: yayın bazı</small>
+              <input name="empty_return_share" type="number" min="0" max="1" step="0.01"
+                     placeholder="—">
+            </label>
+            <label>Karayolu yakıtı
+              <select name="road_fuel_type" id="road-fuel"></select>
+            </label>
+          </div>
+        </details>
+
         <button type="submit" id="submit">Rotala ve hesapla</button>
         <p class="hint" id="status" role="status"></p>
       </form>
