@@ -327,8 +327,14 @@ button.ghost:hover { background: var(--surface-sunken); }
 .pin-btn[aria-pressed="true"] {
   background: var(--accent); color: #fff; border-color: var(--accent);
 }
-/* While picking, the endpoint being filled is the one the eye should be on. */
+/* While picking, the endpoint being filled is the one the eye should be on — the whole
+   block, not just the button that was pressed. Which endpoint is armed is the one thing
+   the user has to know before they click the map. */
 .endpoint:has(.pin-btn[aria-pressed="true"]) .endpoint-role { color: var(--accent); }
+.endpoint:has(.pin-btn[aria-pressed="true"]) .endpoint-name,
+.endpoint:has(.pin-btn[aria-pressed="true"]) .endpoint-coords { border-color: var(--accent); }
+.endpoint:has(.pin-btn[aria-pressed="true"]) .endpoint-dot.origin { border-color: var(--accent); }
+.endpoint:has(.pin-btn[aria-pressed="true"]) .endpoint-dot.destination { background: var(--accent); }
 
 .swap-btn {
   position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%);
@@ -641,7 +647,24 @@ button.ghost:hover { background: var(--surface-sunken); }
   height: 380px; border-radius: var(--r-sm); border: 1px solid var(--border);
   background: var(--surface-sunken); display: grid; place-items: center;
 }
-#map.picking { cursor: crosshair; }
+/* Picking is a mode, so it has to look like one. A crosshair alone is invisible until
+   the pointer is already over the map — which is no help at all when the reason the
+   button seemed dead was that the map was not on screen yet. */
+#map.picking { cursor: crosshair; box-shadow: 0 0 0 2px var(--accent); }
+.map-pick-hint {
+  margin: 0 0 0.5rem; padding: 0.4rem 0.6rem;
+  font-size: 0.82rem; font-weight: 550;
+  color: var(--accent-ink); background: var(--accent-wash);
+  border-radius: var(--r-sm);
+}
+
+/* Before the first calculation there are no numbers, but there is a map, and choosing
+   where the freight starts comes before working out what it emits. Everything with
+   nothing to say yet stays out of the way. */
+.dashboard.map-only > *:not(.panel-grid) { display: none; }
+.dashboard.map-only .panel-grid { grid-template-columns: minmax(0, 1fr); }
+.dashboard.map-only .panel-grid > *:not(.map-card) { display: none; }
+.dashboard.map-only #map { height: 460px; }
 .map-unavailable { max-width: 34ch; margin: 0; padding: 1rem; text-align: center; color: var(--ink-muted); }
 .maplibregl-popup-content {
   font: 13px/1.45 system-ui, sans-serif; padding: 0.5rem 0.7rem;

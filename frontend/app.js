@@ -170,19 +170,61 @@ function placeEndpointMarkers() {
   }
 }
 
+/** Bring the map on screen so an endpoint can actually be picked on it.
+ *
+ *  The map lives inside the results dashboard, which stays hidden until the first
+ *  calculation — so before then "haritadan seç" armed a map nobody could see and the
+ *  button appeared to do nothing but change colour. Choosing where the freight starts
+ *  is the step *before* calculating, so the map has to be available first.
+ *
+ *  Only the map is revealed: the rest of the dashboard has no numbers to show yet, and
+ *  the two `<main>` panels are siblings in a two-column grid, so both being visible at
+ *  once would drop the empty state into the sidebar's column.
+ */
+function revealMapForPicking() {
+  if (!dashboard.hidden) return;
+  emptyState.hidden = true;
+  dashboard.hidden = false;
+  dashboard.classList.add("map-only");
+  if (map) map.resize();
+  dashboard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
 function setPicking(kind) {
+  const hint = $("map-pick-hint");
+
+  // Without MapLibre there is nothing to click, and arming a mode that cannot end
+  // would leave the button lit for good.
+  if (kind && !map) {
+    statusLine.textContent =
+      "Harita yüklenemedi; koordinatı elle yazabilir veya ok ile terminal seçebilirsiniz.";
+    return;
+  }
+
   picking = picking === kind ? null : kind;
   $("pick-origin").setAttribute("aria-pressed", String(picking === "origin"));
   $("pick-destination").setAttribute("aria-pressed", String(picking === "destination"));
   mapElement.classList.toggle("picking", picking !== null);
+
+  if (picking) revealMapForPicking();
+  hint.hidden = picking === null;
+  hint.textContent = picking
+    ? `${picking === "origin" ? "Kalkış" : "Varış"} için haritaya tıklayın — vazgeçmek için Esc.`
+    : "";
 }
 
 function onMapClick(event) {
   if (!picking) return;
-  (picking === "origin" ? originInput : destinationInput).value = formatPoint(event.lngLat);
+  const kind = picking;
+  (kind === "origin" ? originInput : destinationInput).value = formatPoint(event.lngLat);
   placeEndpointMarkers();
   validatePoints();
   setPicking(null);
+  // Confirm where it landed. Silence after a click reads as a click that missed.
+  const hint = $("map-pick-hint");
+  hint.hidden = false;
+  hint.textContent =
+    `${kind === "origin" ? "Kalkış" : "Varış"} güncellendi: ${formatPoint(event.lngLat)}`;
 }
 
 /* ── shipment form ───────────────────────────────────────────────────── */
@@ -1097,6 +1139,9 @@ form.addEventListener("submit", async (event) => {
     $("shipment-summary").textContent =
       `${data.get("origin_name")} → ${data.get("destination_name")} · ${data.get("tonnage")} ton`;
     emptyState.hidden = true; dashboard.hidden = false;
+    // There are numbers now, so the map stops being the only thing worth showing.
+    dashboard.classList.remove("map-only");
+    $("map-pick-hint").hidden = true;
     if (map) map.resize();
     buildDashboard();
     applyScenario();
@@ -1297,6 +1342,11 @@ $("pick-destination").addEventListener("click", () => setPicking("destination"))
 $("swap-endpoints").addEventListener("click", swapEndpoints);
 setUpTerminalPicker("origin");
 setUpTerminalPicker("destination");
+
+// Armed picking is a mode, and a mode the keyboard cannot leave is a trap.
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && picking) setPicking(null);
+});
 $("player-play").addEventListener("click", togglePlay);
 $("player-speed").addEventListener("change", (event) => {
   playSpeed = Number(event.target.value);

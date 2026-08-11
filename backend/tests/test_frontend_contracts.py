@@ -115,6 +115,32 @@ def test_the_terminal_list_hangs_off_the_field_it_belongs_to(stylesheet, page):
     assert "position: relative" in row, "the list would anchor to some outer block"
 
 
+def test_picking_an_endpoint_can_reveal_the_map_before_any_results(page, script, stylesheet):
+    """The map sits inside the results dashboard, and that dashboard starts `hidden`.
+
+    So before the first calculation, "haritadan seç" armed a map that was not on screen:
+    the button changed colour and, as far as the user could tell, did nothing else. But
+    choosing where the freight starts is the step *before* calculating, so the map has
+    to be reachable first. `map-only` is what reveals it, and losing either half of that
+    — the class or the rules — brings the dead button back without a sound.
+    """
+    assert '<main class="dashboard" id="dashboard" hidden>' in page, (
+        "the dashboard no longer starts hidden; this test is checking nothing"
+    )
+    assert 'id="map"' in page and page.index('id="dashboard"') < page.index('id="map"'), (
+        "the map is no longer inside the dashboard"
+    )
+    assert 'classList.add("map-only")' in script, "nothing reveals the map for picking"
+    assert _block(stylesheet, ".dashboard.map-only > *:not(.panel-grid)"), (
+        "map-only has no rule hiding the sections that have no numbers yet"
+    )
+
+
+def test_armed_picking_can_be_left_from_the_keyboard(script):
+    """A mode with no way out is a trap, and this one changes what a map click does."""
+    assert '"Escape"' in script and "setPicking(null)" in script
+
+
 def test_every_form_field_the_script_reads_exists(page, script):
     """The shipment form is built from `name` attributes, and a missing one is silent:
     `FormData.get` returns null and the field is simply dropped from the request, so the
