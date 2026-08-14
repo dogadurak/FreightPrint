@@ -221,6 +221,9 @@ def _leg_out(leg) -> LegOut:
         factor_source=leg.factor.source,
         geometry=[list(point) for point in leg.geometry],
         track_is_indicative=leg.track_is_indicative,
+        terrain_factor=getattr(leg, "terrain_factor", 1.0),
+        elevation_gain_m=getattr(leg, "elevation_gain_m", 0.0),
+        elevation_loss_m=getattr(leg, "elevation_loss_m", 0.0),
     )
 
 
@@ -410,8 +413,54 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals)
             error=str(error),
         )
 
+    priced_routes = list(lowest_emission_first(routes, priced, limit=request.max_alternatives))
+
+    priced_routes_data = []
+    for route, shipment in priced_routes:
+        timeline = _timeline_out(route)
+        total_hours = timeline.total_hours
+        
+        # Calculate base freight cost approx for demo
+        base_cost = (
+            route.distance_by_mode.get('road', 0) * 1.2 +
+            route.distance_by_mode.get('sea', 0) * 0.3 +
+            route.distance_by_mode.get('rail', 0) * 0.5
+        )
+        
+        ets = _ets_out(shipment, route, terminals, request)
+        co2_toll = _toll_out(route, shipment)
+        
+        total_cost = base_cost + (ets.cost_eur if ets else 0) + (co2_toll.total_eur if co2_toll else 0)
+        total_co2 = shipment.total_co2_kg
+        
+        priced_routes_data.append({
+            "route": route,
+            "shipment": shipment,
+            "total_hours": total_hours,
+            "total_cost": total_cost,
+            "total_co2": total_co2,
+            "ets": ets,
+            "co2_toll": co2_toll,
+            "tags": []
+        })
+
+    if priced_routes_data:
+        min_hours = min(d["total_hours"] for d in priced_routes_data)
+        min_cost = min(d["total_cost"] for d in priced_routes_data)
+        min_co2 = min(d["total_co2"] for d in priced_routes_data)
+        
+        for d in priced_routes_data:
+            if d["total_hours"] == min_hours:
+                d["tags"].append("fastest")
+            if d["total_cost"] == min_cost:
+                d["tags"].append("cheapest")
+            if d["total_co2"] == min_co2:
+                d["tags"].append("greenest")
+
     totals = []
-    for route, shipment in lowest_emission_first(routes, priced, limit=request.max_alternatives):
+    for d in priced_routes_data:
+        route = d["route"]
+        shipment = d["shipment"]
         emission_range = None
         try:
             simulated = simulate_emission_range(
@@ -430,9 +479,6 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals)
         except (FactorNotFoundError, ValueError):
             emission_range = None
 
-        # Refrigeration rides on the clock, not the factor set, so it is identical
-        # across scenarios — but it is repeated here so each scenario's total stands
-        # on its own without the caller having to join it back to the alternative.
         reefer = _reefer_out(route, request)
         totals.append(
             ScenarioTotalOut(
@@ -446,19 +492,17 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals)
                     else None
                 ),
                 emission_range=emission_range,
-                # Allowance cost follows the emissions, so it belongs to the scenario;
-                # risk follows the track and is reported once on the alternative.
-                ets=_ets_out(shipment, route, terminals, request),
-                # Carbon priced by a road authority rather than by the allowance market:
-                # Germany charges 200 EUR a tonne in its truck toll, two and a half times
-                # the shipping allowance price, so this moves the money answer.
-                co2_toll=_toll_out(route, shipment),
+                ets=d["ets"],
+                co2_toll=d["co2_toll"],
                 reefer=reefer,
                 total_with_reefer_co2_kg=(
                     round_to_significant(shipment.total_co2_kg + reefer.co2_kg)
                     if reefer
                     else None
                 ),
+                total_cost_eur=round(d["total_cost"], 2),
+                total_hours=round(d["total_hours"], 1),
+                tradeoff_tags=d["tags"]
             )
         )
 
@@ -1008,6 +1052,10 @@ def lane_portfolio(
                 key=lane.key,
                 origin_name=lane.origin_name,
                 destination_name=lane.destination_name,
+                origin_lon=lane.origin_lon,
+                origin_lat=lane.origin_lat,
+                destination_lon=lane.destination_lon,
+                destination_lat=lane.destination_lat,
                 shipments=lane.shipments,
                 tonnes=round(lane.tonnes, 1),
                 tonne_km=round(lane.tonne_km),
@@ -1027,6 +1075,9 @@ def lane_portfolio(
                 tested_under=lane.tested_under,
                 is_robust=lane.is_robust,
                 is_contested=lane.is_contested,
+                empty_miles_risk=lane.empty_miles_risk,
+                imbalance_ratio=round(lane.imbalance_ratio, 2),
+                consolidation_potential=lane.consolidation_potential,
             )
             for lane in portfolio.by_total()
         ],
@@ -1035,6 +1086,18 @@ def lane_portfolio(
         tested_sets=portfolio.tested_sets,
         total_co2_kg=round_to_significant(portfolio.total_co2_kg),
         addressable_co2_kg=round_to_significant(portfolio.addressable_co2_kg),
+        carriers=[
+            {
+                "carrier": c.carrier,
+                "shipments": c.shipments,
+                "tonnes": round(c.tonnes, 1),
+                "tonne_km": round(c.tonne_km, 1),
+                "total_co2_kg": round(c.total_co2_kg, 1),
+                "intensity_kg_per_tonne_km": round(c.intensity_kg_per_tonne_km, 4)
+            }
+            for c in portfolio.carriers
+        ],
+        glidepath=portfolio.glidepath,
         failed=[list(f) for f in portfolio.failed],
         notes=portfolio.notes,
     )

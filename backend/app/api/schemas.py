@@ -147,6 +147,9 @@ class LegOut(BaseModel):
     # lines. A track that is drawable but not sailable is flagged instead of hidden.
     geometry: list[list[float]] = []
     track_is_indicative: bool = False
+    terrain_factor: float = 1.0
+    elevation_gain_m: float = 0.0
+    elevation_loss_m: float = 0.0
 
 
 class RangeOut(BaseModel):
@@ -263,6 +266,9 @@ class ScenarioTotalOut(BaseModel):
     reefer: ReeferOut | None = None
     total_with_reefer_co2_kg: float | None = None
     co2_toll: TollOut | None = None
+    total_cost_eur: float | None = None
+    total_hours: float | None = None
+    tradeoff_tags: list[str] = []
 
 
 class ScenarioOut(BaseModel):
@@ -389,6 +395,10 @@ class LaneOut(BaseModel):
     key: str
     origin_name: str
     destination_name: str
+    origin_lon: float
+    origin_lat: float
+    destination_lon: float
+    destination_lat: float
     shipments: int
     tonnes: float
     tonne_km: float
@@ -407,6 +417,24 @@ class LaneOut(BaseModel):
     tested_under: list[str] = []
     is_robust: bool = False
     is_contested: bool = False
+    empty_miles_risk: bool = False
+    imbalance_ratio: float = 0.0
+    consolidation_potential: bool = False
+
+
+class CarrierStatsOut(BaseModel):
+    carrier: str
+    shipments: int
+    tonnes: float
+    tonne_km: float
+    total_co2_kg: float
+    intensity_kg_per_tonne_km: float
+
+
+class GlidepathOut(BaseModel):
+    baseline_co2_kg: float
+    best_scenario_co2_kg: float
+    target_2030_co2_kg: float
 
 
 class PortfolioOut(BaseModel):
@@ -416,6 +444,8 @@ class PortfolioOut(BaseModel):
     tested_sets: list[str]
     total_co2_kg: float
     addressable_co2_kg: float
+    carriers: list[CarrierStatsOut] = []
+    glidepath: GlidepathOut | None = None
     failed: list[list[str]] = []
     notes: list[str] = []
 

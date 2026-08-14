@@ -59,6 +59,10 @@ class Lane:
     key: str
     origin_name: str
     destination_name: str
+    origin_lon: float = 0.0
+    origin_lat: float = 0.0
+    destination_lon: float = 0.0
+    destination_lat: float = 0.0
     shipments: int = 0
     tonnes: float = 0.0
     tonne_km: float = 0.0
@@ -72,6 +76,13 @@ class Lane:
     # Factor sets under which the best option beats the all-road baseline.
     wins_under: list[str] = field(default_factory=list)
     tested_under: list[str] = field(default_factory=list)
+    empty_miles_risk: bool = False
+    imbalance_ratio: float = 0.0
+
+    @property
+    def consolidation_potential(self) -> bool:
+        """True if average tonnage is under 18t and shipments > 1 (LTL opportunity)."""
+        return self.shipments > 1 and (self.tonnes / self.shipments) < 18.0
 
     @property
     def intensity_kg_per_tonne_km(self) -> float:
@@ -115,6 +126,19 @@ class Lane:
 
 
 @dataclass
+class CarrierStats:
+    carrier: str
+    shipments: int = 0
+    tonnes: float = 0.0
+    tonne_km: float = 0.0
+    total_co2_kg: float = 0.0
+    
+    @property
+    def intensity_kg_per_tonne_km(self) -> float:
+        return self.total_co2_kg / self.tonne_km if self.tonne_km else 0.0
+
+
+@dataclass
 class Portfolio:
     lanes: list[Lane]
     scope: str
@@ -122,6 +146,8 @@ class Portfolio:
     tested_sets: list[str]
     failed: list[tuple[str, str]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    carriers: list[CarrierStats] = field(default_factory=list)
+    glidepath: dict[str, float] = field(default_factory=dict)
 
     @property
     def total_co2_kg(self) -> float:
@@ -189,6 +215,7 @@ def build_portfolio(
     tested = [s for s in factor_sets if any(f.factor_set == s for f in factors)]
 
     lanes: dict[str, Lane] = {}
+    carriers: dict[str, CarrierStats] = {}
     failed: list[tuple[str, str]] = []
 
     for done, shipment in enumerate(shipments, start=1):
@@ -218,7 +245,10 @@ def build_portfolio(
         lane = lanes.setdefault(
             key,
             Lane(key=key, origin_name=shipment.origin_name,
-                 destination_name=shipment.destination_name, tested_under=list(tested)),
+                 destination_name=shipment.destination_name, 
+                 origin_lon=shipment.origin[0], origin_lat=shipment.origin[1],
+                 destination_lon=shipment.destination[0], destination_lat=shipment.destination[1],
+                 tested_under=list(tested)),
         )
         lane.shipments += 1
         lane.tonnes += shipment.tonnage
@@ -248,11 +278,30 @@ def build_portfolio(
             alt = next((o for o in options if not o.is_all_road), None)
             if base and alt and alt.co2_kg < base.co2_kg:
                 wins.append(candidate)
-        # A lane wins under a basis only if it wins there for every shipment on it.
         lane.wins_under = sorted(set(wins) & set(lane.wins_under or wins))
+
+        # Carrier stats
+        carrier_name = getattr(shipment, "carrier", "Unknown")
+        c_stats = carriers.setdefault(carrier_name, CarrierStats(carrier=carrier_name))
+        c_stats.shipments += 1
+        c_stats.tonnes += shipment.tonnage
+        c_stats.tonne_km += shipment.tonnage * yardstick.total_distance_km
+        c_stats.total_co2_kg += baseline.co2_kg
 
         if on_progress:
             on_progress(done)
+
+    # Empty Miles Anomaly Detection
+    for lane in lanes.values():
+        inverse_key = f"{lane.destination_name} → {lane.origin_name}"
+        inverse_lane = lanes.get(inverse_key)
+        outbound = lane.shipments
+        inbound = inverse_lane.shipments if inverse_lane else 0
+        total = outbound + inbound
+        if total > 0:
+            lane.imbalance_ratio = outbound / total
+            if lane.imbalance_ratio > 0.75 and outbound >= 3:
+                lane.empty_miles_risk = True
 
     notes = [
         "Yoğunluk, tam karayolu senaryosunun ton-km başına emisyonudur — hattın nasıl "
@@ -267,7 +316,21 @@ def build_portfolio(
     if failed:
         notes.append(f"{len(failed)} sevkiyat rotalanamadı ve hiçbir hatta sayılmadı.")
 
+    carriers_list = sorted(carriers.values(), key=lambda c: -c.intensity_kg_per_tonne_km)
+    
+    baseline_total = sum(lane.baseline_co2_kg for lane in lanes.values())
+    best_total = sum(lane.best_co2_kg for lane in lanes.values())
+    # Glidepath assumes best scenario + 30% further reduction by 2030 via biofuels on road legs
+    target_2030 = best_total * 0.70
+
+    glidepath = {
+        "baseline_co2_kg": baseline_total,
+        "best_scenario_co2_kg": best_total,
+        "target_2030_co2_kg": target_2030
+    }
+
     return Portfolio(
         lanes=list(lanes.values()), scope=scope, factor_set=factor_set,
         tested_sets=tested, failed=failed, notes=notes,
+        carriers=carriers_list, glidepath=glidepath
     )

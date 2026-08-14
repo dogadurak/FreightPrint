@@ -62,9 +62,10 @@ class ResolvedLeg:
     track_is_indicative: bool = False
     # The terminals this leg runs between, carried so anything that has to line up with
     # the priced legs — the allowance scope, above all — can read the pairing off the
-    # same expansion that produced them instead of replaying the ferry rule itself.
+    # the same expansion that produced them instead of replaying the ferry rule itself.
     from_id: str | None = None
     to_id: str | None = None
+    wind_factor: float = 1.0
 
 
 @dataclass
@@ -79,6 +80,7 @@ class LegEmission:
     duration_h: float | None = None
     geometry: tuple[tuple[float, float], ...] = ()
     track_is_indicative: bool = False
+    wind_factor: float = 1.0
 
 
 @dataclass
@@ -203,6 +205,7 @@ def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
                     geometry=leg.geometry,
                     from_id=leg.from_id,
                     to_id=leg.to_id,
+                    wind_factor=1.0,
                 )
             )
             resolved.append(
@@ -214,6 +217,7 @@ def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
                     is_ferry=True,
                     from_id=leg.from_id,
                     to_id=leg.to_id,
+                    wind_factor=1.0,
                 )
             )
         else:
@@ -228,6 +232,7 @@ def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
                     track_is_indicative=leg.track_is_indicative,
                     from_id=leg.from_id,
                     to_id=leg.to_id,
+                    wind_factor=getattr(leg, "wind_factor", 1.0),
                 )
             )
     return resolved
@@ -311,7 +316,26 @@ def calculate_route_emission(
                 "charged at the sea factor"
             )
 
+        idle_co2 = 0.0
+        if resolved.mode == "road":
+            from .schedule import get_port_congestion
+            dwell_h = get_port_congestion(resolved.to_name)
+            idle_co2 = dwell_h * 5.0 # 5kg/hr Geofence Idling
+            if idle_co2 > 0:
+                warnings.append(f"Liman Yoğunluğu: {resolved.to_name} (veya kalkış) çevresinde {dwell_h} saat canlı bekleme sebebiyle +{idle_co2} kg CO2.")
+
         value = effective_factor_value(factor, load_factor, empty_return_share)
+        leg_co2 = (resolved.distance_km * tonnage * value)
+        
+        # Apply wind factor penalty/bonus to sea legs
+        if resolved.mode == "sea" and resolved.wind_factor != 1.0:
+            leg_co2 *= resolved.wind_factor
+            wind_diff = leg_co2 - (leg_co2 / resolved.wind_factor)
+            if wind_diff > 0:
+                warnings.append(f"Hava Durumu: {resolved.from_name} -> {resolved.to_name} rotasındaki ters rüzgar sebebiyle +{wind_diff:,.0f} kg CO2.")
+            else:
+                warnings.append(f"Hava Durumu: {resolved.from_name} -> {resolved.to_name} rotasındaki arkadan esen rüzgar sebebiyle {wind_diff:,.0f} kg CO2 tasarruf.")
+
         legs.append(
             LegEmission(
                 mode=resolved.mode,
@@ -320,10 +344,11 @@ def calculate_route_emission(
                 distance_km=resolved.distance_km,
                 tonnage=tonnage,
                 factor=factor,
-                co2_kg=resolved.distance_km * tonnage * value,
+                co2_kg=leg_co2 + idle_co2,
                 duration_h=resolved.duration_h,
                 geometry=resolved.geometry,
                 track_is_indicative=resolved.track_is_indicative,
+                wind_factor=resolved.wind_factor,
             )
         )
 

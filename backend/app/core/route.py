@@ -25,8 +25,12 @@ class Leg:
     computed_distance_km: float | None = None
     ferry_km: float = 0.0
     geometry: tuple[tuple[float, float], ...] = ()
+    elevation_gain_m: float = 0.0
+    elevation_loss_m: float = 0.0
+    terrain_factor: float = 1.0
     # Chokepoints a sea leg transits, from searoute's own edge labels.
     passages: tuple[str, ...] = ()
+    wind_factor: float = 1.0
     # True when the track is drawable but not to be trusted as the route taken —
     # searoute's Corinth shortcut, which no ro-ro or container ship can sail.
     track_is_indicative: bool = False
@@ -90,6 +94,9 @@ def _build_routing_graph(
         duration_h=direct.duration_h,
         ferry_km=direct.ferry_km,
         geometry=direct.geometry,
+        elevation_gain_m=direct.elevation_gain_m,
+        elevation_loss_m=direct.elevation_loss_m,
+        terrain_factor=direct.terrain_factor,
         # Which end the geometry was computed from. The graph is undirected, so an edge
         # is stored once and can be walked either way; without this the track comes back
         # in whichever direction it happened to be routed. It draws the same line either
@@ -109,6 +116,9 @@ def _build_routing_graph(
                 duration_h=leg.duration_h,
                 ferry_km=leg.ferry_km,
                 geometry=leg.geometry,
+                elevation_gain_m=leg.elevation_gain_m,
+                elevation_loss_m=leg.elevation_loss_m,
+                terrain_factor=leg.terrain_factor,
                 # Routed outward from the endpoint, including for the destination, where
                 # the leg is actually travelled terminal-to-door.
                 geometry_from=endpoint_node,
@@ -143,9 +153,12 @@ def _leg_from_edge(
         to_id=to_node,
         duration_h=edge.get("duration_h"),
         ref_distance_km=edge.get("ref_distance_km"),
-        computed_distance_km=edge["distance_km"] if edge["mode"] == "road" else None,
+        computed_distance_km=edge["distance_km"] * edge.get("terrain_factor", 1.0) if edge["mode"] == "road" else None,
         ferry_km=edge.get("ferry_km", 0.0),
         geometry=geometry,
+        elevation_gain_m=edge.get("elevation_gain_m", 0.0),
+        elevation_loss_m=edge.get("elevation_loss_m", 0.0),
+        terrain_factor=edge.get("terrain_factor", 1.0),
     )
 
 
@@ -192,6 +205,7 @@ def _add_sea_tracks(
 
         leg.geometry = tuple((point[0], point[1]) for point in computed.geometry)
         leg.passages = tuple(computed.passages)
+        leg.wind_factor = computed.wind_factor
         if compare_distances:
             leg.computed_distance_km = computed.distance_km
         if not computed.is_realistic:

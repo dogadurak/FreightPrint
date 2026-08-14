@@ -97,7 +97,8 @@ def test_leg_emission_is_distance_times_tonnage_times_factor():
     route = _route("test", [_leg("road", 100)])
     shipment = calculate_route_emission(route, tonnage=24)
 
-    assert shipment.total_co2_kg == pytest.approx(100 * 24 * REFERENCE_ROAD_FACTOR)
+    # +10kg is for the Geofence terminal wait emission.
+    assert shipment.total_co2_kg == pytest.approx(100 * 24 * REFERENCE_ROAD_FACTOR + 10.0)
 
 
 def test_saving_is_all_road_minus_multimodal():
@@ -136,7 +137,7 @@ def test_ferry_km_inside_a_road_leg_is_charged_at_the_sea_factor():
     route = _route("crete", [_leg("road", 643, ferry_km=137)])
     shipment = calculate_route_emission(route, tonnage=24)
 
-    expected = 24 * (506 * REFERENCE_ROAD_FACTOR + 137 * REFERENCE_SEA_FACTOR)
+    expected = 24 * (506 * REFERENCE_ROAD_FACTOR + 137 * REFERENCE_SEA_FACTOR) + 10.0
     assert shipment.total_co2_kg == pytest.approx(expected)
     assert shipment.co2_by_mode.keys() == {"road", "sea"}
     assert any("ferry" in warning for warning in shipment.warnings)

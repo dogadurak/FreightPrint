@@ -4,7 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FreightPrint — Karbon ve Rota Panosu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <link href="/static/style.css" rel="stylesheet">
 </head>
 <body>
@@ -132,7 +137,10 @@
           </div>
         </details>
 
-        <button type="submit" id="submit">Rotala ve hesapla</button>
+        <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+          <button type="submit" id="submit" style="flex: 1;">Rotala ve hesapla</button>
+          <button type="button" id="download-pdf" class="ghost" style="flex: 1;" hidden>📄 Sertifika İndir</button>
+        </div>
         <p class="hint" id="status" role="status"></p>
       </form>
     </section>
@@ -204,7 +212,7 @@
             <option value="csv">CSV — veri aktarımı</option>
           </select>
         </label>
-        <button type="submit" class="ghost" id="report-submit">Rapor indir</button>
+        <button type="submit" class="ghost btn-audit" id="report-submit">Audit-Ready Sertifika İndir</button>
         <button type="button" class="ghost" id="portfolio-submit">Hat portföyünü çıkar</button>
         <p class="hint" id="report-status" role="status"></p>
         <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya</a></p>
@@ -227,8 +235,20 @@
       <p class="scenario-note" id="scenario-note"></p>
     </section>
 
+    <!-- CEO Widget: Maliyet ve Emisyon Optimizasyonu CTA -->
+    <section class="ceo-cta-slot" id="ceo-cta-slot" hidden></section>
+
     <!-- KPI kartları -->
     <section class="kpi-row" id="kpi-row" aria-label="Özet göstergeler"></section>
+
+    <!-- Phase 6: Net-Zero Glidepath -->
+    <section class="glidepath-slot" id="glidepath-slot" hidden></section>
+
+    <!-- Phase 4: Vendor Scorecard -->
+    <section class="carrier-scorecard-slot" id="carrier-scorecard-slot" hidden></section>
+
+    <!-- Phase 5: Load Consolidation -->
+    <section class="consolidation-slot" id="consolidation-slot" hidden></section>
 
     <div class="notice-slot" id="notice-slot"></div>
 

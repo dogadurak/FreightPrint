@@ -25,7 +25,7 @@ from .route import find_route_alternatives
 from .uncertainty import round_to_significant
 
 REQUIRED_COLUMNS = ("origin_lon", "origin_lat", "destination_lon", "destination_lat")
-OPTIONAL_COLUMNS = ("reference", "origin_name", "destination_name", "tonnage")
+OPTIONAL_COLUMNS = ("reference", "origin_name", "destination_name", "tonnage", "kaynak_rapor", "carrier")
 
 # An .xlsx is a zip, and every zip starts here. Sniffed rather than trusted from the
 # extension: a renamed file should still work, and a mislabelled one should say why.
@@ -37,6 +37,7 @@ MAX_WORKBOOK_CELLS = 200_000
 
 OUTPUT_COLUMNS = (
     "reference",
+    "carrier",
     "origin_name",
     "destination_name",
     "tonnage",
@@ -63,6 +64,7 @@ class ReportInputError(ValueError):
 @dataclass
 class ShipmentRow:
     reference: str
+    carrier: str
     origin: tuple[float, float]
     destination: tuple[float, float]
     origin_name: str
@@ -243,6 +245,7 @@ def parse_shipments(content: str) -> list[ShipmentRow]:
         shipments.append(
             ShipmentRow(
                 reference=(row.get("reference") or f"row-{number}").strip(),
+                carrier=(row.get("kaynak_rapor") or row.get("carrier") or "Unknown").strip(),
                 origin=origin,
                 destination=destination,
                 origin_name=(row.get("origin_name") or "origin").strip(),
@@ -366,6 +369,7 @@ def report_to_csv(report: Report) -> str:
         writer.writerow(
             [
                 row.shipment.reference,
+                row.shipment.carrier,
                 row.shipment.origin_name,
                 row.shipment.destination_name,
                 row.shipment.tonnage,

@@ -3,17 +3,19 @@
    against this surface. The aqua's 2.82:1 contrast is a documented WARN; the relief it
    requires is met by the leg table and the direct value labels beside every mark. */
 :root {
-  --bg: #eef1f5;
+  --bg: #f4f7f9;
   --surface: #ffffff;
-  --surface-sunken: #f6f8fa;
-  --border: #dde2e9;
-  --border-strong: #c2c9d4;
-  --ink: #10141a;
-  --ink-secondary: #414a57;
-  --ink-muted: #6e7783;
-  --accent: #2a78d6;
-  --accent-ink: #1b5fb0;
-  --accent-wash: #eaf2fd;
+  --surface-sunken: #f8fafc;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --ink: #0f172a;
+  --ink-secondary: #475569;
+  --ink-muted: #64748b;
+  --accent: #3b82f6;
+  --accent-ink: #2563eb;
+  --accent-wash: #eff6ff;
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.4);
 
   --road: #eb6834;
   --sea: #2a78d6;
@@ -42,9 +44,9 @@
   --warn-border: #e6c168;
   --warn-ink: #74510a;
 
-  --r: 12px;
-  --r-sm: 7px;
-  --shadow: 0 1px 2px rgba(16, 20, 26, .05), 0 6px 16px rgba(16, 20, 26, .05);
+  --r: 16px;
+  --r-sm: 10px;
+  --shadow: 0 4px 24px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02);
 }
 
 
@@ -53,17 +55,19 @@
    Declared under both scopes so an explicit choice beats the OS setting either way. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0d1014;
-    --surface: #14171c;
-    --surface-sunken: #1b1f26;
-    --border: #2a2f38;
-    --border-strong: #3d434e;
-    --ink: #f2f4f7;
-    --ink-secondary: #b9c0ca;
-    --ink-muted: #8b93a0;
-    --accent: #3987e5;
-    --accent-ink: #5b9fee;
-    --accent-wash: #16233a;
+    --bg: #0b0f19;
+    --surface: #1e293b;
+    --surface-sunken: #0f172a;
+    --border: #334155;
+    --border-strong: #475569;
+    --ink: #f8fafc;
+    --ink-secondary: #94a3b8;
+    --ink-muted: #64748b;
+    --accent: #3b82f6;
+    --accent-ink: #60a5fa;
+    --accent-wash: #1e3a8a;
+    --glass-bg: rgba(30, 41, 59, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.05);
     --road: #d95926;
     --sea: #3987e5;
     --rail: #199e70;
@@ -84,21 +88,23 @@
     --warn-wash: #241d0d;
     --warn-border: #6b571f;
     --warn-ink: #e0c583;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 16px rgba(0, 0, 0, .3);
+    --shadow: 0 4px 24px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0d1014;
-  --surface: #14171c;
-  --surface-sunken: #1b1f26;
-  --border: #2a2f38;
-  --border-strong: #3d434e;
-  --ink: #f2f4f7;
-  --ink-secondary: #b9c0ca;
-  --ink-muted: #8b93a0;
-  --accent: #3987e5;
-  --accent-ink: #5b9fee;
-  --accent-wash: #16233a;
+  --bg: #0b0f19;
+  --surface: #1e293b;
+  --surface-sunken: #0f172a;
+  --border: #334155;
+  --border-strong: #475569;
+  --ink: #f8fafc;
+  --ink-secondary: #94a3b8;
+  --ink-muted: #64748b;
+  --accent: #3b82f6;
+  --accent-ink: #60a5fa;
+  --accent-wash: #1e3a8a;
+  --glass-bg: rgba(30, 41, 59, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.05);
   --road: #d95926;
   --sea: #3987e5;
   --rail: #199e70;
@@ -119,7 +125,7 @@
   --warn-wash: #241d0d;
   --warn-border: #6b571f;
   --warn-ink: #e0c583;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 16px rgba(0, 0, 0, .3);
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 /* Motion carries meaning here: switching the ro-ro basis moves the bars and the
@@ -132,9 +138,10 @@
 
 body {
   margin: 0;
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14.5px/1.5 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--ink);
-  background: var(--bg);
+  background: linear-gradient(135deg, var(--bg) 0%, var(--surface-sunken) 100%);
+  background-attachment: fixed;
 }
 h1, h2, h3 { letter-spacing: -0.015em; }
 
@@ -143,8 +150,11 @@ h1, h2, h3 { letter-spacing: -0.015em; }
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
   flex-wrap: wrap;
   padding: 0.75rem 1.25rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--glass-border);
+  position: sticky; top: 0; z-index: 100;
 }
 .brand { display: flex; align-items: center; gap: 0.7rem; }
 .brand .mark {
@@ -168,13 +178,32 @@ h1, h2, h3 { letter-spacing: -0.015em; }
 /* A class selector outranks the UA sheet's [hidden] rule, so say it here. */
 [hidden] { display: none !important; }
 
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r);
   box-shadow: var(--shadow);
   padding: 1rem 1.1rem;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08), 0 4px 8px rgba(15, 23, 42, 0.04);
+}
+.sidebar .card:nth-child(1) { animation-delay: 0.0s; }
+.sidebar .card:nth-child(2) { animation-delay: 0.05s; }
+.sidebar .card:nth-child(3) { animation-delay: 0.1s; }
+.dashboard .card:nth-child(1) { animation-delay: 0.15s; }
+.dashboard .card:nth-child(2) { animation-delay: 0.2s; }
+.dashboard .card:nth-child(3) { animation-delay: 0.25s; }
 .card-title { margin: 0; font-size: 0.94rem; }
 .card-head {
   display: flex; align-items: baseline; justify-content: space-between;
@@ -191,11 +220,14 @@ input, select {
   font: inherit; font-size: 0.9rem; color: inherit;
   background: var(--surface);
   border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
 }
 input[type="file"] { padding: 0.3rem; font-size: 0.82rem; }
 input:focus-visible, select:focus-visible, button:focus-visible,
 .seg-btn:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 2px;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
 }
 .hint { margin: 0.35rem 0 0.6rem; font-size: 0.8rem; color: var(--ink-muted); }
 .hint code { background: var(--surface-sunken); padding: 0.05em 0.28em; border-radius: 3px; font-size: 0.95em; }
@@ -205,11 +237,13 @@ button {
   font: inherit; font-weight: 640; font-size: 0.9rem;
   color: #fff; background: var(--accent);
   border: none; border-radius: var(--r-sm); cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-button:hover { background: var(--accent-ink); }
-button:disabled { background: var(--ink-muted); cursor: progress; }
-button.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--border-strong); }
-button.ghost:hover { background: var(--surface-sunken); }
+button:hover:not(:disabled) { background: var(--accent-ink); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+button:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
+button:disabled { background: var(--ink-muted); cursor: progress; opacity: 0.7; }
+button.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--border-strong); box-shadow: none; }
+button.ghost:hover:not(:disabled) { background: var(--surface-sunken); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 /* ── route input ─────────────────────────────────────────────────────────
    Two endpoints read as a journey rather than as four unrelated fields. The old
    form stacked "Kalkış / Adı / Varış / Adı" in one flat column, where the two
@@ -837,3 +871,44 @@ td.exposed { color: var(--bad); font-weight: 620; }
 .place-actions { display: flex; gap: 0.35rem; margin-top: 0.15rem; }
 .place-actions button { width: auto; margin: 0; padding: 0.15rem 0.55rem; font-size: 0.76rem; }
 .place-empty { margin: 0; padding: 0.6rem; font-size: 0.82rem; color: var(--ink-muted); }
+
+
+/* ── tradeoffs ───────────────────────────────────────────────────────── */
+.tags { display: inline-flex; gap: 0.3rem; margin-left: 0.5rem; vertical-align: middle; }
+.tradeoff-tag {
+    font-size: 0.65rem; padding: 0.15rem 0.35rem; border-radius: 4px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.tradeoff-tag.fastest { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
+.tradeoff-tag.cheapest { background: rgba(234, 179, 8, 0.15); color: #ca8a04; border: 1px solid rgba(234, 179, 8, 0.3); }
+.tradeoff-tag.greenest { background: rgba(34, 197, 94, 0.15); color: #16a34a; border: 1px solid rgba(34, 197, 94, 0.3); }
+.bar-value { display: flex; flex-direction: column; text-align: right; line-height: 1.2; }
+.bar-value .val-co2 { font-weight: 600; font-size: 0.85rem; }
+.bar-value .val-cost { font-size: 0.75rem; color: var(--ink-muted); }
+.bar-value .val-time { font-size: 0.75rem; color: var(--ink-muted); }
+
+/* ── CEO Dashboard Audit Button ────────────────────────────────────────── */
+.btn-audit {
+  background: var(--good);
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  box-shadow: 0 4px 15px rgba(63, 183, 130, 0.4);
+  animation: download-pulse 2s infinite;
+}
+.btn-audit:hover {
+  background: #349b6d;
+  color: #fff;
+  animation: none;
+  transform: translateY(-1px);
+}
+@keyframes download-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(63, 183, 130, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(63, 183, 130, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(63, 183, 130, 0); }
+}
+
+/* ── Anomaly Warnings ────────────────────────────────────────── */
+.lane-tag.bad { background: rgba(230,103,103,0.15); color: #e66767; border: 1px solid rgba(230,103,103,0.3); }
+.notice.warn { background: rgba(234,179,8,0.1); border-left: 4px solid #ca8a04; padding: 1rem; border-radius: 4px; color: var(--ink); font-size: 0.9rem; }
+

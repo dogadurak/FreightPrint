@@ -97,6 +97,48 @@ const formatPoint = (lngLat) => `${lngLat.lng.toFixed(4)}, ${lngLat.lat.toFixed(
 /* ── map ─────────────────────────────────────────────────────────────── */
 
 /** The map is a nice-to-have. Losing it must not take the dashboard down with it. */
+class TerrainControl {
+  onAdd(map) {
+    this._map = map;
+    this._container = document.createElement('div');
+    this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.title = '3D/2D Görünüm';
+    button.innerHTML = '3D';
+    button.style.fontWeight = 'bold';
+    button.style.fontFamily = 'inherit';
+    this._is3D = false;
+    
+    button.onclick = () => {
+      this._is3D = !this._is3D;
+      button.innerHTML = this._is3D ? '2D' : '3D';
+      if (this._is3D) {
+        if (!map.getSource('terrain-source')) {
+          map.addSource('terrain-source', {
+            type: 'raster-dem',
+            tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+            encoding: 'terrarium',
+            maxzoom: 14,
+          });
+        }
+        map.setTerrain({ source: 'terrain-source', exaggeration: 1.5 });
+        map.setPitch(60);
+      } else {
+        map.setTerrain(null);
+        map.setPitch(0);
+      }
+    };
+    this._container.appendChild(button);
+    return this._container;
+  }
+
+  onRemove() {
+    this._container.parentNode.removeChild(this._container);
+    this._map = undefined;
+  }
+}
+
 function initMap() {
   if (typeof maplibregl === "undefined") {
     mapElement.innerHTML =
@@ -113,9 +155,9 @@ function initMap() {
       sources: {
         osm: {
           type: "raster",
-          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
           tileSize: 256,
-          attribution: "© OpenStreetMap katkıda bulunanlar",
+          attribution: "© OpenStreetMap, © CARTO",
         },
       },
       layers: [{ id: "osm", type: "raster", source: "osm" }],
@@ -124,6 +166,7 @@ function initMap() {
     zoom: 3.4,
   });
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+  map.addControl(new TerrainControl(), "top-right");
   map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
   map.on("load", async () => {
     await loadRiskZones();
@@ -627,66 +670,81 @@ function terminalCoordinate(name) {
   return match ? match.geometry.coordinates : null;
 }
 
-/** Draw one alternative. Legs without geometry are dashed: schematic, not surveyed. */
-function drawAlternative(alternative, scenario, total) {
-  if (!map || !alternative) return;
+/** Draw all alternatives, highlighting the selected one. */
+function drawAlternatives(alternatives, scenario) {
+  if (!map || !alternatives) return;
   clearRoute();
   const bounds = new maplibregl.LngLatBounds();
-  // Popups quote the scenario on screen, not the one the geometry was priced under.
-  const priced = legsUnder(scenario, alternative, total);
+  
+  const orderedIndices = [];
+  for (let i = 0; i < scenario.totals.length; i++) {
+    if (i !== selectedIndex) orderedIndices.push(i);
+  }
+  if (selectedIndex < scenario.totals.length) orderedIndices.push(selectedIndex);
+  
+  orderedIndices.forEach((idx) => {
+    const total = scenario.totals[idx];
+    const alternative = alternatives.find((a) => a.label === total.label);
+    if (!alternative) return;
+    
+    const priced = legsUnder(scenario, alternative, total);
+    const isSelected = idx === selectedIndex;
 
-  priced.forEach((leg, index) => {
-    let coordinates = leg.geometry;
-    // A track that cannot be sailed is drawn like one that was never computed: solid
-    // would claim this is the route taken.
-    const schematic = !coordinates.length || leg.track_is_indicative;
-    if (schematic) {
-      // A ferry inside a road leg has no endpoints of its own; the road leg it
-      // belongs to is already drawn, so there is nothing separate to show.
-      const from = terminalCoordinate(leg.from_name);
-      const to = terminalCoordinate(leg.to_name);
-      if (!from || !to) return;
-      coordinates = [from, to];
-    }
-    coordinates.forEach((point) => bounds.extend(point));
+    priced.forEach((leg, index) => {
+      let coordinates = leg.geometry;
+      const schematic = !coordinates.length || leg.track_is_indicative;
+      if (schematic) {
+        const from = terminalCoordinate(leg.from_name);
+        const to = terminalCoordinate(leg.to_name);
+        if (!from || !to) return;
+        coordinates = [from, to];
+      }
+      coordinates.forEach((point) => bounds.extend(point));
 
-    const id = `leg-${index}`;
-    map.addSource(id, {
-      type: "geojson",
-      data: {
-        type: "Feature",
-        geometry: { type: "LineString", coordinates },
-        properties: {
-          label: `${leg.from_name} → ${leg.to_name}`,
-          mode: MODE_LABELS[leg.mode] ?? leg.mode,
-          km: nf.format(leg.distance_km),
-          co2: nf.format(leg.co2_kg),
-          factor: `${nf3.format(leg.factor_value)} kg CO2/ton-km`,
-          schematic: schematic
-            ? (leg.track_is_indicative ? "göstergesel iz" : "şematik çizim")
-            : "",
+      const id = `leg-${idx}-${index}`;
+      map.addSource(id, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          geometry: { type: "LineString", coordinates },
+          properties: {
+            label: `${leg.from_name} → ${leg.to_name}`,
+            mode: MODE_LABELS[leg.mode] ?? leg.mode,
+            km: nf.format(leg.distance_km),
+            co2: nf.format(leg.co2_kg),
+            factor: `${nf3.format(leg.factor_value)} kg CO2/ton-km`,
+            schematic: schematic
+              ? (leg.track_is_indicative ? "göstergesel iz" : "şematik çizim")
+              : "",
+            gain: leg.elevation_gain_m || 0,
+            loss: leg.elevation_loss_m || 0,
+            terrain_factor: leg.terrain_factor || 1.0
+          },
         },
-      },
+      });
+      const isSteep = isSelected && leg.terrain_factor > 1.05;
+
+      map.addLayer({
+        id, type: "line", source: id,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": isSelected ? (isSteep ? "#ef4444" : modeColour(leg.mode)) : "#9ca3af",
+          "line-width": isSelected ? (isSteep ? 4 : 3) : 2,
+          "line-dasharray": schematic ? [2, 1.6] : [1],
+          "line-opacity": isSelected ? 1 : 0.6
+        },
+      });
+      map.addLayer({
+        id: `${id}-hit`, type: "line", source: id,
+        paint: { "line-color": "#000", "line-opacity": 0, "line-width": isSelected ? 18 : 8 },
+      });
+      drawnLayers.push(id);
     });
-    map.addLayer({
-      id, type: "line", source: id,
-      layout: { "line-cap": "round", "line-join": "round" },
-      paint: {
-        "line-color": modeColour(leg.mode),
-        "line-width": 3,
-        "line-dasharray": schematic ? [2, 1.6] : [1],
-      },
-    });
-    // An invisible fat line under the thin one: the hit target is bigger than the mark.
-    map.addLayer({
-      id: `${id}-hit`, type: "line", source: id,
-      paint: { "line-color": "#000", "line-opacity": 0, "line-width": 18 },
-    });
-    drawnLayers.push(id);
   });
 
   attachLegHover();
-  highlightCrossedZones((alternative.risk?.zones ?? []).map((z) => z.id));
+  const chosenAlternative = alternatives.find(a => a.label === scenario.totals[selectedIndex].label);
+  highlightCrossedZones((chosenAlternative?.risk?.zones ?? []).map((z) => z.id));
   if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 50, duration: 600 });
 }
 
@@ -699,7 +757,8 @@ function attachLegHover() {
       const p = event.features[0].properties;
       popup.setLngLat(event.lngLat).setHTML(
         `<strong>${p.label}</strong>${p.mode} · ${p.km} km · ${p.co2} kg CO2<br>`
-        + `<span style="color:#6e7783">faktör ${p.factor}${p.schematic ? " · şematik" : ""}</span>`,
+        + (p.gain > 0 ? `⛰️ Tırmanış: +${Math.round(p.gain)}m · İniş: -${Math.round(p.loss)}m<br>` : '')
+        + `<span style="color:#6e7783">faktör ${p.factor}${p.terrain_factor && p.terrain_factor !== 1 ? ` (Topografya x${p.terrain_factor.toFixed(2)})` : ''}${p.schematic ? " · şematik" : ""}</span>`,
       ).addTo(map);
     });
     map.on("mouseleave", hit, () => {
@@ -799,8 +858,8 @@ function buildKpis() {
   $("kpi-row").innerHTML = [
     ["route", "Seçilen rota", "kg CO2"],
     ["delta", "Tam karayoluna fark", "kg CO2"],
+    ["saving_eur", "Maliyet Farkı", "€"],
     ["range", "Belirsizlik aralığı", ""],
-    ["sens", "Ro-ro esasına duyarlılık", ""],
   ].map(([key, label, unit]) => `<article class="kpi" data-kpi="${key}">
       <p class="kpi-label">${label}</p>
       <p class="kpi-value"><span data-num></span>${unit ? `<span class="unit">${unit}</span>` : ""}</p>
@@ -813,6 +872,7 @@ function updateKpis(scenario) {
   const chosen = totals[selectedIndex] ?? totals[0];
   const baseline = totals.find((t) => t.is_all_road);
   const delta = chosen.saving_co2_kg;
+  const costDelta = baseline && chosen.total_cost_eur && baseline.total_cost_eur ? chosen.total_cost_eur - baseline.total_cost_eur : null;
 
   // Only the GLEC sets count here: the customer's own set is a different methodology,
   // not a basis choice, and folding it in stretched the band into meaninglessness.
@@ -835,6 +895,7 @@ function updateKpis(scenario) {
   const tile = (key) => $("kpi-row").querySelector(`[data-kpi="${key}"]`);
   const set = (key, value, format, sub, tone) => {
     const element = tile(key);
+    if (!element) return;
     tween(element.querySelector("[data-num]"), value, format);
     element.querySelector(".kpi-sub").textContent = sub;
     element.classList.toggle("good", tone === "good");
@@ -849,6 +910,11 @@ function updateKpis(scenario) {
       : delta < 0 ? `%${nf.format((-delta / baseline.total_co2_kg) * 100)} daha fazla`
       : "karşılaştırma temeli",
     delta === null || delta === 0 ? "" : delta > 0 ? "good" : "bad");
+    
+  set("saving_eur", costDelta === null ? 0 : costDelta,
+    (v) => (costDelta === null ? "—" : (v > 0 ? "+" : "") + nf.format(v)),
+    costDelta === null ? "temel yok" : "karayoluna kıyasla (Yakıt + ETS)",
+    costDelta === null || costDelta === 0 ? "" : costDelta < 0 ? "good" : "bad");
   set("range", range ? range.low_co2_kg : 0,
     (v) => (range ? `${nf.format(v)} – ${nf.format(range.high_co2_kg)} kg` : "—"),
     range ? `±%${bandWidth.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} · %${
@@ -860,14 +926,27 @@ function updateKpis(scenario) {
 
 function buildComparison(scenario) {
   $("comparison-chart").innerHTML = `<div class="bars">${
-    scenario.totals.map((total, index) => `<button type="button" class="bar-row" data-index="${index}">
+    scenario.totals.map((total, index) => {
+      const tagsHtml = (total.tradeoff_tags || []).map(t => {
+        if (t === 'fastest') return '<span class="tradeoff-tag fastest">⚡ En Hızlı</span>';
+        if (t === 'cheapest') return '<span class="tradeoff-tag cheapest">💰 En Ucuz</span>';
+        if (t === 'greenest') return '<span class="tradeoff-tag greenest">🌿 En Çevreci</span>';
+        return '';
+      }).join(" ");
+      return `<button type="button" class="bar-row" data-index="${index}">
       <span class="bar-name">${total.label}${
-        total.is_all_road ? '<span class="baseline-tag">temel</span>' : ""}</span>
+        total.is_all_road ? '<span class="baseline-tag">temel</span>' : ""
+      } <div class="tags">${tagsHtml}</div></span>
       <span class="bar-track"><span class="bar-stack">${
         MODE_ORDER.map((m) => `<span class="${m}" data-mode="${m}" style="flex:0 0 0%"></span>`).join("")
       }</span></span>
-      <span class="bar-value"><span data-num></span></span>
-    </button>`).join("")}</div>
+      <span class="bar-value">
+        <span class="val-co2"><span data-num></span></span>
+        <span class="val-cost">${total.total_cost_eur ? nf.format(total.total_cost_eur) + ' €' : ''}</span>
+        <span class="val-time">${total.total_hours ? total.total_hours + ' sa' : ''}</span>
+      </span>
+    </button>`;
+    }).join("")}</div>
     <div class="legend-row">
       ${MODE_ORDER.map((m) =>
         `<span class="key"><span class="swatch ${m}"></span>${MODE_LABELS[m]}</span>`).join("")}
@@ -906,6 +985,18 @@ function updateComparison(scenario) {
       segment.title = `${MODE_LABELS[mode]}: ${nf.format(total.co2_by_mode[mode] ?? 0)} kg CO2`;
     });
     tween(element.querySelector("[data-num]"), total.total_co2_kg, (v) => nf.format(v));
+    const tagsHtml = (total.tradeoff_tags || []).map(t => {
+      if (t === 'fastest') return '<span class="tradeoff-tag fastest">⚡ En Hızlı</span>';
+      if (t === 'cheapest') return '<span class="tradeoff-tag cheapest">💰 En Ucuz</span>';
+      if (t === 'greenest') return '<span class="tradeoff-tag greenest">🌿 En Çevreci</span>';
+      return '';
+    }).join(" ");
+    const tagsEl = element.querySelector(".tags");
+    if (tagsEl) tagsEl.innerHTML = tagsHtml;
+    const costEl = element.querySelector(".val-cost");
+    if (costEl) costEl.textContent = total.total_cost_eur ? nf.format(total.total_cost_eur) + ' €' : '';
+    const timeEl = element.querySelector(".val-time");
+    if (timeEl) timeEl.textContent = total.total_hours ? total.total_hours + ' sa' : '';
   });
 }
 
@@ -1026,6 +1117,40 @@ function buildDashboard() {
     .join("") + '<span class="key"><span class="dashed-key"></span>şematik</span>';
 }
 
+function renderCEOWidget(scenario) {
+  const ctaSlot = $("ceo-cta-slot");
+  if (!ctaSlot) return;
+
+  const baseline = scenario.totals.find((t) => t.is_all_road);
+  const best = scenario.totals.reduce((prev, curr) => 
+    (curr.total_cost_eur < prev.total_cost_eur ? curr : prev), scenario.totals[0]);
+
+  if (!baseline || !best || baseline.label === best.label || baseline.total_cost_eur <= best.total_cost_eur) {
+    ctaSlot.hidden = true;
+    return;
+  }
+
+  const costSaving = baseline.total_cost_eur - best.total_cost_eur;
+  const etsSaving = (baseline.ets?.cost_eur || 0) - (best.ets?.cost_eur || 0);
+  const co2Saving = baseline.total_co2_kg - best.total_co2_kg;
+  const co2Pct = (co2Saving / baseline.total_co2_kg) * 100;
+
+  ctaSlot.hidden = false;
+  ctaSlot.innerHTML = `
+    <div style="background: var(--surface-float); border: 2px solid var(--sea); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      <div>
+        <h3 style="margin: 0 0 0.5rem 0; color: var(--sea); font-size: 1.2rem;">💡 Yönetici Özeti: Optimizasyon Fırsatı</h3>
+        <p style="margin: 0; font-size: 1.05rem;">
+          Sadece Karayolu yerine <strong>${best.label}</strong> rotasını tercih ederek sefer başına toplam <strong>${nf.format(costSaving)} €</strong> tasarruf edebilirsiniz.
+          <br>
+          <small style="color: var(--text-muted);">Bu tasarrufun <strong>${nf.format(etsSaving)} €</strong>'su düşen EU ETS karbon vergisinden kaynaklanmaktadır (Karbon ayak iziniz %${nf1.format(co2Pct)} azalır).</small>
+        </p>
+      </div>
+      <button type="button" class="primary" style="background: var(--sea); color: white; padding: 0.75rem 1.5rem; font-weight: 600; border-radius: 4px; white-space: nowrap; margin-left: 1rem;" onclick="document.querySelector('.kpi-row').scrollIntoView({behavior: 'smooth'})">Detayları İncele</button>
+    </div>
+  `;
+}
+
 /** Update values in place so the bars and dots animate between scenarios. */
 function applyScenario() {
   const scenario = currentScenario();
@@ -1033,6 +1158,7 @@ function applyScenario() {
   if (selectedIndex >= scenario.totals.length) selectedIndex = 0;
 
   renderScenarioBar();
+  renderCEOWidget(scenario);
   updateKpis(scenario);
   renderNotices(scenario);
   updateComparison(scenario);
@@ -1043,7 +1169,7 @@ function applyScenario() {
 
   const chosen = scenario.totals[selectedIndex];
   const shown = payload.alternatives.find((a) => a.label === chosen.label);
-  drawAlternative(shown, scenario, chosen);
+  drawAlternatives(payload.alternatives, scenario);
   // The player belongs to one alternative; switching scenario or route reloads it.
   resetPlayer(shown);
   loadConformance(scenario);
@@ -1116,6 +1242,7 @@ form.addEventListener("submit", async (event) => {
   if (data.get("empty_return_share")) body.empty_return_share = Number(data.get("empty_return_share"));
 
   submitButton.disabled = true;
+  $("download-pdf").hidden = true;
   statusLine.textContent = "Rotalanıyor — soğuk istek birkaç saniye sürebilir…";
   showSkeleton();
   try {
@@ -1145,6 +1272,7 @@ form.addEventListener("submit", async (event) => {
     if (map) map.resize();
     buildDashboard();
     applyScenario();
+    $("download-pdf").hidden = false;
   } catch (error) {
     emptyState.innerHTML = `<div class="error">Sunucuya ulaşılamadı: ${error.message}</div>`;
     emptyState.hidden = false; dashboard.hidden = true;
@@ -1152,6 +1280,25 @@ form.addEventListener("submit", async (event) => {
     submitButton.disabled = false;
     statusLine.textContent = "";
   }
+});
+
+$("download-pdf").addEventListener("click", () => {
+  const element = document.querySelector(".layout");
+  const opt = {
+    margin:       10,
+    filename:     'freightprint_karbon_sertifikasi.pdf',
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2, useCORS: true },
+    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
+  };
+  
+  // hide sidebar in the PDF for a cleaner report? No, layout is responsive, but let's hide the form side temporarily
+  const sidebar = document.querySelector(".sidebar");
+  sidebar.style.display = 'none';
+  
+  html2pdf().set(opt).from(element).save().then(() => {
+    sidebar.style.display = 'flex';
+  });
 });
 
 const reportForm = $("report-form");
@@ -1199,6 +1346,95 @@ reportForm.addEventListener("submit", async (event) => {
     reportSubmit.disabled = false;
   }
 });
+
+});
+
+$("portfolio-submit").addEventListener("click", async (event) => {
+  event.preventDefault();
+  const body = new FormData(reportForm);
+  const scenario = currentScenario();
+  body.set("scope", scenario?.scope ?? "TTW");
+  body.set("factor_set", scenario?.factor_set ?? "glec");
+
+  const btn = $("portfolio-submit");
+  btn.disabled = true;
+  reportStatus.textContent = "Portföy analiz ediliyor…";
+  
+  try {
+    const response = await fetch("/api/portfolio", { method: "POST", body });
+    const portfolio = await response.json();
+    if (!response.ok) {
+      reportStatus.textContent = portfolio.detail ?? `İstek başarısız (${response.status}).`;
+      return;
+    }
+    reportStatus.textContent = `${portfolio.lanes.length} hat analiz edildi.`;
+    
+    // Switch to dashboard view
+    $("dashboard").hidden = false;
+    $("empty-state").hidden = true;
+    
+    renderPortfolio(portfolio);
+    renderPortfolioOnMap(portfolio);
+  } catch (error) {
+    reportStatus.textContent = `Sunucuya ulaşılamadı: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function renderPortfolioOnMap(portfolio) {
+  if (!map) return;
+  
+  if (map.getSource('portfolio-lines')) {
+    map.removeLayer('portfolio-lines');
+    map.removeSource('portfolio-lines');
+  }
+  
+  const features = portfolio.lanes.map(lane => {
+    return {
+      type: "Feature",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [lane.origin_lon, lane.origin_lat],
+          [lane.destination_lon, lane.destination_lat]
+        ]
+      },
+      properties: {
+        risk: lane.empty_miles_risk,
+        imbalance: lane.imbalance_ratio,
+        label: lane.key,
+        shipments: lane.shipments
+      }
+    };
+  });
+  
+  map.addSource('portfolio-lines', {
+    type: 'geojson',
+    data: { type: "FeatureCollection", features }
+  });
+  
+  map.addLayer({
+    id: 'portfolio-lines',
+    type: 'line',
+    source: 'portfolio-lines',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': ['case', ['==', ['get', 'risk'], true], '#e66767', '#3fb782'],
+      'line-width': ['+', 2, ['/', ['get', 'shipments'], 10]],
+      'line-opacity': 0.8
+    }
+  });
+  
+  const bounds = new maplibregl.LngLatBounds();
+  features.forEach(f => {
+    bounds.extend(f.geometry.coordinates[0]);
+    bounds.extend(f.geometry.coordinates[1]);
+  });
+  if (!bounds.isEmpty()) {
+    map.fitBounds(bounds, { padding: 50 });
+  }
+}
 
 async function pollReportJob(jobId) {
   // Poll gently: the run is minutes long, so a tighter loop only adds requests.
@@ -1998,6 +2234,18 @@ function togglePlay() {
   }, tick * 1000);
 }
 
+$("player-play")?.addEventListener("click", togglePlay);
+
+$("player-scrub")?.addEventListener("input", (e) => {
+  if (!playback) return;
+  playHead = (e.target.value / 1000) * playback.total_hours;
+  if (!playTimer) drawPlayHead();
+});
+
+$("player-speed")?.addEventListener("change", (e) => {
+  playSpeed = Number(e.target.value);
+});
+
 /* ── lane portfolio ──────────────────────────────────────────────────── */
 
 /** Read the uploaded shipment file as a portfolio of lanes.
@@ -2063,9 +2311,13 @@ function renderPortfolio(data) {
             ? ` · €${nf.format(lane.eur_per_tonne_abated)}/ton` : ""}</span>`
       : "";
 
-    return `<tr>
+    const emptyMilesWarning = lane.empty_miles_risk 
+      ? `<span class="lane-tag bad" style="margin-left:8px;" title="Gidiş/Dönüş dengesizliği: ${lane.imbalance_ratio}">⚠️ Boş Dönüş Riski</span>`
+      : "";
+
+    return `<tr ${lane.empty_miles_risk ? 'style="background-color:rgba(230,103,103,0.05);"' : ''}>
       <td class="lane-name">${lane.key}<br><span class="card-note">${
-        lane.shipments} sevkiyat · ${nf.format(lane.tonne_km)} ton-km</span></td>
+        lane.shipments} sevkiyat · ${nf.format(lane.tonne_km)} ton-km</span>${emptyMilesWarning}</td>
       <td class="num">${nf3.format(lane.intensity_kg_per_tonne_km)}</td>
       <td class="num">${nf.format(lane.baseline_co2_kg)}
         <span class="lane-bar" style="width:${(lane.baseline_co2_kg / worst) * 100}%"></span></td>
@@ -2073,6 +2325,15 @@ function renderPortfolio(data) {
       <td>${state}${cost}</td>
     </tr>`;
   }).join("");
+
+  const anomalousLanes = data.lanes.filter(l => l.empty_miles_risk);
+  let anomalyNotice = "";
+  if (anomalousLanes.length > 0) {
+      anomalyNotice = `<div class="notice warn" style="margin-bottom:1rem;">
+          <strong>⚠️ ${anomalousLanes.length} hatta Boş Dönüş (Empty Miles) Riski tespit edildi!</strong><br>
+          Bu hatlarda gidiş ve dönüş yük hacimleri dengesiz (Katsayı > 0.75). Bu durum nakliyecinin dönüşte boş dönme ihtimalini artırarak maliyetlere ve emisyona olumsuz yansıyabilir. Tedarik zinciri planlamasında çift yönlü yük konsolidasyonu önerilir.
+      </div>`;
+  }
 
   const headline = data.addressable_co2_kg > 0
     ? `Her esasta kazanan hatlarda toplam <strong>${
@@ -2082,6 +2343,7 @@ function renderPortfolio(data) {
        bu bir hesap hatası değil, ro-ro deniz bacağının faktörünün sonucu.`;
 
   $("portfolio").innerHTML = `
+    ${anomalyNotice}
     <p class="hint">${headline}</p>
     <div class="table-scroll">
       <table class="lane-table">
@@ -2096,6 +2358,147 @@ function renderPortfolio(data) {
       ? `<p class="hint">Rotalanamayan ${data.failed.length} sevkiyat hiçbir hatta sayılmadı.</p>`
       : ""}
     ${data.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
+
+  renderCarrierScorecard(data);
+  renderConsolidation(data);
+  renderGlidepath(data);
+}
+
+function renderCarrierScorecard(data) {
+  const slot = $("carrier-scorecard-slot");
+  if (!slot) return;
+  if (!data.carriers || data.carriers.length === 0) {
+    slot.hidden = true;
+    return;
+  }
+  
+  slot.hidden = false;
+  const maxIntensity = Math.max(...data.carriers.map(c => c.intensity_kg_per_tonne_km), 0.0001);
+  const rows = data.carriers.map((c) => {
+    return `<tr>
+      <td><strong>${c.carrier}</strong></td>
+      <td class="num">${c.shipments}</td>
+      <td class="num">${nf.format(c.tonnes)}</td>
+      <td class="num">${nf.format(c.tonne_km)}</td>
+      <td class="num">${nf.format(c.total_co2_kg)}</td>
+      <td class="num">${nf3.format(c.intensity_kg_per_tonne_km)}
+        <span class="lane-bar" style="width:${(c.intensity_kg_per_tonne_km / maxIntensity) * 100}%; background-color: var(--status-bad);"></span>
+      </td>
+    </tr>`;
+  }).join("");
+
+  slot.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h2 class="card-title">Tedarikçi Karbon Karnesi</h2>
+        <span class="card-note">Performans bazlı ölçüm</span>
+      </div>
+      <p class="hint">Taşıyıcıların (Carrier) emisyon yoğunluğuna (kg CO2 / ton-km) göre sıralanmış listesi.</p>
+      <div class="table-scroll">
+        <table class="lane-table">
+          <thead>
+            <tr>
+              <th>Taşıyıcı</th>
+              <th class="num">Sevkiyat</th>
+              <th class="num">Ton</th>
+              <th class="num">Ton-km</th>
+              <th class="num">Toplam CO2 (kg)</th>
+              <th class="num">Yoğunluk (kg/ton-km)</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderConsolidation(data) {
+  const slot = $("consolidation-slot");
+  if (!slot) return;
+  
+  const opportunities = data.lanes.filter(l => l.consolidation_potential);
+  if (opportunities.length === 0) {
+    slot.hidden = true;
+    return;
+  }
+  
+  slot.hidden = false;
+  const rows = opportunities.map(l => {
+    const avgTonnage = l.tonnes / l.shipments;
+    return `<tr>
+      <td>${l.key}</td>
+      <td class="num">${l.shipments}</td>
+      <td class="num">${nf.format(l.tonnes)}</td>
+      <td class="num">${nf1.format(avgTonnage)}</td>
+    </tr>`;
+  }).join("");
+
+  slot.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h2 class="card-title">Yük Konsolidasyonu (FTL) Fırsatları</h2>
+        <span class="card-note">${opportunities.length} hatta potansiyel</span>
+      </div>
+      <div class="notice good" style="margin-bottom:1rem;">
+        <strong>Tavsiye:</strong> LTL (Parsiyel) sevkiyatları birleştirip FTL (Komple) taşıma yaparak rotalama verimliliğini artırın. Ortalama ağırlığı 18 ton altı olan, birden fazla sevkiyat içeren hatlar aşağıdadır.
+      </div>
+      <div class="table-scroll">
+        <table class="lane-table">
+          <thead>
+            <tr>
+              <th>Hat</th>
+              <th class="num">Sevkiyat Sayısı</th>
+              <th class="num">Toplam Ton</th>
+              <th class="num">Ortalama Tonaj</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderGlidepath(data) {
+  const slot = $("glidepath-slot");
+  if (!slot) return;
+  if (!data.glidepath) {
+    slot.hidden = true;
+    return;
+  }
+  
+  slot.hidden = false;
+  const gp = data.glidepath;
+  
+  // Calculate reductions
+  const multiModalReduction = gp.baseline_co2_kg - gp.best_scenario_co2_kg;
+  const netZeroReduction = gp.best_scenario_co2_kg - gp.target_2030_co2_kg;
+  
+  slot.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h2 class="card-title">Net-Zero 2030 Yörüngesi (Glidepath)</h2>
+        <span class="card-note">Karbon azaltım hedefleri</span>
+      </div>
+      <p class="hint">Portföyünüzün bugünden 2030'a emisyon azaltım potansiyeli.</p>
+      
+      <div class="glidepath-metrics" style="display:flex; gap:1rem; margin-top:1rem; margin-bottom:1.5rem;">
+        <div style="flex:1; padding:1rem; background:rgba(0,0,0,0.02); border-radius:8px; border-left:4px solid var(--border-subtle);">
+          <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.25rem;">Mevcut Karayolu (Baseline)</div>
+          <div style="font-size:1.5rem; font-weight:600; color:var(--text-main);">${nf.format(gp.baseline_co2_kg)} kg</div>
+        </div>
+        <div style="flex:1; padding:1rem; background:rgba(15,122,69,0.05); border-radius:8px; border-left:4px solid var(--status-good);">
+          <div style="font-size:0.875rem; color:var(--status-good); margin-bottom:0.25rem;">Multimodal Geçişi (-${Math.round((multiModalReduction/gp.baseline_co2_kg)*100)}%)</div>
+          <div style="font-size:1.5rem; font-weight:600; color:var(--text-main);">${nf.format(gp.best_scenario_co2_kg)} kg</div>
+        </div>
+        <div style="flex:1; padding:1rem; background:rgba(30,136,229,0.05); border-radius:8px; border-left:4px solid #1e88e5;">
+          <div style="font-size:0.875rem; color:#1e88e5; margin-bottom:0.25rem;">2030 Hedefi (Biyoyakıt & FTL)</div>
+          <div style="font-size:1.5rem; font-weight:600; color:var(--text-main);">${nf.format(gp.target_2030_co2_kg)} kg</div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 /* ── ISO 14083 self-assessment ───────────────────────────────────────── */

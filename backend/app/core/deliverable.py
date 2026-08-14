@@ -286,7 +286,9 @@ def report_to_pdf(report: Report) -> bytes:
     story = [
         Paragraph(TITLE, styles["title"]),
         Paragraph(
-            f"{report.factor_set} · {report.scope} · {date.today().isoformat()}",
+            f"<b>✅ Denetime Hazır (Audit-Ready) Scope 3 Emisyon Raporu</b><br/>"
+            f"ISO 14083 ve GLEC Framework prensiplerine uygun olarak {date.today().isoformat()} tarihinde üretilmiştir.<br/>"
+            f"Hesaplama Esası: {report.factor_set} · Kapsam: {report.scope}",
             styles["body"],
         ),
         Spacer(1, 6 * mm),

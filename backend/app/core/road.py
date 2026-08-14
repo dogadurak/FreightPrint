@@ -41,6 +41,9 @@ class RoadRoute:
     # Simplified [lon, lat] pairs, kept so a map can draw the road actually taken
     # rather than a straight line that crosses whatever lies between.
     geometry: tuple[tuple[float, float], ...] = ()
+    elevation_gain_m: float = 0.0
+    elevation_loss_m: float = 0.0
+    terrain_factor: float = 1.0
 
     @property
     def driving_km(self) -> float:
@@ -153,9 +156,44 @@ def _parse_osrm(payload: dict, origin: tuple[float, float], destination: tuple[f
         if step.get("mode") == "ferry"
     )
     coordinates = route.get("geometry", {}).get("coordinates", [])
+    
+    # Calculate elevation and terrain factor
+    elevation_gain = 0.0
+    elevation_loss = 0.0
+    terrain_factor = 1.0
+    
+    if coordinates:
+        # Sample max 100 points to avoid URL too long error
+        step = max(1, len(coordinates) // 100)
+        sampled_coords = coordinates[::step]
+        
+        try:
+            lats = ",".join(str(round(p[1], 4)) for p in sampled_coords)
+            lons = ",".join(str(round(p[0], 4)) for p in sampled_coords)
+            url = f"https://api.open-meteo.com/v1/elevation?latitude={lats}&longitude={lons}"
+            resp = requests.get(url, timeout=5)
+            if resp.ok:
+                elevations = resp.json().get("elevation", [])
+                if elevations:
+                    for i in range(1, len(elevations)):
+                        diff = elevations[i] - elevations[i-1]
+                        if diff > 0:
+                            elevation_gain += diff
+                        else:
+                            elevation_loss += abs(diff)
+                    
+                    # Each 100m of climb adds 0.8% fuel consumption. Each 100m descent saves 0.3%.
+                    terrain_factor = 1.0 + (elevation_gain * 0.008 / 100) - (elevation_loss * 0.003 / 100)
+                    terrain_factor = max(0.8, min(terrain_factor, 1.5))
+        except Exception:
+            pass # Fallback to flat terrain if API fails
+
     return RoadRoute(
         distance_km=route["distance"] / 1000.0,
         duration_h=route["duration"] / 3600.0,
         ferry_km=ferry_m / 1000.0,
         geometry=tuple((point[0], point[1]) for point in coordinates),
+        elevation_gain_m=elevation_gain,
+        elevation_loss_m=elevation_loss,
+        terrain_factor=terrain_factor,
     )
