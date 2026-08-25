@@ -152,6 +152,7 @@ def simulate_emission_range(
     leg_inputs = [
         (
             leg.distance_km,
+            leg.mode,
             spread_for(leg.mode),
             find_factor(
                 factors,
@@ -169,14 +170,17 @@ def simulate_emission_range(
     for _ in range(samples):
         sampled_load = rng.uniform(*band) if band is not None else None
         total = 0.0
-        for distance_km, spread, factor in leg_inputs:
+        for distance_km, mode, spread, factor in leg_inputs:
             sampled_km = rng.triangular(
                 distance_km * (1 - spread),
                 distance_km * (1 + spread),
                 distance_km,
             )
+            # Road only, exactly as the point estimate does it — the two describe one
+            # shipment and an argument applied differently in each would put the band
+            # somewhere other than around the number it belongs to.
             total += sampled_km * tonnage * effective_factor_value(
-                factor, sampled_load, empty_return_share
+                factor, sampled_load, empty_return_share if mode == "road" else None
             )
         totals.append(total)
 

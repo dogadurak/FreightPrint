@@ -399,3 +399,37 @@ def test_a_zero_distance_leg_emits_nothing():
     route = _route("nowhere", [_leg("road", 0.0)])
 
     assert calculate_route_emission(route, tonnage=24).total_co2_kg == 0.0
+
+
+def test_empty_return_reaches_the_road_and_nothing_else():
+    """A ro-ro's published basis is 0% empty running — the ship sails or it does not —
+    so a user describing *their trucks* as 10% empty was silently inflating the vessel's
+    emissions by 10% too. Rail keeps its published 17% for the same reason: the wagons
+    are not theirs either.
+    """
+    route = _route("mixed", [_leg("road", 100), _leg("sea", 1000), _leg("rail", 500)])
+
+    published = calculate_route_emission(route, tonnage=24, scope="WTW", factor_set="glec")
+    described = calculate_route_emission(
+        route, tonnage=24, scope="WTW", factor_set="glec", empty_return_share=0.10
+    )
+
+    by_mode = lambda shipment: shipment.co2_by_mode
+    assert by_mode(described)["road"] != pytest.approx(by_mode(published)["road"])
+    assert by_mode(described)["sea"] == pytest.approx(by_mode(published)["sea"])
+    assert by_mode(described)["rail"] == pytest.approx(by_mode(published)["rail"])
+
+
+def test_the_band_applies_empty_return_the_same_way_the_figure_does():
+    """The two describe one shipment, so an argument applied to different modes in each
+    would put the band somewhere other than around the number it belongs to."""
+    route = _route("mixed", [_leg("road", 100), _leg("sea", 1000)])
+    point = calculate_route_emission(
+        route, tonnage=24, scope="WTW", factor_set="glec", empty_return_share=0.10
+    ).total_co2_kg
+
+    band = simulate_emission_range(
+        route, tonnage=24, scope="WTW", factor_set="glec", empty_return_share=0.10, seed=0
+    )
+
+    assert band.low_co2_kg <= point <= band.high_co2_kg

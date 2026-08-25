@@ -323,7 +323,17 @@ def calculate_route_emission(
         #
         # Both belong here eventually, from real data: ERA5 reanalysis along the sea
         # track for wind, and measured terminal dwell for idling. Until then, absent.
-        value = effective_factor_value(factor, load_factor, empty_return_share)
+        # Empty return is a road-vehicle fact and the caller knows it about their own
+        # trucks. Applying it to the other modes substitutes that knowledge for the
+        # operator's: a ro-ro's published basis is 0% empty running because the ship
+        # sails or it does not, so a user describing their fleet as 10% empty was
+        # silently inflating the vessel's emissions by 10% as well. Rail keeps its
+        # published 17% for the same reason — the wagons are not theirs either.
+        value = effective_factor_value(
+            factor,
+            load_factor,
+            empty_return_share if resolved.mode == "road" else None,
+        )
         leg_co2 = resolved.distance_km * tonnage * value
 
         legs.append(

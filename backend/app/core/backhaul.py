@@ -157,6 +157,25 @@ class BackhaulReport:
     def worst(self) -> Imbalance | None:
         return max(self.imbalances, key=lambda i: i.empty_km, default=None)
 
+    @property
+    def laden_km(self) -> float:
+        """Distance actually carrying something, under the same dedicated-trip model."""
+        return sum(
+            item.heavy.trips * item.return_km + item.inbound_trips * item.return_km
+            for item in self.imbalances
+        )
+
+    @property
+    def implied_empty_share(self) -> float | None:
+        """Empty vehicle-kilometres as a share of all of them.
+
+        The quantity Eurostat reports, so the model can be held against it. None where
+        there is nothing to divide — a balanced portfolio has no imbalance rows at all,
+        and reporting 0% there would claim an observation the data does not contain.
+        """
+        total = self.laden_km + self.empty_km
+        return self.empty_km / total if total else None
+
 
 def _movements(shipments: list[ShipmentRow]) -> dict[str, Movement]:
     """Directed lanes, aggregated. Direction is the whole point, so it is kept."""
