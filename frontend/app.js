@@ -1197,6 +1197,8 @@ function applyScenario() {
   // Follows the selected alternative: the observation is weighted by the countries that
   // route crosses, so an all-road run and a multimodal one do not share an answer.
   renderEmptyRunning(shown, chosen);
+  // Same idea, the other assumption: the sea factor against the ships EMSA verified.
+  renderSeaFactor(shown);
   drawAlternatives(payload.alternatives, scenario);
   // The player belongs to one alternative; switching scenario or route reloads it.
   resetPlayer(shown);
@@ -3109,6 +3111,136 @@ $("hub-submit").addEventListener("click", async () => {
     button.disabled = false;
   }
 });
+
+/* ── the sea factor against the ships EMSA verified ───────────────────── */
+
+/** The published ro-ro factor, drawn on the distribution of the fleet it describes.
+ *
+ *  The second panel that compares this engine to something outside it, and the one that
+ *  checks its largest single number: every multimodal figure here rests on GLEC's ro-ro
+ *  factor, and until EU MRV was imported nothing could tell whether that factor
+ *  described the ships this corridor actually uses.
+ *
+ *  It reads as a pass — 0.063 lands inside the middle half of the verified fleet in
+ *  every period published. The more useful number is the width of that middle half:
+ *  spanning a factor of about 2.7, it says no single fleet average can describe the
+ *  particular ship carrying a particular load, which is a limit on this whole method
+ *  rather than on this engine.
+ */
+function renderSeaFactor(alternative) {
+  const card = $("sea-factor-card");
+  const slot = $("sea-factor");
+  if (!card || !slot) return;
+
+  const s = alternative?.sea_factor;
+  if (!s) { card.hidden = true; return; }
+
+  const f = (v) => v.toFixed(4);
+  $("sea-factor-note").textContent = s.observed_source;
+
+  // The scale spans the middle half plus whatever room the factor needs, so the marker
+  // is always on the track. Drawing the full range would compress the interesting part
+  // into a few pixels: a handful of ships report almost no transport work and come back
+  // two orders of magnitude high.
+  const lo = Math.min(s.q1, s.factor) * 0.85;
+  const hi = Math.max(s.q3, s.factor) * 1.1;
+  const at = (v) => `${((v - lo) / (hi - lo)) * 100}%`;
+
+  const strip = el("div", { class: "fleet-strip" }, [
+    el("div", { class: "fleet-track" }, [
+      el("div", {
+        class: "fleet-iqr",
+        style: `left:${at(s.q1)};right:${100 - parseFloat(at(s.q3))}%`,
+        title: `Filonun orta yarısı: ${f(s.q1)} – ${f(s.q3)}`,
+      }),
+      el("div", {
+        class: "fleet-median", style: `left:${at(s.median)}`,
+        title: `Gözlenen medyan ${f(s.median)}`,
+      }),
+      el("div", {
+        class: "fleet-factor", style: `left:${at(s.factor)}`,
+        title: `${s.compared_row} ${s.compared_scope}: ${f(s.factor)}`,
+      }),
+    ]),
+    el("div", { class: "fleet-scale" }, [
+      el("span", {}, f(lo)),
+      el("span", {}, "kg CO₂/ton-km"),
+      el("span", {}, f(hi)),
+    ]),
+    el("div", { class: "fleet-key" }, [
+      el("span", {}, [
+        el("i", { style: "background:var(--accent-wash);border:1px solid var(--border-strong)" }),
+        document.createTextNode(`filonun orta yarısı ${f(s.q1)}–${f(s.q3)}`),
+      ]),
+      el("span", {}, [
+        el("i", { style: "background:var(--ink-secondary)" }),
+        document.createTextNode(`gözlenen medyan ${f(s.median)}`),
+      ]),
+      el("span", {}, [
+        el("i", { style: "background:var(--sea);border-radius:50%" }),
+        document.createTextNode(`kullanılan faktör ${f(s.factor)}`),
+      ]),
+    ]),
+  ]);
+
+  const figures = el("div", { class: "hub-headline" }, [
+    el("div", { class: "hub-figure" }, [
+      el("span", { class: "hub-value" }, `${s.ratio.toFixed(2)}×`),
+      el("span", { class: "hub-label" }, "faktör / gözlenen medyan"),
+    ]),
+    el("div", { class: "hub-figure" }, [
+      el("span", { class: "hub-value neutral" }, `%${Math.round(s.share_below * 100)}`),
+      el("span", { class: "hub-label" }, `${nf.format(s.ships)} geminin faktörün altındaki payı`),
+    ]),
+    el("div", { class: "hub-figure" }, [
+      el("span", { class: "hub-value warn" }, `${s.spread.toFixed(1)}×`),
+      el("span", { class: "hub-label" }, "orta yarının genişliği"),
+    ]),
+  ]);
+
+  // Never colour alone: the chip carries a word, and the sentence under it says what
+  // "within" is actually claiming.
+  const within = s.verdict === "within";
+  const chip = el("span", { class: `verdict-chip ${within ? "ok" : "off"}` },
+    within ? "✓ aralık içinde" : s.verdict === "above" ? "▲ üst çeyreğin üstünde" : "▼ alt çeyreğin altında");
+
+  const reading = el("p", { class: "hint" }, [
+    chip,
+    document.createTextNode(
+      within
+        ? ` — filo ortalaması hiçbir gemiye eşit olmak zorunda değil, adil bir orta olmalı;`
+          + ` ${s.year} döneminde yayımlanan değer bunu sağlıyor.`
+        : ` — yayımlanan değer, tarif ettiği filonun orta yarısının dışında kalıyor.`),
+  ]);
+
+  // The finding that outlives the pass. An interquartile range this wide means the
+  // factor is a statement about a fleet, not about a sailing.
+  const spread = el("p", { class: "hint" },
+    `Orta yarı ${s.spread.toFixed(1)} kat aralığa yayılıyor: aynı seferi taşıyan iki `
+    + `doğrulanmış gemi arasında bu kadar fark var. Hangi filo ortalaması seçilirse `
+    + `seçilsin, tek bir geminin gerçeğini veremez — bu, motorun değil yöntemin sınırı.`);
+
+  const composition = el("p", { class: "provenance" },
+    "Gözlemdeki gemiler: "
+    + Object.entries(s.ship_types).sort((a, b) => b[1] - a[1])
+        .map(([kind, n]) => `${kind} ${nf.format(n)}`).join(" · "));
+
+  const mismatch = s.is_comparable ? null : el("p", { class: "provenance warn-text" },
+    "Bu faktör, bu gözlemin içermediği bir trafiği tarif ediyor; aşağıdaki not geçerli.");
+
+  slot.replaceChildren(
+    figures,
+    reading,
+    strip,
+    spread,
+    composition,
+    ...(mismatch ? [mismatch] : []),
+    el("p", { class: "provenance" },
+      `Karşılaştırılan satır: ${s.compared_row} · ${s.compared_scope} · ${s.factor_source}`),
+    ...s.notes.map((note) => el("p", { class: "provenance" }, note)),
+  );
+  card.hidden = false;
+}
 
 /* ── observed empty running ──────────────────────────────────────────── */
 

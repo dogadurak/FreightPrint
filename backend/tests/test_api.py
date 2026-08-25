@@ -768,3 +768,105 @@ def test_staying_off_german_roads_shows_up_as_money(client):
     multimodal = next(t for t in totals if not t["is_all_road"])
 
     assert road["co2_toll"]["total_eur"] > multimodal["co2_toll"]["total_eur"] * 5
+
+
+# ── the sea factor reaches the response, not only its own tests ───────────────
+
+def _multimodal(client, **overrides):
+    """The alternative that actually sails; an all-road option has no sea factor."""
+    payload = _post(client, **overrides).json()
+    return next(a for a in payload["alternatives"] if not a["is_all_road"])
+
+
+def test_the_sea_factor_comparison_reaches_the_api(client):
+    """The benchmark is only worth building if a caller can see it. This module was once
+    complete, correct, and reachable from nothing but its own test file."""
+    sea = _multimodal(client)["sea_factor"]
+
+    assert sea is not None
+    assert sea["ships"] > 200
+    assert "THETIS-MRV" in sea["observed_source"]
+
+
+def test_an_all_road_option_carries_no_sea_factor(client):
+    """Nothing sails, so there is nothing to check. A comparison offered here would be
+    about a leg the route does not have."""
+    payload = _post(client).json()
+    road = next(a for a in payload["alternatives"] if a["is_all_road"])
+
+    assert road["sea_factor"] is None
+
+
+def test_the_comparison_uses_the_ttw_row_even_when_the_shipment_is_priced_wtw(client):
+    """MRV reports the CO2 a ship emitted from fuel it burned. Comparing GLEC's
+    well-to-wake 0.068 against it charges the observation for fuel production nobody
+    measured, and makes the factor look about 8% worse than it is."""
+    sea = _multimodal(client, scope="WTW", factor_set="glec")["sea_factor"]
+
+    assert sea["compared_scope"] == "TTW"
+    assert sea["factor"] == pytest.approx(0.063)
+    assert any("TTW" in note and "WTW" in note for note in sea["notes"]), \
+        "priced on one basis and compared on another without saying so"
+
+
+def test_the_factor_that_changes_changes_the_comparison(client):
+    """A panel that reports the same verdict whatever the engine is told to use is
+    decoration. The accompanied basis is half again the trailer one."""
+    trailer = _multimodal(client, factor_set="glec")["sea_factor"]
+    accompanied = _multimodal(client, factor_set="glec_accompanied")["sea_factor"]
+
+    assert accompanied["factor"] > trailer["factor"]
+    assert accompanied["ratio"] > trailer["ratio"]
+    assert trailer["compared_row"] != accompanied["compared_row"]
+
+
+def test_a_factor_describing_traffic_the_fleet_does_not_carry_says_so(client):
+    """Accompanied haulage largely sails ro-pax, and no ro-pax ship reports mass-based
+    transport work — the whole class is absent from the observation. Reporting the
+    comparison anyway is fine; reporting it as a test would not be."""
+    accompanied = _multimodal(client, factor_set="glec_accompanied")["sea_factor"]
+
+    assert accompanied["is_comparable"] is False
+    assert any("ro-pax" in note for note in accompanied["notes"])
+
+    trailer = _multimodal(client, factor_set="glec")["sea_factor"]
+    assert trailer["is_comparable"] is True
+
+
+def test_the_observed_fleet_is_named_ship_by_ship_type(client):
+    """So a reader can see that ro-pax is missing rather than assume it was counted."""
+    sea = _multimodal(client)["sea_factor"]
+
+    assert "Ro-ro ship" in sea["ship_types"]
+    assert "Ro-pax ship" not in sea["ship_types"]
+    assert sum(sea["ship_types"].values()) == sea["ships"]
+
+
+def test_the_spread_travels_with_the_verdict(client):
+    """The pass is the smaller finding. The middle half of the fleet spans a factor of
+    about 2.7, which says no fleet average describes the ship carrying the load."""
+    sea = _multimodal(client, factor_set="glec")["sea_factor"]
+
+    assert sea["verdict"] == "within"
+    assert sea["q1"] < sea["factor"] < sea["q3"]
+    assert sea["spread"] > 2
+
+
+def test_the_validation_datasets_own_sea_factor_is_below_every_verified_ship(client):
+    """The sharpest thing this benchmark found, and it is about the default basis.
+
+    The reference set is not a published standard — it is the figure the validation
+    dataset's own carbon report used, kept here so the engine can be checked against a
+    real document. Its sea value is 0.012, and the emission factor table has always
+    carried a note that this looked closer to a container ship than to a ro-ro service.
+
+    That was a suspicion with nothing behind it. Against EU MRV it is now an observation:
+    not one of the verified ro-ro ships in the reporting period is that clean, so a
+    report priced on this basis understates its sea leg by roughly a factor of four.
+    """
+    sea = _multimodal(client)["sea_factor"]
+
+    assert sea["compared_row"].startswith("reference"), "the default basis changed"
+    assert sea["verdict"] == "below"
+    assert sea["share_below"] == 0.0, "some ship is now that clean; rewrite this finding"
+    assert sea["ratio"] < 0.3

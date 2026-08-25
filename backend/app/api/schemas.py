@@ -198,6 +198,9 @@ class AlternativeOut(BaseModel):
     # because it follows the geography: an all-road run through seven countries and a
     # multimodal one through two are not exposed to the same haulage.
     empty_running: "EmptyRunningOut | None" = None
+    # The sea factor against the verified EU fleet. Present only where this alternative
+    # actually sails: an all-road option has no sea factor to check.
+    sea_factor: "SeaFactorOut | None" = None
     reefer: "ReeferOut | None" = None
     total_with_reefer_co2_kg: float | None = None
     playback: "PlaybackOut | None" = None
@@ -638,4 +641,39 @@ class HubPlanOut(BaseModel):
     capacity_tonnes: float
     # Absent where no road factor matched the chosen basis — never a zero standing in.
     saved_co2_kg: float | None = None
+    notes: list[str] = []
+
+
+class SeaFactorOut(BaseModel):
+    """The sea factor this route priced with, against the ships that actually sail it.
+
+    EU MRV publishes verified annual CO2 and transport work for every vessel over
+    5,000 GT calling at an EEA port. It is the only independent observation of the ro-ro
+    figure in this engine, and until it was imported nothing here could check that number
+    at all.
+
+    Always reported on the TTW basis whatever the request selected, because MRV measures
+    fuel burned: holding a well-to-wake factor against it would charge the observation
+    for fuel production it never saw. `compared_row` names the row actually used.
+    """
+
+    factor: float
+    compared_row: str
+    compared_scope: str
+    factor_source: str
+    year: int
+    ships: int
+    median: float
+    q1: float
+    q3: float
+    ratio: float
+    spread: float
+    share_below: float
+    verdict: str
+    # False where the factor describes traffic the observed fleet does not carry — the
+    # accompanied row, whose traffic largely sails ro-pax, and ro-pax reports no
+    # mass-based transport work at all.
+    is_comparable: bool
+    ship_types: dict[str, int] = {}
+    observed_source: str = ""
     notes: list[str] = []

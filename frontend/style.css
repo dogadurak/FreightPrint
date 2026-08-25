@@ -974,3 +974,44 @@ td.exposed { color: var(--bad); font-weight: 620; }
 .hub-value.neutral { color: var(--ink-secondary); }
 .hub-value.warn { color: var(--warn-ink); }
 .provenance.warn-text { color: var(--warn-ink); }
+
+/* ── deniz faktörü: yayımlanan değer, doğrulanmış filonun dağılımı üzerinde ──
+   Kutu grafiğinin tek satırlık hâli. Filonun orta yarısı bir bant, medyan ince bir
+   çizgi, faktör ise üstüne oturan işaret. Ölçek doğrusal ve alan bandın kendisinden
+   türetiliyor; amaç faktörün nereye düştüğünü göstermek, dağılımı çizmek değil. */
+.fleet-strip { margin: 0.9rem 0 0.2rem; }
+.fleet-track {
+  position: relative; height: 34px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+}
+.fleet-iqr {
+  position: absolute; top: 0; bottom: 0;
+  background: var(--accent-wash);
+  border-left: 1px solid var(--border-strong);
+  border-right: 1px solid var(--border-strong);
+}
+.fleet-median { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink-secondary); }
+.fleet-factor {
+  position: absolute; top: -4px; bottom: -4px; width: 2px;
+  background: var(--sea);
+}
+.fleet-factor::after {
+  content: ""; position: absolute; left: 50%; top: -5px;
+  width: 9px; height: 9px; margin-left: -4.5px; border-radius: 50%;
+  background: var(--sea); border: 2px solid var(--surface);
+}
+.fleet-scale {
+  display: flex; justify-content: space-between;
+  margin-top: 0.35rem; font-size: 0.72rem; color: var(--ink-muted);
+}
+.fleet-key { display: flex; gap: 1.1rem; flex-wrap: wrap; margin-top: 0.55rem; font-size: 0.76rem; color: var(--ink-secondary); }
+.fleet-key span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.fleet-key i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.verdict-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.1rem 0.5rem; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600;
+}
+.verdict-chip.ok { background: var(--good-wash); color: var(--good); }
+.verdict-chip.off { background: var(--warn-wash); color: var(--warn-ink); border: 1px solid var(--warn-border); }

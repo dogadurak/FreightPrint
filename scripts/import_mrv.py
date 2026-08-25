@@ -3,7 +3,7 @@
 The EU publishes, for every ship over 5,000 GT calling at an EEA port, its **verified**
 annual CO2, fuel burn, distance sailed and transport work. That is the only independent
 observation of the number this project's headline rests on: GLEC's ro-ro figure of
-0.068 kg CO2 per tonne-kilometre, which nothing here has ever been able to check.
+0.068 kg CO2 per tonne-kilometre, which nothing here had ever been able to check.
 
 It cannot be fetched automatically. The portal is a JavaScript application, the download
 sits behind a reCAPTCHA, and EMSA publishes no direct file URL — so this script takes
@@ -13,50 +13,126 @@ the file after a person has clicked once:
     2. Choose a reporting period and export the table (Excel)
     3. Save it under data/external/, then:
 
-       python scripts/import_mrv.py data/external/<the file>.xlsx
+       python scripts/import_mrv.py "data/external/<file>.xlsx" --describe
+       python scripts/import_mrv.py "data/external/<file>.xlsx"
 
-Run with no arguments it only reports what the workbook contains, which is the right
-first step: EMSA has changed the column names between reporting periods, and guessing at
-a header is exactly the kind of shortcut this project does not take. Nothing is written
-until the columns it needs are found and named in the output.
+`--describe` first, always. EMSA changes these workbooks between reporting periods —
+the published file has two rows of grouping labels above the real header and a hundred
+and thirteen columns, several of which differ only by the words "on laden voyages" —
+and guessing at a column is exactly the shortcut this project does not take. Nothing is
+written until every needed column has been found and named in the output.
 """
 
 import argparse
 import csv
+import statistics
 import sys
+import warnings
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "data" / "external" / "roro_intensity_mrv.csv"
 
-# What the derivation needs, and the header spellings seen across reporting periods.
-# Matched case-insensitively on a substring so a changed suffix does not break it, but
-# never guessed: a column that matches nothing is reported and the run stops.
+# GLEC Framework 2019 (Jul 2022) Table 45, ro-ro fleet average, trailer only.
+#
+# **The tank-to-wheel figure, not the well-to-wheel one, and the difference is the whole
+# comparison.** MRV reports the CO2 a ship actually emitted from the fuel it burned —
+# that is TTW by construction. GLEC's WTW value of 0.068 additionally carries the
+# emissions of producing and delivering that fuel, which no ship reports and no verifier
+# checks. Holding 0.068 against an MRV figure would charge the observation for something
+# it never measured and make the factor look 8% worse than it is.
+GLEC_RORO_TTW = 0.063
+GLEC_RORO_WTW = 0.068
+
+# One nautical mile in kilometres. MRV reports per tonne-nautical-mile and GLEC per
+# tonne-kilometre; comparing them unconverted is wrong by this factor.
+KM_PER_NAUTICAL_MILE = 1.852
+
+# What the derivation needs, and how each column is recognised. Matched on a lower-cased
+# substring so a changed unit suffix does not break it, with `not_` to keep a
+# near-identical neighbour out: the workbook publishes "per transport work (mass)" twice,
+# once over all voyages and once over laden voyages only, and they are different numbers.
 WANTED = {
-    "imo": ["imo number", "imo"],
-    "ship_type": ["ship type"],
-    "co2_total": ["total co2 emissions", "annual total co2"],
-    "transport_work_mass": ["co2 emissions per transport work (mass)", "transport work (mass)"],
-    "distance": ["annual total time spent at sea", "total distance travelled", "distance"],
-    "reporting_period": ["reporting period"],
+    "imo": {"any": ["imo number"]},
+    "ship_type": {"any": ["ship type"]},
+    "reporting_period": {"any": ["reporting period"]},
+    # The comparable figure: CO2 per tonne-nautical-mile over all voyages, which is the
+    # basis a fleet-average factor describes.
+    "co2_per_tw": {
+        "any": ["emissions per transport work (mass)"],
+        "not_": ["laden", "co₂eq", "co2eq", "fuel consumption"],
+    },
+    # The same over laden voyages only. Kept because the gap between the two is the
+    # ballast share — the sea's own version of empty running.
+    "co2_per_tw_laden": {
+        "any": ["emissions per transport work (mass) on laden"],
+        "not_": ["co₂eq", "co2eq", "fuel consumption"],
+    },
+    # Freight-only allocation, published for ships that also carry passengers. GLEC's
+    # Table 45 is trailer-only, so for a ro-pax this is the honest comparison.
+    "co2_per_tw_freight": {
+        "any": ["emissions per transport work (freight)"],
+        "not_": ["laden", "co₂eq", "co2eq", "fuel consumption"],
+    },
 }
 
-# The ship types this project actually prices. GLEC Table 45 describes a ro-ro fleet, so
-# comparing it against a container or bulk figure would be comparing two different ships.
-RORO_TYPES = ("ro-ro", "roro", "ro-pax", "ropax", "vehicle carrier", "passenger ship")
+REQUIRED = {"imo", "ship_type", "co2_per_tw"}
+
+# The header is not the first row: two rows of grouping labels sit above it, so reading
+# row 1 finds nothing at all — which is exactly what the guard reported the first time
+# this ran against a real export.
+HEADER_MARKER = "imo number"
+MAX_HEADER_SCAN = 12
+
+# The ship types this corridor actually uses. A vehicle carrier moves cars and a
+# passenger ship moves people; holding GLEC's trailer factor against either would be
+# comparing different vessels and calling it validation.
+RORO_TYPES = ("ro-ro ship", "ro-pax ship", "container/ro-ro cargo ship")
+
+# MRV writes this where a ship reported no transport work. Read as a number it is
+# nothing, and nothing would drag the median to the floor.
+NOT_A_NUMBER = ("division by zero!", "not applicable", "n/a", "")
 
 
-def find_columns(header: list[str]) -> tuple[dict[str, int], list[str]]:
+def find_columns(header: list) -> tuple[dict[str, int], list[str]]:
     """Map each wanted field onto a column, and say which were not found."""
     lowered = [str(cell or "").strip().lower() for cell in header]
     found: dict[str, int] = {}
-    for field, spellings in WANTED.items():
-        for spelling in spellings:
-            match = next((i for i, cell in enumerate(lowered) if spelling in cell), None)
+    for field, rule in WANTED.items():
+        for spelling in rule["any"]:
+            match = next(
+                (
+                    i for i, cell in enumerate(lowered)
+                    if spelling in cell
+                    and not any(bad in cell for bad in rule.get("not_", []))
+                ),
+                None,
+            )
             if match is not None:
                 found[field] = match
                 break
     return found, [field for field in WANTED if field not in found]
+
+
+def header_row(sheet) -> tuple[int, list]:
+    """Find the row that actually names the columns, rather than assuming the first."""
+    for number, row in enumerate(sheet.iter_rows(max_row=MAX_HEADER_SCAN, values_only=True), 1):
+        if any(HEADER_MARKER in str(cell or "").lower() for cell in row):
+            return number, list(row)
+    raise LookupError(
+        f"ilk {MAX_HEADER_SCAN} satirda '{HEADER_MARKER}' iceren bir baslik satiri yok"
+    )
+
+
+def _number(value) -> float | None:
+    """A reported figure, or None where the ship reported none."""
+    if value is None or str(value).strip().lower() in NOT_A_NUMBER:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
 
 
 def describe(path: Path) -> None:
@@ -67,16 +143,19 @@ def describe(path: Path) -> None:
     try:
         for name in book.sheetnames:
             sheet = book[name]
-            rows = list(sheet.iter_rows(max_row=3, values_only=True))
             print(f"\n--- {name}  ({sheet.max_row} satir x {sheet.max_column} sutun) ---")
-            if not rows:
+            try:
+                number, header = header_row(sheet)
+            except LookupError as error:
+                print(f"    {error}")
                 continue
-            header = list(rows[0])
+            print(f"    baslik satiri: {number}")
             found, missing = find_columns(header)
             for field, index in found.items():
-                print(f"    {field:22} <- sutun {index}: {str(header[index])[:52]}")
+                print(f"    {field:22} <- [{index:3}] {str(header[index])[:56]}")
             for field in missing:
-                print(f"    {field:22} BULUNAMADI (aranan: {', '.join(WANTED[field])})")
+                mark = "ZORUNLU" if field in REQUIRED else "istege bagli"
+                print(f"    {field:22} BULUNAMADI ({mark})")
     finally:
         book.close()
 
@@ -87,66 +166,87 @@ def derive(path: Path, sheet_name: str | None = None) -> int:
 
     book = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
-        sheet = book[sheet_name] if sheet_name else book[book.sheetnames[0]]
-        rows = sheet.iter_rows(values_only=True)
-        header = list(next(rows))
-        found, missing = find_columns(header)
+        # The full reports, not the partial ones: a partial return covers part of a year
+        # and its intensity is not comparable with an annual figure.
+        name = sheet_name or next(
+            (s for s in book.sheetnames if "full" in s.lower()), book.sheetnames[0]
+        )
+        sheet = book[name]
+        start, header = header_row(sheet)
+        found, _ = find_columns(header)
 
-        needed = {"imo", "ship_type", "transport_work_mass"}
-        absent = needed - set(found)
+        absent = REQUIRED - set(found)
         if absent:
             print(
-                f"HATA: su sutunlar bulunamadi: {', '.join(sorted(absent))}.\n"
-                f"Once '--describe' ile calistirin; EMSA basliklari donemler arasinda "
-                f"degistirdi ve tahmin edilmeyecek.",
+                f"HATA: zorunlu sutun(lar) bulunamadi: {', '.join(sorted(absent))}.\n"
+                f"Once --describe ile calistirin; basliklar tahmin edilmeyecek.",
                 file=sys.stderr,
             )
             return 0
 
         out_rows = []
-        for row in rows:
+        for row in sheet.iter_rows(min_row=start + 1, values_only=True):
             ship_type = str(row[found["ship_type"]] or "").strip()
-            if not any(kind in ship_type.lower() for kind in RORO_TYPES):
+            if ship_type.lower() not in RORO_TYPES:
                 continue
-            intensity = row[found["transport_work_mass"]]
-            if intensity in (None, "", "Division by zero!"):
+            per_tw = _number(row[found["co2_per_tw"]])
+            if per_tw is None:
                 continue
-            try:
-                value = float(intensity)
-            except (TypeError, ValueError):
-                continue
-            if value <= 0:
-                continue
+
+            laden = _number(row[found["co2_per_tw_laden"]]) if "co2_per_tw_laden" in found else None
+            freight = (
+                _number(row[found["co2_per_tw_freight"]]) if "co2_per_tw_freight" in found else None
+            )
+            to_kg_per_tonne_km = lambda g: round(g / KM_PER_NAUTICAL_MILE / 1000, 6)
+
             out_rows.append({
                 "imo": row[found["imo"]],
                 "ship_type": ship_type,
-                # MRV reports grams of CO2 per tonne-nautical-mile.
-                "g_co2_per_tonne_nm": round(value, 4),
-                # Converted for comparison with GLEC, which is per tonne-kilometre.
-                # 1 nautical mile = 1.852 km, so dividing by that converts the
-                # denominator; /1000 turns grams into kilograms.
-                "kg_co2_per_tonne_km": round(value / 1.852 / 1000, 6),
                 "reporting_period": (
-                    row[found["reporting_period"]] if "reporting_period" in found else ""
+                    int(float(row[found["reporting_period"]]))
+                    if "reporting_period" in found and row[found["reporting_period"]]
+                    else ""
                 ),
+                "g_co2_per_tonne_nm": round(per_tw, 4),
+                "kg_co2_per_tonne_km": to_kg_per_tonne_km(per_tw),
+                "kg_co2_per_tonne_km_laden": to_kg_per_tonne_km(laden) if laden else "",
+                "kg_co2_per_tonne_km_freight": to_kg_per_tonne_km(freight) if freight else "",
             })
 
         if not out_rows:
-            print("HATA: ro-ro tipinde hicbir gemi bulunamadi.", file=sys.stderr)
+            print(f"HATA: '{name}' sayfasinda ro-ro tipinde gemi bulunamadi.", file=sys.stderr)
             return 0
 
+        # Merge rather than overwrite, so importing each year in turn builds one file.
+        # Rows for the period being imported are replaced, which makes a re-run after a
+        # corrected publication idempotent instead of doubling the fleet.
+        periods = {row["reporting_period"] for row in out_rows}
+        kept = []
+        if OUT.exists():
+            with OUT.open(encoding="utf-8") as f:
+                kept = [
+                    row for row in csv.DictReader(f)
+                    if row.get("reporting_period") not in {str(p) for p in periods}
+                ]
+
         OUT.parent.mkdir(parents=True, exist_ok=True)
+        merged = kept + [{k: str(v) for k, v in row.items()} for row in out_rows]
+        merged.sort(key=lambda row: (row["reporting_period"], row["imo"]))
         with OUT.open("w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=list(out_rows[0]))
             writer.writeheader()
-            writer.writerows(out_rows)
+            writer.writerows(merged)
 
         values = sorted(r["kg_co2_per_tonne_km"] for r in out_rows)
-        median = values[len(values) // 2]
-        print(f"{len(out_rows)} ro-ro gemisi -> {OUT}")
-        print(f"  medyan  {median:.4f} kg CO2/ton-km")
-        print(f"  aralik  {values[0]:.4f} - {values[-1]:.4f}")
-        print(f"  GLEC Tablo 45 (WTW): 0.068 — karsilastirma icin")
+        median = statistics.median(values)
+        print(f"'{name}' -> {len(out_rows)} ro-ro gemisi ({len(merged)} toplam) -> {OUT}")
+        print(f"  medyan   {median:.4f} kg CO2/ton-km")
+        print(f"  ceyrekler {values[len(values)//4]:.4f} / {values[3*len(values)//4]:.4f}")
+        print(f"  aralik   {values[0]:.4f} - {values[-1]:.4f}")
+        print(f"  GLEC Tablo 45 (TTW): {GLEC_RORO_TTW}  ->  medyanin {GLEC_RORO_TTW/median:.2f} kati")
+        inside = sum(1 for v in values if v <= GLEC_RORO_TTW) / len(values)
+        print(f"  gozlenen gemilerin %{inside*100:.0f}'i GLEC'in altinda")
+        print(f"  (WTW {GLEC_RORO_WTW} ile karsilastirilmaz: MRV yakit uretimini olcmez)")
         return len(out_rows)
     finally:
         book.close()
@@ -166,6 +266,9 @@ def main() -> int:
     if not args.workbook.exists():
         print(f"dosya yok: {args.workbook}", file=sys.stderr)
         return 1
+
+    # openpyxl complains about the publication's missing default style on every open.
+    warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
     if args.describe:
         describe(args.workbook)

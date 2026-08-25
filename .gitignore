@@ -11,3 +11,8 @@ CARBON FOOTPRINT REPORT COLGATE_2026 (1).xlsx
 CARBON FOOTPRINT REPORT_NESTLE (1).xlsx
 data/route_cache.sqlite
 osrm-data/
+
+# THETIS-MRV publications: 25 MB of workbook per year, downloaded by hand and not ours
+# to redistribute. The derived roro_intensity_mrv.csv IS committed - it is the evidence
+# - and import_mrv.py reproduces it from a fresh download.
+data/external/*.xlsx

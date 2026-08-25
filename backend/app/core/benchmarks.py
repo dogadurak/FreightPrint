@@ -27,6 +27,7 @@ be worthless. What it produces is the size and direction of the gap.
 """
 
 import csv
+import statistics
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -296,4 +297,173 @@ def corridor_empty_running(
         total_km=total_km,
         per_country=per_country,
         missing=missing,
+    )
+
+
+# ── the sea factor, against the ships that actually sail ─────────────────────
+
+# MRV reports what a ship emitted from the fuel it burned, which is tank-to-wake by
+# construction. GLEC's well-to-wake figure additionally carries the emissions of making
+# and delivering that fuel — something no ship reports and no verifier checks — so the
+# comparison is against GLEC's TTW row. Holding the WTW value against an MRV figure
+# would charge the observation for something it never measured.
+MRV_SCOPE = "TTW"
+
+# What the observation cannot see, and it is not a small thing.
+#
+# The importer accepts ro-pax and container/ro-ro vessels, and in the published exports
+# not one of them survives: every ro-pax ship and every container/ro-ro ship reports no
+# mass-based transport work at all. MRV measures a ro-pax's work in passengers, so the
+# tonne-mile column comes back "Division by zero!" for the entire class. The observed
+# fleet is therefore pure ro-ro cargo ships.
+#
+# That matters for which factor may honestly be held against it. GLEC's trailer-only row
+# describes unaccompanied traffic on exactly these ships. Its accompanied row describes a
+# tractor and driver travelling with the load — traffic that largely sails ro-pax, which
+# this observation does not contain.
+ACCOMPANIED_BASES = ("roro_truck_trailer",)
+
+
+@dataclass(frozen=True)
+class ShipIntensity:
+    """One verified ship-year, as EMSA published it."""
+
+    imo: str
+    ship_type: str
+    reporting_period: int
+    kg_co2_per_tonne_km: float
+    laden_only: float | None = None
+    freight_only: float | None = None
+
+
+@lru_cache(maxsize=1)
+def load_roro_intensity(path: Path | None = None) -> list[ShipIntensity]:
+    path = path or EXTERNAL_DIR / "roro_intensity_mrv.csv"
+    with open(path, encoding="utf-8") as f:
+        return [
+            ShipIntensity(
+                imo=row["imo"],
+                ship_type=row["ship_type"],
+                reporting_period=int(row["reporting_period"]),
+                kg_co2_per_tonne_km=float(row["kg_co2_per_tonne_km"]),
+                laden_only=(
+                    float(row["kg_co2_per_tonne_km_laden"])
+                    if row.get("kg_co2_per_tonne_km_laden") else None
+                ),
+                freight_only=(
+                    float(row["kg_co2_per_tonne_km_freight"])
+                    if row.get("kg_co2_per_tonne_km_freight") else None
+                ),
+            )
+            for row in csv.DictReader(f)
+        ]
+
+
+@dataclass
+class FleetComparison:
+    """A published factor against the distribution of ships it claims to describe."""
+
+    factor: float
+    factor_source: str
+    year: int
+    ships: int
+    median: float
+    q1: float
+    q3: float
+    share_below: float
+    observed_source: str
+    # How many ships of each type are behind the comparison, so a reader can see that
+    # ro-pax is absent rather than assume it was included.
+    ship_types: dict[str, int] = field(default_factory=dict)
+    # False where the factor describes traffic this fleet does not carry. The comparison
+    # is still reported — it is the nearest observation there is — but it is not a test.
+    is_comparable: bool = True
+    notes: list[str] = field(default_factory=list)
+
+    @property
+    def ratio(self) -> float:
+        return self.factor / self.median if self.median else 0.0
+
+    @property
+    def spread(self) -> float:
+        """How wide the middle half is, as a multiple.
+
+        The number that matters most and the one a single factor cannot express: where
+        the interquartile range spans a factor of two or more, *any* fleet average is a
+        poor description of the ship actually carrying the load.
+        """
+        return self.q3 / self.q1 if self.q1 else 0.0
+
+    @property
+    def verdict(self) -> str:
+        """Whether the factor sits inside the fleet it describes.
+
+        Inside the interquartile range is the honest pass: a fleet average is not meant
+        to equal any ship, it is meant to be a fair middle. Outside it is a real finding.
+        """
+        if self.q1 <= self.factor <= self.q3:
+            return "within"
+        return "above" if self.factor > self.q3 else "below"
+
+
+def compare_sea_factor(
+    factor: float,
+    factor_source: str = "GLEC Framework 2019 (Jul 2022) Table 45",
+    year: int | None = None,
+    vehicle_type: str | None = None,
+) -> FleetComparison:
+    """Hold a ro-ro emission factor against the verified EU fleet.
+
+    Only the most recent reporting period by default. Pooling years would blur a fleet
+    that is measurably changing — the observed median fell 14% across the three periods
+    published — and a factor's fairness is a question about the fleet sailing now.
+    """
+    ships = load_roro_intensity()
+    if not ships:
+        raise BenchmarkUnavailable("MRV turetmesi bos; once scripts/import_mrv.py calistirin")
+
+    year = year or max(ship.reporting_period for ship in ships)
+    fleet = [ship for ship in ships if ship.reporting_period == year]
+    if not fleet:
+        years = sorted({ship.reporting_period for ship in ships})
+        raise BenchmarkUnavailable(f"{year} donemi yok; mevcut: {years}")
+
+    values = sorted(ship.kg_co2_per_tonne_km for ship in fleet)
+    quartiles = statistics.quantiles(values, n=4)
+
+    types: dict[str, int] = {}
+    for ship in fleet:
+        types[ship.ship_type] = types.get(ship.ship_type, 0) + 1
+
+    accompanied = vehicle_type in ACCOMPANIED_BASES
+    notes = [
+        f"Karsilastirma {MRV_SCOPE} esasindadir. MRV geminin yaktigi yakittan cikan "
+        "CO2'yi bildirir; yakit uretimini olcmez, bu yuzden WTW bir faktorle "
+        "karsilastirilmaz.",
+        "Medyan kullanilir, ortalama degil: birkac gemi tasima isi bildirmedigi icin "
+        "asiri deger uretiyor ve ortalamayi tek basina tasiyabiliyor.",
+        "Gozlem saf ro-ro yuk gemilerinden olusuyor. Ro-pax gemileri tasima islerini "
+        "yolcu uzerinden bildirdigi icin ton-mil sutunu tum sinif icin bos donuyor; "
+        "yayinin kendisinde yoklar, burada elenmediler.",
+    ]
+    if accompanied:
+        notes.append(
+            "DIKKAT: karsilastirilan faktor refakatli (cekici ve surucu yukle birlikte) "
+            "tasimayi tanimliyor; bu trafik agirlikla ro-pax gemilerinde seyrediyor ve "
+            "bu gozlemde ro-pax yok. Rakam yine de en yakin gozlem, ama bir sinama degil."
+        )
+
+    return FleetComparison(
+        factor=factor,
+        factor_source=factor_source,
+        year=year,
+        ships=len(fleet),
+        median=statistics.median(values),
+        q1=quartiles[0],
+        q3=quartiles[2],
+        share_below=sum(1 for v in values if v <= factor) / len(values),
+        observed_source=f"EU MRV (THETIS-MRV), {year}, {len(fleet)} dogrulanmis ro-ro gemisi",
+        ship_types=types,
+        is_comparable=not accompanied,
+        notes=notes,
     )

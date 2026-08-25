@@ -21,7 +21,13 @@ from ..core.catchment import (
     build_catchment,
 )
 from ..core.backhaul import DEFAULT_REPOSITION_RADIUS_KM, find_backhauls
-from ..core.benchmarks import corridor_empty_running, observed
+from ..core.benchmarks import (
+    MRV_SCOPE,
+    BenchmarkUnavailable,
+    compare_sea_factor,
+    corridor_empty_running,
+    observed,
+)
 from ..core.conformance import assess as assess_conformance
 from ..core.disruption import Disruption, assess_disruption, rank_criticality
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
@@ -80,6 +86,7 @@ from .schemas import (
     RouteResponse,
     RouteRiskOut,
     SailingOut,
+    SeaFactorOut,
     ScheduleStepOut,
     ScenarioOut,
     ScenarioTotalOut,
@@ -485,6 +492,63 @@ def _empty_running_out(route, factor_share: float | None) -> EmptyRunningOut | N
     )
 
 
+def _sea_factor_out(route, request: RouteRequest) -> SeaFactorOut | None:
+    """The sea factor this route priced with, against the ships EMSA actually verified.
+
+    Deliberately pinned to the TTW row whatever scope the request selected. MRV reports
+    the CO2 a ship emitted from the fuel it burned; a well-to-wake factor additionally
+    carries the emissions of making and delivering that fuel, which no ship reports and
+    no verifier checks. Comparing the two would make the factor look about 8% worse than
+    it is, so the panel compares the right row and names which one it used.
+    """
+    if not any(leg.mode == "sea" for leg in route.legs):
+        return None
+
+    try:
+        factor = find_factor(
+            load_emission_factors(), "sea", scope=MRV_SCOPE, factor_set=request.factor_set
+        )
+    except FactorNotFoundError:
+        return None
+
+    try:
+        comparison = compare_sea_factor(
+            factor.value, factor.source, vehicle_type=factor.vehicle_type
+        )
+    except BenchmarkUnavailable:
+        # No derivation imported yet. The panel disappears rather than inventing a fleet.
+        return None
+
+    notes = list(comparison.notes)
+    if request.scope != MRV_SCOPE:
+        notes.insert(
+            0,
+            f"Bu sevkiyat {request.scope} esasiyla fiyatlandi; karsilastirma ise ayni "
+            f"setin {MRV_SCOPE} satiri ({factor.value} kg CO2/ton-km) uzerinden yapildi. "
+            f"MRV yalnizca yakilan yakiti olcer, uretimini olcmez.",
+        )
+
+    return SeaFactorOut(
+        factor=factor.value,
+        compared_row=f"{factor.factor_set} / {factor.vehicle_type}",
+        compared_scope=MRV_SCOPE,
+        factor_source=comparison.factor_source,
+        year=comparison.year,
+        ships=comparison.ships,
+        median=round(comparison.median, 4),
+        q1=round(comparison.q1, 4),
+        q3=round(comparison.q3, 4),
+        ratio=round(comparison.ratio, 3),
+        spread=round(comparison.spread, 2),
+        share_below=round(comparison.share_below, 3),
+        verdict=comparison.verdict,
+        is_comparable=comparison.is_comparable,
+        ship_types=comparison.ship_types,
+        observed_source=comparison.observed_source,
+        notes=notes,
+    )
+
+
 def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals) -> ScenarioOut:
     """Reprice already-routed alternatives. No OSRM call, so this is effectively free.
 
@@ -739,6 +803,7 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
                 risk=_risk_out(route),
                 timeline=_timeline_out(route),
                 empty_running=_empty_running_out(route, road_factor_share),
+                sea_factor=_sea_factor_out(route, request),
                 reefer=reefer,
                 total_with_reefer_co2_kg=(
                     round_to_significant(shipment.total_co2_kg + reefer.co2_kg)
