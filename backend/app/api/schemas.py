@@ -486,3 +486,36 @@ class ConformanceOut(BaseModel):
     data_quality_note: str
     checks: list[ConformanceCheckOut]
     notes: list[str] = []
+
+
+class CriticalityOut(BaseModel):
+    """One piece of the network, ranked by what losing it costs."""
+
+    id: str
+    name: str
+    kind: str  # "terminal" | "leg"
+    severity: str  # "stranded" | "rerouted" | "no-effect"
+    stranded: int
+    rerouted: int
+    extra_co2_kg: float
+    # Signed on purpose: the route is chosen by lowest emissions, not by time, so a
+    # forced alternative can genuinely be quicker while emitting more.
+    extra_hours: float
+    # Present for a terminal closure, so the map can colour the point that failed.
+    terminal_id: str | None = None
+    lon: float | None = None
+    lat: float | None = None
+
+
+class VulnerabilityOut(BaseModel):
+    """What the network costs when each of its pieces stops working, worst first."""
+
+    scope: str
+    factor_set: str
+    shipments: int
+    lanes: int
+    ranked: list[CriticalityOut]
+    # Terminals the chosen routes actually depend on. A closure only matters where
+    # traffic goes, so this is what separates a critical node from a merely central one.
+    depended_on: list[str] = []
+    notes: list[str] = []

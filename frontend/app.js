@@ -2585,3 +2585,175 @@ function renderConformance(data) {
     <ul class="check-list">${rows}</ul>
     ${data.notes.map((n) => `<p class="hint">${n}</p>`).join("")}`;
 }
+
+/* ── network vulnerability ───────────────────────────────────────────── */
+
+/** Which piece of the network cannot be replaced.
+ *
+ *  Not "which terminal is busiest" — those differ, and the difference is the finding.
+ *  A hub can carry everything and still be cheap to lose because a substitute sits one
+ *  port along; a quiet terminal can be the only way through. Only re-routing the whole
+ *  demand tells them apart, so every row here is a measured outcome rather than a
+ *  centrality score.
+ */
+const SEVERITY = {
+  stranded: { label: "taşınamaz", css: "is-stranded" },
+  rerouted: { label: "rota değişir", css: "is-rerouted" },
+  "no-effect": { label: "etkisiz", css: "is-quiet" },
+};
+
+function renderVulnerability(data) {
+  const card = $("vulnerability-card");
+  const slot = $("vulnerability");
+  if (!card || !slot) return;
+
+  const affected = data.ranked.filter((r) => r.severity !== "no-effect");
+  $("vulnerability-note").textContent =
+    `${data.shipments} sevkiyat · ${data.ranked.length} parça denendi · `
+    + `${affected.length} tanesi bu talebi etkiliyor`;
+
+  const rows = affected.length ? affected : data.ranked.slice(0, 5);
+  const table = el("table", { class: "vuln-table" }, [
+    el("thead", {}, el("tr", {}, [
+      el("th", {}, "Devre dışı kalan"),
+      el("th", {}, "Sonuç"),
+      el("th", { class: "num" }, "Taşınamaz"),
+      el("th", { class: "num" }, "Rota değişen"),
+      el("th", { class: "num" }, "+kg CO2"),
+      el("th", { class: "num" }, "Süre farkı"),
+    ])),
+    el("tbody", {}, rows.map((row) => {
+      const severity = SEVERITY[row.severity] ?? SEVERITY["no-effect"];
+      return el("tr", { class: severity.css }, [
+        el("td", {}, [
+          el("span", { class: "vuln-name" }, row.name),
+          el("span", { class: "vuln-kind" }, row.kind === "terminal" ? "terminal" : "servis"),
+        ]),
+        el("td", {}, el("span", { class: `vuln-pill ${severity.css}` }, severity.label)),
+        el("td", { class: "num" }, row.stranded ? String(row.stranded) : "—"),
+        el("td", { class: "num" }, row.rerouted ? String(row.rerouted) : "—"),
+        el("td", { class: "num" }, row.extra_co2_kg ? `+${nf.format(row.extra_co2_kg)}` : "—"),
+        // Signed, and often negative: the route is chosen on carbon, not on time, so
+        // being forced off it can genuinely be quicker. That is half the trade-off.
+        el("td", { class: "num" }, row.extra_hours ? `${signed(row.extra_hours)} sa` : "—"),
+      ]);
+    })),
+  ]);
+
+  slot.replaceChildren(
+    el("p", { class: "hint" },
+      affected.length
+        ? "Her satır, o parça devre dışı kalırsa tüm talebin yeniden rotalanmasıyla ölçüldü."
+        : "Bu talep, ağın hiçbir tek parçasına bağımlı değil — kayıpsız yedeği var."),
+    el("div", { class: "table-scroll" }, table),
+    ...data.notes.map((note) => el("p", { class: "provenance" }, note)),
+  );
+
+  card.hidden = false;
+  paintCriticality(data);
+}
+
+/** Colour the terminals by what losing each one costs.
+ *
+ *  This is the part that had to be spatial. A table ranks the pieces; the map shows
+ *  that the exposure is concentrated at one point on one corridor, which is the shape
+ *  of the problem and not a number in it.
+ */
+function paintCriticality(data) {
+  if (!map || !map.getSource("terminals")) return;
+
+  const bySeverity = Object.fromEntries(
+    data.ranked
+      .filter((row) => row.kind === "terminal" && row.terminal_id)
+      .map((row) => [row.terminal_id, row])
+  );
+
+  const features = data.ranked
+    .filter((row) => row.kind === "terminal" && row.lon != null)
+    .map((row) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [row.lon, row.lat] },
+      properties: {
+        name: row.name,
+        severity: row.severity,
+        extra_co2_kg: row.extra_co2_kg,
+        stranded: row.stranded,
+      },
+    }));
+
+  const collection = { type: "FeatureCollection", features };
+  if (map.getSource("criticality")) {
+    map.getSource("criticality").setData(collection);
+    return;
+  }
+  map.addSource("criticality", { type: "geojson", data: collection });
+
+  // Size carries magnitude, colour carries severity — the same split the table uses.
+  // A terminal nothing depends on stays small and quiet rather than disappearing:
+  // "we checked it and it does not matter" is a result too.
+  map.addLayer({
+    id: "criticality", type: "circle", source: "criticality",
+    paint: {
+      "circle-radius": [
+        "case",
+        ["==", ["get", "severity"], "no-effect"], 5,
+        ["interpolate", ["linear"], ["get", "extra_co2_kg"], 0, 9, 1000, 20],
+      ],
+      "circle-color": [
+        "match", ["get", "severity"],
+        "stranded", "#b3261e",
+        "rerouted", "#eda100",
+        "#8b93a0",
+      ],
+      "circle-opacity": ["case", ["==", ["get", "severity"], "no-effect"], 0.35, 0.75],
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1.5,
+    },
+  });
+
+  const popup = new maplibregl.Popup({ closeButton: false, offset: 10 });
+  map.on("mousemove", "criticality", (event) => {
+    const p = event.features[0].properties;
+    map.getCanvas().style.cursor = "pointer";
+    popup.setLngLat(event.lngLat).setText(
+      p.severity === "no-effect"
+        ? `${p.name} — bu talebi etkilemiyor`
+        : `${p.name} — ${nf.format(p.extra_co2_kg)} kg fazla CO2`
+    ).addTo(map);
+  });
+  map.on("mouseleave", "criticality", () => {
+    map.getCanvas().style.cursor = "";
+    popup.remove();
+  });
+}
+
+$("vulnerability-submit").addEventListener("click", async () => {
+  const button = $("vulnerability-submit");
+  const body = new FormData(reportForm);
+  if (!body.get("file") || !body.get("file").name) {
+    reportStatus.textContent = "Önce bir sevkiyat dosyası seçin.";
+    return;
+  }
+  const scenario = currentScenario();
+  body.set("scope", scenario?.scope ?? "WTW");
+  body.set("factor_set", scenario?.factor_set ?? "glec");
+
+  button.disabled = true;
+  reportStatus.textContent = "Ağın her parçası için talep yeniden rotalanıyor…";
+  try {
+    const response = await fetch("/api/vulnerability", { method: "POST", body });
+    const result = await response.json();
+    if (!response.ok) {
+      reportStatus.textContent = result.detail ?? `İstek başarısız (${response.status}).`;
+      return;
+    }
+    renderVulnerability(result);
+    const affected = result.ranked.filter((r) => r.severity !== "no-effect").length;
+    reportStatus.textContent =
+      `${result.ranked.length} parça denendi; ${affected} tanesi bu talebi etkiliyor.`;
+  } catch (error) {
+    reportStatus.textContent = `Sunucuya ulaşılamadı: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+});

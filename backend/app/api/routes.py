@@ -20,6 +20,7 @@ from ..core.catchment import (
     build_catchment,
 )
 from ..core.conformance import assess as assess_conformance
+from ..core.disruption import Disruption, assess_disruption, rank_criticality
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
 from ..core.deliverable import report_to_pdf, report_to_xlsx
 from ..core.geocode import GeocodingBusy, GeocodingError, search
@@ -72,9 +73,11 @@ from .schemas import (
     ScenarioOut,
     ScenarioTotalOut,
     CountryTollOut,
+    CriticalityOut,
     TerminalOut,
     TimelineOut,
     TollOut,
+    VulnerabilityOut,
     ZoneCrossingOut,
 )
 
@@ -1136,4 +1139,96 @@ def conformance(
             for c in result.checks
         ],
         notes=result.notes,
+    )
+
+
+# A vulnerability study routes the demand once per failable piece of the network. That
+# sounds ruinous and is not: every run reaches for the same terminals, so the road
+# lookups are shared and warm after the first shipment, and what repeats is the graph
+# search. The cap is on lanes rather than seconds because the cost is in the routing.
+MAX_VULNERABILITY_SHIPMENTS = 60
+
+
+@router.post("/vulnerability", response_model=VulnerabilityOut)
+def network_vulnerability(
+    file: UploadFile = File(..., description="Shipments as CSV or .xlsx"),
+    scope: str = Form("WTW"),
+    factor_set: str = Form("glec"),
+) -> VulnerabilityOut:
+    """Rank the network's pieces by what losing each one would cost this demand.
+
+    The question underneath is not "which terminal is busiest" but "which one cannot be
+    replaced". Those differ: a hub can carry everything and still be cheap to lose
+    because a substitute sits one port along, and a quiet terminal can be the only way
+    through. Only re-routing tells them apart, which is why this is computed rather than
+    read off the graph as a centrality score.
+    """
+    if scope not in {"TTW", "WTW"}:
+        raise HTTPException(status_code=422, detail=f"scope must be TTW or WTW, got {scope!r}")
+
+    try:
+        shipments = parse_shipments(_read_upload(file))
+    except ReportInputError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    if len(shipments) > MAX_VULNERABILITY_SHIPMENTS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{len(shipments)} sevkiyat, kırılganlık analizi için fazla "
+                f"(en fazla {MAX_VULNERABILITY_SHIPMENTS}). Ağın her parçası için "
+                "tüm talep yeniden rotalanıyor; önce hatları temsil eden bir alt küme verin."
+            ),
+        )
+
+    terminals = load_terminals()
+    try:
+        ranked = rank_criticality(shipments, scope=scope, factor_set=factor_set)
+        survey = assess_disruption(
+            shipments, Disruption("none", "kesintisiz"), scope=scope, factor_set=factor_set
+        )
+    except (FactorNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except requests.RequestException as error:
+        raise HTTPException(status_code=503, detail=f"road routing unavailable: {error}") from error
+
+    depended_on = sorted({t for o in survey.outcomes for t in o.normal_terminals})
+
+    out = []
+    for item in ranked:
+        closed = item.disruption.closed_terminals
+        terminal_id = next(iter(closed)) if len(closed) == 1 else None
+        terminal = terminals.get(terminal_id) if terminal_id else None
+        out.append(
+            CriticalityOut(
+                id=item.disruption.id,
+                name=item.disruption.name,
+                kind="terminal" if item.disruption.closed_terminals else "leg",
+                severity=item.severity,
+                stranded=item.stranded,
+                rerouted=item.rerouted,
+                extra_co2_kg=round_to_significant(item.extra_co2_kg),
+                extra_hours=round(item.extra_hours, 1),
+                terminal_id=terminal_id,
+                lon=terminal.lon if terminal else None,
+                lat=terminal.lat if terminal else None,
+            )
+        )
+
+    return VulnerabilityOut(
+        scope=scope,
+        factor_set=factor_set,
+        shipments=len(shipments),
+        lanes=len({o.lane for o in survey.outcomes}),
+        ranked=out,
+        depended_on=depended_on,
+        notes=[
+            "Her satır, o parça devre dışı kalırsa tüm talebin yeniden rotalanmasıyla "
+            "ölçüldü — merkezilik skoru değil, gerçek sonuç.",
+            "Karbon farkı hiç negatif olamaz: rota en düşük emisyona göre seçildiği için "
+            "bir kapanma ağı iyileştiremez. Süre farkı işaretlidir; zorunlu bir alternatif "
+            "gerçekten daha hızlı olabilir.",
+            "Mahsur kalan sevkiyat, pahalılaşan sevkiyatla aynı kefeye konmaz; "
+            "taşınamayan bir yükün yerine geçecek bir sayı yoktur.",
+        ] + survey.notes,
     )

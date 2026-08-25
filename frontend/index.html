@@ -214,6 +214,7 @@
         </label>
         <button type="submit" class="ghost btn-audit" id="report-submit">Audit-Ready Sertifika İndir</button>
         <button type="button" class="ghost" id="portfolio-submit">Hat portföyünü çıkar</button>
+        <button type="button" class="ghost" id="vulnerability-submit">Ağ kırılganlığını ölç</button>
         <p class="hint" id="report-status" role="status"></p>
         <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya</a></p>
       </form>
@@ -262,6 +263,15 @@
     </section>
 
     <!-- Hat portföyü: yüklenen dosya hat hat okunur -->
+    <!-- Ağ kırılganlığı: hangi parça kaybedilirse ne olur. Merkezilik değil, sonuç. -->
+    <section class="card" id="vulnerability-card" hidden>
+      <div class="card-head">
+        <h2 class="card-title">Ağ kırılganlığı</h2>
+        <span class="card-note" id="vulnerability-note"></span>
+      </div>
+      <div id="vulnerability"></div>
+    </section>
+
     <section class="card" id="portfolio-card" hidden>
       <div class="card-head">
         <h2 class="card-title">Hat portföyü</h2>
