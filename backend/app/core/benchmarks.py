@@ -176,7 +176,7 @@ def check_empty_running_assumptions(
     """
     reference = observed(geo=geo, year=year)
     source = (
-        f"Eurostat road_go_ta_tott, {reference.geo_name}, {reference.year}, "
+        f"Eurostat road_go_ta_vm, {reference.geo_name}, {reference.year}, "
         f"{reference.basis} arac-km"
     )
 
@@ -220,3 +220,80 @@ def check_empty_running_assumptions(
         "ikame edilmemiştir."
     )
     return report
+
+@dataclass
+class CorridorEmptyRunning:
+    """Observed empty running weighted by the route's own kilometres, and what it misses.
+
+    The EU-27 average is the wrong yardstick for a specific corridor: it is dominated by
+    the countries that haul the most, not by the ones this freight crosses. Austria runs
+    22% empty on international work and Bulgaria 12%, so a route's exposure depends on
+    where its kilometres actually fall.
+
+    The gap is the other half of the answer and is measured rather than apologised for.
+    Turkey and Serbia do not report to this survey — between them they carry about a
+    third of the pilot corridor's road distance — so the honest output is a rate *and*
+    the share of the route it was computed over. A weighted mean quietly taken over 70%
+    of a journey, presented as the journey's rate, is the kind of number that survives
+    right up until somebody checks it.
+    """
+
+    rate: float
+    covered_km: float
+    total_km: float
+    per_country: dict[str, float] = field(default_factory=dict)
+    missing: dict[str, float] = field(default_factory=dict)
+
+    @property
+    def coverage(self) -> float:
+        return self.covered_km / self.total_km if self.total_km else 0.0
+
+    @property
+    def is_representative(self) -> bool:
+        """Whether enough of the route was observed for the rate to stand for it.
+
+        Two thirds is a judgement, not a standard, and it is here to be argued with —
+        the point is that a threshold exists at all rather than a rate being quoted over
+        whatever happened to be available.
+        """
+        return self.coverage >= 0.667
+
+
+def corridor_empty_running(
+    route, year: int | None = None
+) -> CorridorEmptyRunning:
+    """Weight the survey by how far the route actually runs through each country.
+
+    Uses the same country split the CO2 toll does, so the two answers cannot disagree
+    about where the freight is.
+    """
+    from .geography import road_distance_by_country
+
+    parts = road_distance_by_country(route)
+    total_km = sum(part.distance_km for part in parts)
+
+    weighted = 0.0
+    covered = 0.0
+    per_country: dict[str, float] = {}
+    missing: dict[str, float] = {}
+
+    for part in parts:
+        if not part.iso:
+            missing["yerleştirilemedi"] = missing.get("yerleştirilemedi", 0.0) + part.distance_km
+            continue
+        try:
+            reference = observed(part.iso, year=year)
+        except BenchmarkUnavailable:
+            missing[part.iso] = missing.get(part.iso, 0.0) + part.distance_km
+            continue
+        per_country[part.iso] = reference.relevant_share
+        weighted += part.distance_km * reference.relevant_share
+        covered += part.distance_km
+
+    return CorridorEmptyRunning(
+        rate=weighted / covered if covered else 0.0,
+        covered_km=covered,
+        total_km=total_km,
+        per_country=per_country,
+        missing=missing,
+    )

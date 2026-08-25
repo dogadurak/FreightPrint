@@ -5,6 +5,9 @@ would tell you nothing, so most of these tests are about the comparison staying 
 when it does not match — and about never quietly substituting a number for a missing one.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 
 from app.core.benchmarks import (
@@ -129,3 +132,88 @@ def test_the_worst_gap_is_the_one_furthest_from_the_observation():
     )
 
     assert report.worst.what.startswith("Boş dönüş modelinin")
+
+
+# ── weighting the survey by the route's own kilometres ────────────────────────
+
+CORRIDOR_ROADS = json.loads(
+    (Path(__file__).parent / "fixtures" / "corridor_roads.json").read_text(encoding="utf-8")
+)
+
+
+@pytest.fixture
+def corridor(monkeypatch):
+    """The pilot corridor on OSRM's own recorded geometry, so the country split is real."""
+    from app.core import route as route_module
+    from app.core.network import haversine_km
+    from app.core.road import RoadRoute
+    from app.core.route import find_route_alternatives
+
+    def replay(origin, destination):
+        leg = CORRIDOR_ROADS.get(f"{origin[0]},{origin[1]}|{destination[0]},{destination[1]}")
+        if leg is None:
+            km = haversine_km(origin, destination) * 1.3
+            return RoadRoute(distance_km=km, duration_h=km / 70, geometry=(origin, destination))
+        return RoadRoute(
+            distance_km=leg["distance_km"], duration_h=leg["duration_h"],
+            ferry_km=leg["ferry_km"], geometry=tuple(map(tuple, leg["geometry"])),
+        )
+
+    monkeypatch.setattr(route_module, "road_route", replay)
+    routes = find_route_alternatives((29.4306, 40.7889), (6.7735, 51.2277))
+    return next(route for route in routes if route.is_all_road)
+
+
+def test_the_rate_is_weighted_by_where_the_route_actually_runs(corridor):
+    """The EU-27 average is dominated by the countries that haul the most, not by the
+    ones this freight crosses. This corridor runs through Austria and Germany, which are
+    among the emptiest, so its own rate sits well above the EU figure."""
+    from app.core.benchmarks import corridor_empty_running
+
+    result = corridor_empty_running(corridor)
+
+    assert result.rate > observed().relevant_share, "weighting changed nothing"
+    assert min(result.per_country.values()) <= result.rate <= max(result.per_country.values())
+
+
+def test_the_countries_with_no_survey_are_named_and_measured(corridor):
+    """Serbia and Turkey do not report. Naming them is not enough — how much of the
+    journey they carry is what decides whether the rate means anything."""
+    from app.core.benchmarks import corridor_empty_running
+
+    result = corridor_empty_running(corridor)
+
+    assert set(result.missing) >= {"RS", "TR"}
+    assert sum(result.missing.values()) > 700, "the unobserved share looks too small"
+    assert result.covered_km + sum(result.missing.values()) == pytest.approx(result.total_km)
+
+
+def test_the_rate_never_travels_without_its_coverage(corridor):
+    """A weighted mean quietly taken over 70% of a journey, presented as the journey's
+    rate, is the kind of number that survives right up until somebody checks it."""
+    from app.core.benchmarks import corridor_empty_running
+
+    result = corridor_empty_running(corridor)
+
+    assert 0.6 < result.coverage < 0.8
+    assert result.is_representative
+
+
+def test_a_route_through_nothing_observed_is_not_representative():
+    """The threshold has to be able to fail, or it is decoration."""
+    from app.core.benchmarks import CorridorEmptyRunning
+
+    thin = CorridorEmptyRunning(rate=0.2, covered_km=100, total_km=1000)
+
+    assert not thin.is_representative
+    assert thin.coverage == pytest.approx(0.1)
+
+
+def test_distance_nobody_could_place_is_not_counted_as_observed(corridor):
+    """Kilometres that fall in no country polygon are a gap like any other, and folding
+    them into the covered share would overstate how much of the route was seen."""
+    from app.core.benchmarks import corridor_empty_running
+
+    result = corridor_empty_running(corridor)
+
+    assert "yerleştirilemedi" in result.missing
