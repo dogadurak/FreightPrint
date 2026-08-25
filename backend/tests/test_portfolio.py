@@ -149,3 +149,39 @@ def test_the_portfolio_says_what_it_was_tested_against():
     assert len(result.tested_sets) > 1, "robustness against one basis is not robustness"
     assert result.notes
     assert lane_key(parse_shipments(HEADER + GEBZE_DUSSELDORF)[0]) == "Gebze → Dusseldorf"
+
+
+def test_the_fuel_lever_is_priced_from_the_factor_file_not_chosen():
+    """This figure used to be `best_scenario * 0.70` — a 30% reduction "by 2030 via
+    biofuels", picked rather than derived. It is now the multimodal scenario's road legs
+    repriced on the HVO row, so it moves when the factor file moves and it says which
+    feedstock it used."""
+    from app.core.emissions import find_factor, load_emission_factors
+    from app.core.portfolio import HVO_LEVER_FUEL
+
+    result = portfolio(GEBZE_DUSSELDORF + GEBZE_VIENNA)
+    glidepath = result.glidepath
+
+    assert glidepath["road_on_hvo_co2_kg"] < glidepath["best_scenario_co2_kg"]
+    assert glidepath["hvo_fuel"] == HVO_LEVER_FUEL
+    assert glidepath["hvo_source"], "the lever does not say where its factor came from"
+
+    # It reaches the road legs only: a fuel switch cannot decarbonise the ship.
+    road = sum(lane.best_road_co2_kg for lane in result.lanes)
+    non_road = glidepath["best_scenario_co2_kg"] - road
+    factors = load_emission_factors()
+    ratio = (
+        find_factor(factors, "road", scope="WTW", fuel_type=HVO_LEVER_FUEL, factor_set="glec").value
+        / find_factor(factors, "road", scope="WTW", factor_set="glec").value
+    )
+    assert glidepath["road_on_hvo_co2_kg"] == pytest.approx(non_road + road * ratio)
+    assert non_road > 0, "a corridor with no sea or rail leg would not test the split"
+
+
+def test_a_derived_lever_declares_itself():
+    """HVO's factor is scaled off diesel rather than published, and a reader deciding
+    on a fuel switch needs to know that before they act on the number."""
+    result = portfolio(GEBZE_DUSSELDORF)
+
+    assert result.glidepath["hvo_is_verified"] is False
+    assert any("kaldıracı" in note for note in result.notes)

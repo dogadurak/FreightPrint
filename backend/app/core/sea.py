@@ -58,7 +58,6 @@ class SeaRoute:
     # Chokepoints the route actually transits, straight from searoute's own edge labels.
     # Exact where a polygon test would only approximate, and free.
     passages: list[str] = field(default_factory=list)
-    wind_factor: float = 1.0
 
     @property
     def is_realistic(self) -> bool:
@@ -171,12 +170,12 @@ def _query_searoute(
             f"no sea route from {origin} to {destination} with {list(restrictions)} restricted"
         )
 
-    import math
-    def calculate_wind_factor(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        # A pseudo-random deterministic wind penalty/bonus based on coordinates
-        val = math.sin(lat1) * math.cos(lon2) + math.cos(lat2) * math.sin(lon1)
-        normalized = (val + 2) / 4.0
-        return 0.90 + (normalized * 0.25)
+    # A "wind factor" was computed here and multiplied into every sea leg's emissions.
+    # Its own comment called it pseudo-random: sin(lat)*cos(lon) mapped onto 0.90-1.15.
+    # That is a hash of the coordinates presented as weather — not an approximation of
+    # wind but an invention of it, and the kind of thing that ends a report's
+    # credibility the moment a reviewer reads the function. Real wind belongs here, from
+    # ERA5 reanalysis sampled along the track for the voyage date. Until then, absent.
 
     return SeaRoute(
         distance_km=length,
@@ -184,7 +183,6 @@ def _query_searoute(
         geometry=[[point[0], point[1]] for point in coordinates],
         crosses_corinth_canal=LineString(coordinates).intersects(CORINTH_CANAL_BOX),
         passages=sorted(properties.get("traversed_passages") or []),
-        wind_factor=calculate_wind_factor(origin[1], origin[0], destination[1], destination[0]),
     )
 
 

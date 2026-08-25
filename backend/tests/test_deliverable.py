@@ -200,3 +200,30 @@ def test_whole_tonnages_lose_the_decimal_excel_gave_them(report):
 
 def test_the_status_column_is_in_the_documents_own_language(report):
     assert "hesaplandı" in pdf_text(report_to_pdf(report))
+
+
+def test_every_printed_column_has_a_heading_and_a_value(report):
+    """The three lists that describe a column have to agree, and nothing makes them.
+
+    `OUTPUT_COLUMNS` names what the workbook prints, `PDF_COLUMNS` what the PDF prints,
+    `HEADER_TR` what each is called and `_row_values` what goes under it. A column added
+    to one and not the others is a `KeyError` at render time, which is how both export
+    formats came to fail at once: `carrier` reached OUTPUT_COLUMNS alone.
+    """
+    from app.core.deliverable import HEADER_TR, PDF_COLUMNS, _row_values
+    from app.core.report import OUTPUT_COLUMNS
+
+    named = set(HEADER_TR)
+    printed = set(OUTPUT_COLUMNS) | set(PDF_COLUMNS)
+    assert printed <= named, f"printed with no heading: {sorted(printed - named)}"
+
+    produced = set(_row_values(report.rows[0]))
+    assert printed <= produced, f"printed with no value: {sorted(printed - produced)}"
+
+
+def test_the_pdf_prints_a_subset_of_what_the_workbook_does():
+    """The PDF is the narrow view of the same report, not a different report."""
+    from app.core.deliverable import PDF_COLUMNS
+    from app.core.report import OUTPUT_COLUMNS
+
+    assert set(PDF_COLUMNS) <= set(OUTPUT_COLUMNS)

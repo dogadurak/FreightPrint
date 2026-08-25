@@ -97,8 +97,7 @@ def test_leg_emission_is_distance_times_tonnage_times_factor():
     route = _route("test", [_leg("road", 100)])
     shipment = calculate_route_emission(route, tonnage=24)
 
-    # +10kg is for the Geofence terminal wait emission.
-    assert shipment.total_co2_kg == pytest.approx(100 * 24 * REFERENCE_ROAD_FACTOR + 10.0)
+    assert shipment.total_co2_kg == pytest.approx(100 * 24 * REFERENCE_ROAD_FACTOR)
 
 
 def test_saving_is_all_road_minus_multimodal():
@@ -137,7 +136,7 @@ def test_ferry_km_inside_a_road_leg_is_charged_at_the_sea_factor():
     route = _route("crete", [_leg("road", 643, ferry_km=137)])
     shipment = calculate_route_emission(route, tonnage=24)
 
-    expected = 24 * (506 * REFERENCE_ROAD_FACTOR + 137 * REFERENCE_SEA_FACTOR) + 10.0
+    expected = 24 * (506 * REFERENCE_ROAD_FACTOR + 137 * REFERENCE_SEA_FACTOR)
     assert shipment.total_co2_kg == pytest.approx(expected)
     assert shipment.co2_by_mode.keys() == {"road", "sea"}
     assert any("ferry" in warning for warning in shipment.warnings)
@@ -370,3 +369,33 @@ def test_an_unsailable_track_stays_flagged_through_pricing():
 
     assert leg.track_is_indicative
     assert leg.geometry
+
+
+@pytest.mark.parametrize("factor_set", ["reference", "glec", "glec_accompanied"])
+@pytest.mark.parametrize("mode", ["road", "sea", "rail"])
+def test_a_leg_is_exactly_distance_times_tonnage_times_factor(mode, factor_set):
+    """No addend, no multiplier, no correction — in any mode, under any set.
+
+    This is the invariant the engine's credibility rests on, and it is stated across
+    every combination because it was broken in exactly one: an idling allowance of
+    5 kg/h was added to road legs and a wind factor multiplied into sea legs, both
+    without a source. Between them they cost the project its only externally checkable
+    claim, that on rows matching the customer's own method it reproduced the customer's
+    own figure to the kilogram. Anything that belongs in a leg's emissions belongs in
+    its factor, where it carries a source and a verification flag.
+    """
+    scope = "TTW" if factor_set == "reference" else "WTW"
+    factor = find_factor(load_emission_factors(), mode, scope=scope, factor_set=factor_set)
+    route = _route("one leg", [_leg(mode, 500)])
+
+    shipment = calculate_route_emission(route, tonnage=24, scope=scope, factor_set=factor_set)
+
+    assert shipment.total_co2_kg == pytest.approx(500 * 24 * factor.value)
+
+
+def test_a_zero_distance_leg_emits_nothing():
+    """The sharpest form of the same rule: with no distance there is nothing to charge,
+    so any per-leg constant shows up here as emissions out of thin air."""
+    route = _route("nowhere", [_leg("road", 0.0)])
+
+    assert calculate_route_emission(route, tonnage=24).total_co2_kg == 0.0

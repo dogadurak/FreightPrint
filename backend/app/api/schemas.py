@@ -147,9 +147,6 @@ class LegOut(BaseModel):
     # lines. A track that is drawable but not sailable is flagged instead of hidden.
     geometry: list[list[float]] = []
     track_is_indicative: bool = False
-    terrain_factor: float = 1.0
-    elevation_gain_m: float = 0.0
-    elevation_loss_m: float = 0.0
 
 
 class RangeOut(BaseModel):
@@ -432,9 +429,21 @@ class CarrierStatsOut(BaseModel):
 
 
 class GlidepathOut(BaseModel):
+    """Two computed states of the portfolio, and one lever priced from the factor file.
+
+    There is no target here. A reduction target is the sum of specific levers with
+    specific costs and dates; the figure this replaced was `best_scenario * 0.70`, a
+    percentage chosen rather than derived, and it is the kind of number a
+    sustainability reviewer discards the whole report over.
+    """
+
     baseline_co2_kg: float
     best_scenario_co2_kg: float
-    target_2030_co2_kg: float
+    # Absent when the chosen factor set carries no HVO row — never silently zero.
+    road_on_hvo_co2_kg: float | None = None
+    hvo_fuel: str | None = None
+    hvo_source: str | None = None
+    hvo_is_verified: bool | None = None
 
 
 class PortfolioOut(BaseModel):

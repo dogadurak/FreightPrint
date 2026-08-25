@@ -1,0 +1,4 @@
+mode,eur_per_km,basis,is_verified,source,notes
+road,1.20,indicative,no,"derived: order-of-magnitude only","Yol taşımasının km başına yaklaşık maliyeti. Gerçek navlun; sözleşmeye, hatta, mevsime, doluluğa ve dönüş yüküne göre kat kat değişir. Bu satır bir teklif değil, alternatifleri aynı ölçekte sıralamak için konmuş kaba bir büyüklüktür."
+sea,0.30,indicative,no,"derived: order-of-magnitude only","Ro-ro treyler slot ücretinin km başına yaklaşık karşılığı. Gerçekte slot başına fiyatlanır ve sefer doluluğuna göre değişir; km başına çevirmek yalnızca karşılaştırma amaçlıdır."
+rail,0.50,indicative,no,"derived: order-of-magnitude only","İntermodal demiryolu için km başına yaklaşık maliyet. Blok tren doluluğuna ve terminal ücretlerine göre değişir; terminal elleçleme bu rakama dâhil değildir."

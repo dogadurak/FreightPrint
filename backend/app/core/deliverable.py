@@ -49,6 +49,7 @@ TITLE = "FreightPrint — Karbon Raporu"
 
 HEADER_TR = {
     "reference": "Referans",
+    "carrier": "Taşıyıcı",
     "origin_name": "Kalkış",
     "destination_name": "Varış",
     "tonnage": "Ton",
@@ -126,6 +127,7 @@ def _row_values(report_row) -> dict:
     row = report_row
     return {
         "reference": row.shipment.reference,
+        "carrier": row.shipment.carrier,
         "origin_name": row.shipment.origin_name,
         "destination_name": row.shipment.destination_name,
         "tonnage": row.shipment.tonnage,

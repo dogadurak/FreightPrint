@@ -41,9 +41,6 @@ class RoadRoute:
     # Simplified [lon, lat] pairs, kept so a map can draw the road actually taken
     # rather than a straight line that crosses whatever lies between.
     geometry: tuple[tuple[float, float], ...] = ()
-    elevation_gain_m: float = 0.0
-    elevation_loss_m: float = 0.0
-    terrain_factor: float = 1.0
 
     @property
     def driving_km(self) -> float:
@@ -156,44 +153,25 @@ def _parse_osrm(payload: dict, origin: tuple[float, float], destination: tuple[f
         if step.get("mode") == "ferry"
     )
     coordinates = route.get("geometry", {}).get("coordinates", [])
-    
-    # Calculate elevation and terrain factor
-    elevation_gain = 0.0
-    elevation_loss = 0.0
-    terrain_factor = 1.0
-    
-    if coordinates:
-        # Sample max 100 points to avoid URL too long error
-        step = max(1, len(coordinates) // 100)
-        sampled_coords = coordinates[::step]
-        
-        try:
-            lats = ",".join(str(round(p[1], 4)) for p in sampled_coords)
-            lons = ",".join(str(round(p[0], 4)) for p in sampled_coords)
-            url = f"https://api.open-meteo.com/v1/elevation?latitude={lats}&longitude={lons}"
-            resp = requests.get(url, timeout=5)
-            if resp.ok:
-                elevations = resp.json().get("elevation", [])
-                if elevations:
-                    for i in range(1, len(elevations)):
-                        diff = elevations[i] - elevations[i-1]
-                        if diff > 0:
-                            elevation_gain += diff
-                        else:
-                            elevation_loss += abs(diff)
-                    
-                    # Each 100m of climb adds 0.8% fuel consumption. Each 100m descent saves 0.3%.
-                    terrain_factor = 1.0 + (elevation_gain * 0.008 / 100) - (elevation_loss * 0.003 / 100)
-                    terrain_factor = max(0.8, min(terrain_factor, 1.5))
-        except Exception:
-            pass # Fallback to flat terrain if API fails
 
+    # A gradient correction was fetched here, live from open-meteo, on every routing
+    # call. Three things were wrong with it and each is worth naming, because the shape
+    # of the mistake will recur:
+    #
+    #   * The coefficients — 0.8% more fuel per 100 m climbed, 0.3% less per 100 m
+    #     descended — carried no source. Plausible is not the same as cited.
+    #   * `except Exception: pass` swallowed every failure, including the test suite's
+    #     own network guard. So it never ran under test and always ran in production,
+    #     which is the exact inverse of what you want from an unproven correction.
+    #   * A failure produced flat terrain, and that answer was then written to the
+    #     route cache as though it had been measured.
+    #
+    # Elevation genuinely belongs in a road factor. It comes back when it comes back
+    # from a dataset with a citation — an SRTM/EU-DEM profile sampled offline, and a
+    # published gradient-to-consumption curve — not from a lookup nobody can check.
     return RoadRoute(
         distance_km=route["distance"] / 1000.0,
         duration_h=route["duration"] / 3600.0,
         ferry_km=ferry_m / 1000.0,
         geometry=tuple((point[0], point[1]) for point in coordinates),
-        elevation_gain_m=elevation_gain,
-        elevation_loss_m=elevation_loss,
-        terrain_factor=terrain_factor,
     )

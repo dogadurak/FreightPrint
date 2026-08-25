@@ -29,6 +29,7 @@ from .emissions import (
     DEFAULT_SCOPE,
     FactorNotFoundError,
     calculate_shipment,
+    find_factor,
     leg_countries,
     load_emission_factors,
     lowest_emission_first,
@@ -42,6 +43,21 @@ from .schedule import build_timeline
 # errors on a leg tells you nothing about robustness.
 CANDIDATE_FACTOR_SETS = ("glec", "glec_accompanied", "glec_freight_average")
 
+# The feedstock the fuel lever is priced on. Named rather than left implicit: HVO runs
+# from 14% to 73% of diesel depending on what it was made from, so "HVO" without a
+# feedstock is not a number.
+HVO_LEVER_FUEL = "hvo_uco"
+
+# Thresholds for *flagging an opportunity to look at* — never for changing a carbon
+# figure. They are conventions, not measurements, and they are named here so a reader
+# can disagree with them: a 24 t trailer is treated as full-load, so a lane averaging
+# under three quarters of that is carrying air worth consolidating, and a lane where
+# three in four movements run one way has a return-leg problem worth asking about.
+# Both need at least a few movements before the average means anything.
+LTL_TONNES = 18.0
+IMBALANCE_RATIO = 0.75
+MIN_MOVEMENTS_FOR_IMBALANCE = 3
+
 
 @dataclass
 class LaneOption:
@@ -52,6 +68,7 @@ class LaneOption:
     co2_kg: float
     hours: float
     ets_eur: float
+    road_co2_kg: float = 0.0
 
 
 @dataclass
@@ -72,6 +89,7 @@ class Lane:
     best_hours: float = 0.0
     baseline_ets_eur: float = 0.0
     best_ets_eur: float = 0.0
+    best_road_co2_kg: float = 0.0
     best_label: str = ""
     # Factor sets under which the best option beats the all-road baseline.
     wins_under: list[str] = field(default_factory=list)
@@ -81,8 +99,8 @@ class Lane:
 
     @property
     def consolidation_potential(self) -> bool:
-        """True if average tonnage is under 18t and shipments > 1 (LTL opportunity)."""
-        return self.shipments > 1 and (self.tonnes / self.shipments) < 18.0
+        """A lane worth asking about: more than one movement, averaging under a full load."""
+        return self.shipments > 1 and (self.tonnes / self.shipments) < LTL_TONNES
 
     @property
     def intensity_kg_per_tonne_km(self) -> float:
@@ -192,6 +210,10 @@ def _options(routes, shipment, scope, factor_set) -> list[LaneOption]:
                 label=emission.label,
                 is_all_road=route.is_all_road,
                 co2_kg=emission.total_co2_kg,
+                # Carried separately because the fuel levers only reach the road legs:
+                # a target that scaled the whole total would credit a biofuel switch
+                # with reducing the ship's emissions too.
+                road_co2_kg=emission.co2_by_mode.get("road", 0.0),
                 hours=build_timeline(route).total_hours,
                 ets_eur=ets,
             )
@@ -265,6 +287,7 @@ def build_portfolio(
         lane.best_hours = best.hours
         lane.baseline_ets_eur += baseline.ets_eur
         lane.best_ets_eur += best.ets_eur
+        lane.best_road_co2_kg += best.road_co2_kg
         lane.best_label = best.label
 
         # The same routes under every other basis, to see whether the advantage holds.
@@ -300,7 +323,8 @@ def build_portfolio(
         total = outbound + inbound
         if total > 0:
             lane.imbalance_ratio = outbound / total
-            if lane.imbalance_ratio > 0.75 and outbound >= 3:
+            if (lane.imbalance_ratio > IMBALANCE_RATIO
+                    and outbound >= MIN_MOVEMENTS_FOR_IMBALANCE):
                 lane.empty_miles_risk = True
 
     notes = [
@@ -320,14 +344,37 @@ def build_portfolio(
     
     baseline_total = sum(lane.baseline_co2_kg for lane in lanes.values())
     best_total = sum(lane.best_co2_kg for lane in lanes.values())
-    # Glidepath assumes best scenario + 30% further reduction by 2030 via biofuels on road legs
-    target_2030 = best_total * 0.70
+    best_road_total = sum(lane.best_road_co2_kg for lane in lanes.values())
 
+    # This third figure used to be `best_total * 0.70` — a 30% reduction "by 2030 via
+    # biofuels", chosen rather than computed. A reduction target is the sum of specific
+    # levers, and an engine that already carries HVO factors by feedstock has no excuse
+    # for guessing at one. So the lever is priced from the factor file instead, on the
+    # road legs alone, because that is all a fuel switch can reach.
     glidepath = {
         "baseline_co2_kg": baseline_total,
         "best_scenario_co2_kg": best_total,
-        "target_2030_co2_kg": target_2030
     }
+    try:
+        diesel = find_factor(factors, "road", scope=scope, factor_set=factor_set)
+        hvo = find_factor(
+            factors, "road", scope=scope, fuel_type=HVO_LEVER_FUEL, factor_set=factor_set
+        )
+    except FactorNotFoundError:
+        notes.append(
+            f"{factor_set} setinde HVO satırı yok; yakıt değişimi kaldıracı hesaplanmadı."
+        )
+    else:
+        switched = best_road_total * (hvo.value / diesel.value)
+        glidepath["road_on_hvo_co2_kg"] = best_total - best_road_total + switched
+        glidepath["hvo_fuel"] = HVO_LEVER_FUEL
+        glidepath["hvo_source"] = hvo.source
+        glidepath["hvo_is_verified"] = hvo.is_verified
+        notes.append(
+            f"Yakıt kaldıracı, çok modlu senaryonun karayolu bacakları {hvo.label} ile "
+            f"fiyatlanarak hesaplandı. Seçilmiş bir hedef değil; besleme stoğu "
+            f"değiştiğinde sonuç da değişir."
+        )
 
     return Portfolio(
         lanes=list(lanes.values()), scope=scope, factor_set=factor_set,

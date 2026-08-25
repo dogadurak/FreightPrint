@@ -43,6 +43,17 @@ const originInput = $("origin");
 const destinationInput = $("destination");
 const mapElement = $("map");
 
+/** Build an element. Text goes in as text, so a place name or a factor source out of a
+ *  data file can never be read as markup on its way to the screen. */
+function el(tag, attrs = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
+  for (const child of [children].flat()) {
+    node.append(typeof child === "string" ? document.createTextNode(child) : child);
+  }
+  return node;
+}
+
 const nf = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
 const nf3 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
 const nf1 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
@@ -2470,35 +2481,46 @@ function renderGlidepath(data) {
   
   slot.hidden = false;
   const gp = data.glidepath;
-  
-  // Calculate reductions
-  const multiModalReduction = gp.baseline_co2_kg - gp.best_scenario_co2_kg;
-  const netZeroReduction = gp.best_scenario_co2_kg - gp.target_2030_co2_kg;
-  
-  slot.innerHTML = `
-    <div class="card">
-      <div class="card-head">
-        <h2 class="card-title">Net-Zero 2030 Yörüngesi (Glidepath)</h2>
-        <span class="card-note">Karbon azaltım hedefleri</span>
-      </div>
-      <p class="hint">Portföyünüzün bugünden 2030'a emisyon azaltım potansiyeli.</p>
-      
-      <div class="glidepath-metrics" style="display:flex; gap:1rem; margin-top:1rem; margin-bottom:1.5rem;">
-        <div style="flex:1; padding:1rem; background:rgba(0,0,0,0.02); border-radius:8px; border-left:4px solid var(--border-subtle);">
-          <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.25rem;">Mevcut Karayolu (Baseline)</div>
-          <div style="font-size:1.5rem; font-weight:600; color:var(--text-main);">${nf.format(gp.baseline_co2_kg)} kg</div>
-        </div>
-        <div style="flex:1; padding:1rem; background:rgba(15,122,69,0.05); border-radius:8px; border-left:4px solid var(--status-good);">
-          <div style="font-size:0.875rem; color:var(--status-good); margin-bottom:0.25rem;">Multimodal Geçişi (-${Math.round((multiModalReduction/gp.baseline_co2_kg)*100)}%)</div>
-          <div style="font-size:1.5rem; font-weight:600; color:var(--text-main);">${nf.format(gp.best_scenario_co2_kg)} kg</div>
-        </div>
-        <div style="flex:1; padding:1rem; background:rgba(30,136,229,0.05); border-radius:8px; border-left:4px solid #1e88e5;">
-          <div style="font-size:0.875rem; color:#1e88e5; margin-bottom:0.25rem;">2030 Hedefi (Biyoyakıt & FTL)</div>
-          <div style="font-size:1.5rem; font-weight:600; color:var(--text-main);">${nf.format(gp.target_2030_co2_kg)} kg</div>
-        </div>
-      </div>
-    </div>
-  `;
+  const share = (kg) => Math.round(((gp.baseline_co2_kg - kg) / gp.baseline_co2_kg) * 100);
+
+  // Two states the engine computed, and one lever it priced. Deliberately not a target:
+  // the figure here used to be "best scenario minus 30%", a percentage picked rather
+  // than derived, which is exactly what a reviewer throws the whole report out over.
+  const steps = [
+    { label: "Bugün — tam karayolu", kg: gp.baseline_co2_kg, note: "karşılaştırma esası" },
+    {
+      label: `Çok modlu geçiş  −%${share(gp.best_scenario_co2_kg)}`,
+      kg: gp.best_scenario_co2_kg,
+      note: "her esas altında kazanan hatlar",
+      good: true,
+    },
+  ];
+  if (gp.road_on_hvo_co2_kg != null) {
+    steps.push({
+      label: `Karayolu bacakları ${gp.hvo_fuel} ile  −%${share(gp.road_on_hvo_co2_kg)}`,
+      kg: gp.road_on_hvo_co2_kg,
+      note: gp.hvo_source || "",
+      good: true,
+      derived: gp.hvo_is_verified === false,
+    });
+  }
+
+  slot.replaceChildren(el("div", { class: "card" }, [
+    el("div", { class: "card-head" }, [
+      el("h2", { class: "card-title" }, "Azaltım kaldıraçları"),
+      el("span", { class: "card-note" }, "hedef değil, hesaplanmış"),
+    ]),
+    el("p", { class: "hint" },
+      "Her basamak bir eylemin karşılığı. Sıradaki basamak bir öncekinin üstüne biner."),
+    el("div", { class: "lever-row" }, steps.map((step) =>
+      el("div", { class: `lever${step.good ? " is-good" : ""}` }, [
+        el("span", { class: "lever-label" }, step.label),
+        el("span", { class: "lever-value" }, `${nf.format(step.kg)} kg`),
+        el("span", { class: "lever-note" },
+          step.derived ? `${step.note} — türetme faktör` : step.note),
+      ])
+    )),
+  ]));
 }
 
 /* ── ISO 14083 self-assessment ───────────────────────────────────────── */

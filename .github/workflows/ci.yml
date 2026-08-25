@@ -53,7 +53,7 @@ jobs:
 
       - name: Run tests
         working-directory: backend
-        run: python -m pytest -q
+        run: python -m pytest -q -ra
 
   image:
     name: Image builds

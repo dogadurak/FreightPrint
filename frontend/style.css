@@ -912,3 +912,22 @@ td.exposed { color: var(--bad); font-weight: 620; }
 .lane-tag.bad { background: rgba(230,103,103,0.15); color: #e66767; border: 1px solid rgba(230,103,103,0.3); }
 .notice.warn { background: rgba(234,179,8,0.1); border-left: 4px solid #ca8a04; padding: 1rem; border-radius: 4px; color: var(--ink); font-size: 0.9rem; }
 
+
+/* ── reduction levers ─────────────────────────────────────────────────
+   Steps, not a target. Each one is an action the engine priced; the third is
+   absent entirely when the chosen factor set carries no HVO row, rather than
+   being shown as zero. */
+.lever-row { display: grid; gap: 0.6rem; margin-top: 0.9rem; }
+@media (min-width: 720px) { .lever-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.lever {
+  display: grid; gap: 0.15rem; padding: 0.75rem 0.9rem;
+  background: var(--surface-sunken);
+  border-left: 3px solid var(--border-strong); border-radius: var(--r-sm);
+}
+.lever.is-good { border-left-color: var(--good); }
+.lever-label { font-size: 0.79rem; font-weight: 600; color: var(--ink-secondary); }
+.lever-value {
+  font-size: 1.35rem; font-weight: 680; color: var(--ink);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+}
+.lever-note { font-size: 0.73rem; color: var(--ink-muted); line-height: 1.35; }

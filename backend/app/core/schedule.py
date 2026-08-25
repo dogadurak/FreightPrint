@@ -30,35 +30,24 @@ SEA_SPEED_KMH = 39.0
 RAIL_SPEED_KMH = 40.0
 
 # Hours a unit spends being handled at a terminal, by what changes there.
-# Geofencing delay: +2 hours added to all interactions.
-DWELL_HOURS = {("road", "sea"): 8.0, ("sea", "road"): 8.0,
-               ("road", "rail"): 6.0, ("rail", "road"): 6.0,
-               ("sea", "rail"): 10.0, ("rail", "sea"): 10.0,
-               ("sea", "sea"): 10.0, ("rail", "rail"): 6.0, ("road", "road"): 2.0}
-DEFAULT_DWELL_H = 8.0
-
-PORT_CONGESTION = {
-    "rotterdam": 6.0,
-    "shanghai": 5.0,
-    "singapur": 4.5,
-    "los angeles": 6.0,
-    "hamburg": 4.0,
-    "antwerp": 3.0,
-    "jebel ali": 4.0,
-    "pendik": 3.5,
-    "trieste": 3.0
-}
-
-def get_port_congestion(port_name: str | None) -> float:
-    if not port_name:
-        return 2.0
-    name = port_name.lower()
-    for p, hours in PORT_CONGESTION.items():
-        if p in name:
-            return hours
-    return 2.0
+#
+# A "geofencing delay" of +2 h was added to every one of these, and a per-port
+# congestion table beside them naming Shanghai, Singapore and Los Angeles — ports this
+# network does not contain. Neither carried a source. Both are removed: the dwell hours
+# below are the ones the pilot corridor was built on, and refrigeration is charged
+# against the clock, so two invented hours per terminal were also two hours of invented
+# CO2 on every reefer shipment.
+#
+# Real congestion belongs here, from measured terminal dwell — port community system
+# data or an operator's own gate records — carrying its source like everything else.
+DWELL_HOURS = {("road", "sea"): 6.0, ("sea", "road"): 6.0,
+               ("road", "rail"): 4.0, ("rail", "road"): 4.0,
+               ("sea", "rail"): 8.0, ("rail", "sea"): 8.0,
+               ("sea", "sea"): 8.0, ("rail", "rail"): 4.0, ("road", "road"): 0.0}
+DEFAULT_DWELL_H = 6.0
 
 HOURS_PER_WEEK = 168.0
+
 
 @dataclass
 class ScheduleStep:

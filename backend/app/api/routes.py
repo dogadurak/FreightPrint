@@ -35,6 +35,7 @@ from ..core.report import (
 from ..core.risk import assess_route, load_risk_zones
 from ..core.playback import PlaybackMismatch, build_playback
 from ..core.portfolio import build_portfolio
+from ..core.rates import estimate_freight_cost
 from ..core.reefer import ReeferFactorError, calculate_reefer
 from ..core.schedule import build_timeline
 from ..core.tolls import estimate_tolls
@@ -221,9 +222,6 @@ def _leg_out(leg) -> LegOut:
         factor_source=leg.factor.source,
         geometry=[list(point) for point in leg.geometry],
         track_is_indicative=leg.track_is_indicative,
-        terrain_factor=getattr(leg, "terrain_factor", 1.0),
-        elevation_gain_m=getattr(leg, "elevation_gain_m", 0.0),
-        elevation_loss_m=getattr(leg, "elevation_loss_m", 0.0),
     )
 
 
@@ -420,17 +418,19 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals)
         timeline = _timeline_out(route)
         total_hours = timeline.total_hours
         
-        # Calculate base freight cost approx for demo
-        base_cost = (
-            route.distance_by_mode.get('road', 0) * 1.2 +
-            route.distance_by_mode.get('sea', 0) * 0.3 +
-            route.distance_by_mode.get('rail', 0) * 0.5
-        )
-        
+        # Freight at the published rate table rather than at three numbers written into
+        # this handler. They are still estimates, but they now say so and the warning
+        # travels with the answer — the "cheapest" badge is a recommendation, and one
+        # resting on invisible assumptions is worse than none.
+        freight = estimate_freight_cost(route)
         ets = _ets_out(shipment, route, terminals, request)
         co2_toll = _toll_out(route, shipment)
-        
-        total_cost = base_cost + (ets.cost_eur if ets else 0) + (co2_toll.total_eur if co2_toll else 0)
+
+        total_cost = (
+            freight.eur
+            + (ets.cost_eur if ets else 0)
+            + (co2_toll.total_eur if co2_toll else 0)
+        )
         total_co2 = shipment.total_co2_kg
         
         priced_routes_data.append({
@@ -441,7 +441,9 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals)
             "total_co2": total_co2,
             "ets": ets,
             "co2_toll": co2_toll,
-            "tags": []
+            "tags": [],
+            "cost_is_indicative": freight.is_indicative,
+            "cost_warnings": freight.warnings,
         })
 
     if priced_routes_data:
