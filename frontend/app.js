@@ -1358,8 +1358,6 @@ reportForm.addEventListener("submit", async (event) => {
   }
 });
 
-});
-
 $("portfolio-submit").addEventListener("click", async (event) => {
   event.preventDefault();
   const body = new FormData(reportForm);

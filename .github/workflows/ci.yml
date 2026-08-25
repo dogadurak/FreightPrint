@@ -51,6 +51,12 @@ jobs:
           grep -v -E '^(matplotlib|jupyter|nbconvert)' requirements.txt > ci-requirements.txt
           pip install -r ci-requirements.txt
 
+      # A JavaScript error at module scope disables every control on the page and
+      # reports itself only to a console nobody has open, so no Python test can see it.
+      # ubuntu-latest ships node, which means this is never the skipped one.
+      - name: Dashboard script loads
+        run: node scripts/check_frontend_boots.js
+
       - name: Run tests
         working-directory: backend
         run: python -m pytest -q -ra
