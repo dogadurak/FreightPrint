@@ -208,8 +208,38 @@ def read_upload(raw: bytes, filename: str | None = None) -> str:
         raise ReportInputError(f"file must be UTF-8 text or an .xlsx workbook: {error}") from error
 
 
-def parse_shipments(content: str) -> list[ShipmentRow]:
-    """Read the upload, refusing it whole rather than reporting on a misread column."""
+# Above this share of rows failing, the file is not "a file with some typos" — it is a
+# file being read wrongly. A wrong delimiter or a shifted header produces exactly that
+# signature, and reporting on the survivors would hand back a confident total drawn from
+# a fraction of the data.
+MAX_BAD_ROW_SHARE = 0.5
+
+
+@dataclass
+class ParsedUpload:
+    """Shipments that could be read, and an account of the rows that could not.
+
+    The skipped rows are part of the answer, not a footnote. A carbon total silently
+    computed over 480 of 500 shipments understates by four percent and looks exactly
+    like a total over 500, which is the failure this whole structure exists to prevent.
+    """
+
+    shipments: list[ShipmentRow]
+    skipped: list[str] = field(default_factory=list)
+    total_rows: int = 0
+
+    @property
+    def bad_share(self) -> float:
+        return len(self.skipped) / self.total_rows if self.total_rows else 0.0
+
+
+def _open_reader(content: str) -> tuple[csv.DictReader, bool]:
+    """The reader and how it reads a comma, with the header checked.
+
+    Header problems are fatal in both reading modes and always will be: a missing or
+    shifted column corrupts every row identically and silently, which is a different
+    kind of failure from a typo in row 47.
+    """
     # Excel in most of Europe writes CSV with semicolons, because the comma is its
     # decimal mark. Sniffed from the header alone, which is the one line whose shape
     # is known in advance.
@@ -227,36 +257,92 @@ def parse_shipments(content: str) -> list[ShipmentRow]:
             f"missing column(s): {', '.join(missing)}. "
             f"Required: {', '.join(REQUIRED_COLUMNS)}; optional: {', '.join(OPTIONAL_COLUMNS)}"
         )
+    return reader, comma_is_decimal
 
-    shipments = []
-    for number, row in enumerate(reader, start=2):
-        read = lambda column: _number(row[column], column, number, comma_is_decimal)
-        origin = (read("origin_lon"), read("origin_lat"))
-        destination = (read("destination_lon"), read("destination_lat"))
-        raw_tonnage = (row.get("tonnage") or "").strip() if row.get("tonnage") else ""
-        tonnage = read("tonnage") if raw_tonnage else 24.0
 
-        for point in (origin, destination):
-            if not (-180 <= point[0] <= 180 and -90 <= point[1] <= 90):
-                raise ReportInputError(f"row {number}: {point} is not a valid lon,lat pair")
-        if tonnage <= 0:
-            raise ReportInputError(f"row {number}: tonnage must be positive, got {tonnage}")
+def _parse_row(row: dict, number: int, comma_is_decimal: bool) -> ShipmentRow:
+    """One row, or a `ReportInputError` naming what is wrong with it.
 
-        shipments.append(
-            ShipmentRow(
-                reference=(row.get("reference") or f"row-{number}").strip(),
-                carrier=(row.get("kaynak_rapor") or row.get("carrier") or "Unknown").strip(),
-                origin=origin,
-                destination=destination,
-                origin_name=(row.get("origin_name") or "origin").strip(),
-                destination_name=(row.get("destination_name") or "destination").strip(),
-                tonnage=tonnage,
-            )
-        )
+    Shared by both reading modes so they cannot drift: whether a row is acceptable is
+    one question, and only what to do about an unacceptable one differs.
+    """
+    read = lambda column: _number(row[column], column, number, comma_is_decimal)
+    origin = (read("origin_lon"), read("origin_lat"))
+    destination = (read("destination_lon"), read("destination_lat"))
+    raw_tonnage = (row.get("tonnage") or "").strip() if row.get("tonnage") else ""
+    tonnage = read("tonnage") if raw_tonnage else 24.0
 
+    for point in (origin, destination):
+        if not (-180 <= point[0] <= 180 and -90 <= point[1] <= 90):
+            raise ReportInputError(f"row {number}: {point} is not a valid lon,lat pair")
+    if tonnage <= 0:
+        raise ReportInputError(f"row {number}: tonnage must be positive, got {tonnage}")
+
+    return ShipmentRow(
+        reference=(row.get("reference") or f"row-{number}").strip(),
+        carrier=(row.get("kaynak_rapor") or row.get("carrier") or "Unknown").strip(),
+        origin=origin,
+        destination=destination,
+        origin_name=(row.get("origin_name") or "origin").strip(),
+        destination_name=(row.get("destination_name") or "destination").strip(),
+        tonnage=tonnage,
+    )
+
+
+def parse_shipments(content: str) -> list[ShipmentRow]:
+    """Read the upload strictly: one bad row refuses the whole file.
+
+    Kept for callers that are describing a known-good file and want an exception rather
+    than a report — most of the tests, and anything where a partial answer would be
+    worse than none. `read_shipments` is what an upload from a person should use.
+    """
+    reader, comma_is_decimal = _open_reader(content)
+    shipments = [
+        _parse_row(row, number, comma_is_decimal)
+        for number, row in enumerate(reader, start=2)
+    ]
     if not shipments:
         raise ReportInputError("file has a header but no shipments")
     return shipments
+
+
+def read_shipments(content: str) -> ParsedUpload:
+    """Read an uploaded file, keeping the rows that are usable.
+
+    A real shipment file has a typo in it somewhere, and refusing five hundred rows over
+    row forty-seven is not a service to anybody. So a bad row is skipped and *named*,
+    and the count travels with the result so no figure is ever quoted over a silently
+    smaller set than the caller believes.
+
+    Two things still refuse the whole file. A header problem, because a shifted column
+    corrupts every row alike. And too many bad rows: past `MAX_BAD_ROW_SHARE` the honest
+    reading is not "some typos" but "this file is being parsed wrongly", and answering
+    over the survivors would be confidently wrong rather than usefully partial.
+    """
+    reader, comma_is_decimal = _open_reader(content)
+
+    upload = ParsedUpload(shipments=[])
+    for number, row in enumerate(reader, start=2):
+        upload.total_rows += 1
+        try:
+            upload.shipments.append(_parse_row(row, number, comma_is_decimal))
+        except ReportInputError as error:
+            upload.skipped.append(str(error))
+
+    if not upload.total_rows:
+        raise ReportInputError("file has a header but no shipments")
+    if not upload.shipments:
+        raise ReportInputError(
+            f"hicbir satir okunamadi ({upload.total_rows} denendi). "
+            f"Ilk hata: {upload.skipped[0]}"
+        )
+    if upload.bad_share > MAX_BAD_ROW_SHARE:
+        raise ReportInputError(
+            f"{len(upload.skipped)}/{upload.total_rows} satir okunamadi. Bu oranda hata, "
+            f"tek tek yazim hatasi degil dosyanin yanlis okundugu anlamina gelir - "
+            f"ayrac veya sutun basliklarini kontrol edin. Ilk hata: {upload.skipped[0]}"
+        )
+    return upload
 
 
 def build_report(

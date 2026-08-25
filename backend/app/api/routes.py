@@ -31,7 +31,7 @@ from ..core.network import build_network, load_terminals
 from ..core.report import (
     ReportInputError,
     build_report,
-    parse_shipments,
+    read_shipments,
     read_upload,
     report_to_csv,
 )
@@ -130,6 +130,25 @@ FUEL_LABELS = {
     "electric_se": "Elektrik — Isvec sebekesi",
     "electric_pl": "Elektrik — Polonya sebekesi",
 }
+
+
+def _upload_notes(upload) -> list[str]:
+    """What the file cost to read, in the answer rather than beside it.
+
+    A total computed over 480 of 500 shipments understates by four percent and looks
+    exactly like a total over 500. So the skipped rows travel with every figure derived
+    from them, and the first few are named — "twenty rows were dropped" is a warning,
+    "row 47: origin_lon is not a number" is something a person can go and fix.
+    """
+    if not upload.skipped:
+        return []
+    shown = "; ".join(upload.skipped[:3])
+    more = f" (+{len(upload.skipped) - 3} tane daha)" if len(upload.skipped) > 3 else ""
+    return [
+        f"{len(upload.skipped)}/{upload.total_rows} satır okunamadı ve hiçbir hesaba "
+        f"katılmadı — aşağıdaki her rakam kalan {len(upload.shipments)} sevkiyat "
+        f"üzerinedir. {shown}{more}"
+    ]
 
 
 @router.get("/terminals", response_model=list[TerminalOut])
@@ -682,7 +701,8 @@ def bulk_report(
         )
 
     try:
-        shipments = parse_shipments(_read_upload(file))
+        upload = read_shipments(_read_upload(file))
+        shipments = upload.shipments
     except ReportInputError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -697,6 +717,10 @@ def bulk_report(
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+    # Into the report's own warnings, so the dropped rows reach the document a customer
+    # files rather than a status line they saw once.
+    report.warnings.extend(_upload_notes(upload))
 
     # Every shipment failing means the settings are wrong, not the data.
     if shipments and not report.calculated:
@@ -887,7 +911,8 @@ def start_report_job(
             detail=f"format must be one of {', '.join(REPORT_FORMATS)}, got {output_format!r}",
         )
     try:
-        shipments = parse_shipments(_read_upload(file))
+        upload = read_shipments(_read_upload(file))
+        shipments = upload.shipments
     except ReportInputError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -904,6 +929,7 @@ def start_report_job(
             concurrency=DEFAULT_CONCURRENCY,
             on_progress=lambda done: setattr(job, "done", done),
         )
+        report.warnings.extend(_upload_notes(upload))
         if not report.calculated:
             raise RuntimeError(report.rows[0].status if report.rows else "nothing calculated")
         body = render(report)
@@ -1046,7 +1072,8 @@ def lane_portfolio(
         raise HTTPException(status_code=422, detail=f"scope must be TTW or WTW, got {scope!r}")
 
     try:
-        shipments = parse_shipments(_read_upload(file))
+        upload = read_shipments(_read_upload(file))
+        shipments = upload.shipments
         portfolio = build_portfolio(shipments, scope=scope, factor_set=factor_set)
     except ReportInputError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -1112,7 +1139,7 @@ def lane_portfolio(
         ],
         glidepath=portfolio.glidepath,
         failed=[list(f) for f in portfolio.failed],
-        notes=portfolio.notes,
+        notes=portfolio.notes + _upload_notes(upload),
     )
 
 
@@ -1175,7 +1202,8 @@ def network_vulnerability(
         raise HTTPException(status_code=422, detail=f"scope must be TTW or WTW, got {scope!r}")
 
     try:
-        shipments = parse_shipments(_read_upload(file))
+        upload = read_shipments(_read_upload(file))
+        shipments = upload.shipments
     except ReportInputError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -1238,7 +1266,7 @@ def network_vulnerability(
             "gerçekten daha hızlı olabilir.",
             "Mahsur kalan sevkiyat, pahalılaşan sevkiyatla aynı kefeye konmaz; "
             "taşınamayan bir yükün yerine geçecek bir sayı yoktur.",
-        ] + survey.notes,
+        ] + survey.notes + _upload_notes(upload),
     )
 
 
@@ -1261,7 +1289,8 @@ def backhaul_opportunities(
         )
 
     try:
-        shipments = parse_shipments(_read_upload(file))
+        upload = read_shipments(_read_upload(file))
+        shipments = upload.shipments
         report = find_backhauls(shipments, radius_km=radius_km)
     except ReportInputError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -1307,7 +1336,7 @@ def backhaul_opportunities(
             )
             for match in report.matches
         ],
-        notes=report.notes,
+        notes=report.notes + _upload_notes(upload),
     )
 
 
@@ -1333,7 +1362,8 @@ def consolidation_hub_plan(
         )
 
     try:
-        shipments = parse_shipments(_read_upload(file))
+        upload = read_shipments(_read_upload(file))
+        shipments = upload.shipments
         plan = plan_hubs(
             shipments, max_hubs=max_hubs, capacity_tonnes=capacity_tonnes,
             scope=scope, factor_set=factor_set,
@@ -1377,5 +1407,5 @@ def consolidation_hub_plan(
         saved_co2_kg=(
             round_to_significant(plan.saved_co2_kg) if plan.saved_co2_kg is not None else None
         ),
-        notes=plan.notes,
+        notes=plan.notes + _upload_notes(upload),
     )

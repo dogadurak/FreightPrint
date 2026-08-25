@@ -227,3 +227,20 @@ def test_the_pdf_prints_a_subset_of_what_the_workbook_does():
     from app.core.report import OUTPUT_COLUMNS
 
     assert set(PDF_COLUMNS) <= set(OUTPUT_COLUMNS)
+
+
+def test_dropped_rows_reach_the_document_a_customer_files():
+    """The report is the deliverable. A row silently missing from it is a carbon total
+    that understates and cannot be checked from the file itself."""
+    from app.core.report import read_shipments
+
+    upload = read_shipments(
+        TURKISH_CSV + "SEV-3,Bozuk,BOZUK,40.78,Viyana,16.37,48.21,18\n"
+    )
+    report = build_report(upload.shipments, factor_set="glec", scope="WTW")
+    report.warnings.append(
+        f"{len(upload.skipped)}/{upload.total_rows} satır okunamadı: {upload.skipped[0]}"
+    )
+
+    assert "okunamadı" in sheet_text(load_workbook(io.BytesIO(report_to_xlsx(report))), "Esas ve kaynaklar")
+    assert "okunamad" in pdf_text(report_to_pdf(report))

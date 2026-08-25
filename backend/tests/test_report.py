@@ -6,6 +6,7 @@ from app.core.report import (
     ReportInputError,
     build_report,
     parse_shipments,
+    read_shipments,
     read_upload,
     report_to_csv,
 )
@@ -240,3 +241,73 @@ def test_a_file_named_xlsx_that_is_not_one_says_so():
 
 def test_plain_csv_still_arrives_through_the_same_door():
     assert read_upload((HEADER + ROW).encode("utf-8-sig")) == HEADER + ROW
+
+
+# ── reading a real file, which has a typo in it somewhere ─────────────────────
+
+GOOD = "A1,Gebze,29.4306,40.7889,Dusseldorf,6.7735,51.2277,24\n"
+BAD = "A2,Bozuk,BOZUK,40.7889,Dusseldorf,6.7735,51.2277,24\n"
+NAMED_HEADER = (
+    "reference,origin_name,origin_lon,origin_lat,destination_name,"
+    "destination_lon,destination_lat,tonnage\n"
+)
+
+
+def test_a_typo_in_one_row_no_longer_refuses_five_hundred():
+    """Refusing a whole file over row forty-seven is not a service to anybody, and a
+    real shipment file has a typo in it somewhere."""
+    upload = read_shipments(NAMED_HEADER + GOOD + BAD + GOOD)
+
+    assert len(upload.shipments) == 2
+    assert len(upload.skipped) == 1
+    assert upload.total_rows == 3
+
+
+def test_a_skipped_row_says_which_row_and_why():
+    """"Twenty rows were dropped" is a warning; "row 3: origin_lon is not a number" is
+    something a person can go and fix."""
+    upload = read_shipments(NAMED_HEADER + GOOD + BAD)
+
+    assert "row 3" in upload.skipped[0]
+    assert "origin_lon" in upload.skipped[0]
+
+
+def test_strict_reading_still_refuses_the_whole_file():
+    """Kept for callers describing a known-good file, where a partial answer is worse
+    than an exception."""
+    with pytest.raises(ReportInputError, match="row 3"):
+        parse_shipments(NAMED_HEADER + GOOD + BAD)
+
+
+def test_both_readers_accept_exactly_the_same_rows():
+    """One row parser, two policies. If they ever disagreed about what a valid row is,
+    a file would import differently depending on which door it came through."""
+    content = NAMED_HEADER + GOOD + GOOD
+
+    assert read_shipments(content).shipments == parse_shipments(content)
+
+
+def test_a_header_problem_still_refuses_everything():
+    """A shifted or missing column corrupts every row identically and silently, which is
+    a different kind of failure from a typo in one of them."""
+    with pytest.raises(ReportInputError, match="missing column"):
+        read_shipments("reference,tonnage\nA1,24\n")
+
+
+def test_a_file_that_is_mostly_unreadable_is_refused_rather_than_summarised():
+    """Past a certain share the honest reading is not "some typos" but "this file is
+    being parsed wrongly" — a wrong delimiter looks exactly like this — and answering
+    over the survivors would be confidently wrong rather than usefully partial."""
+    with pytest.raises(ReportInputError, match="yanlis okundugu"):
+        read_shipments(NAMED_HEADER + GOOD + BAD + BAD + BAD)
+
+
+def test_a_file_where_nothing_parses_says_so_with_the_first_reason():
+    with pytest.raises(ReportInputError, match="hicbir satir okunamadi"):
+        read_shipments(NAMED_HEADER + BAD)
+
+
+def test_the_share_of_bad_rows_is_available_to_the_caller():
+    upload = read_shipments(NAMED_HEADER + GOOD + GOOD + GOOD + BAD)
+
+    assert upload.bad_share == pytest.approx(0.25)
