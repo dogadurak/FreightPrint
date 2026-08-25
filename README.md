@@ -3,7 +3,12 @@
 Çok modlu yük taşımacılığı karbon ve rota analiz motoru.
 Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
-**Durum:** Planın tüm fazları (0–8) tamamlandı. 230 test geçiyor.
+**Durum:** Planın tüm fazları (0–8) tamamlandı. 576 test geçiyor.
+
+Motorun hesabı iki ayrı şeye karşı sınanıyor: gerçek bir müşteri karbon raporunu yeniden
+üretmesine, ve kendi varsayımlarının **dışarıdan indirilmiş gözlemlerle** karşılaştırılmasına
+(Eurostat boş dönüş anketi, EU MRV doğrulanmış gemi emisyonları). İkisi de aşağıdaki
+[Doğrulama](#doğrulama) bölümünde.
 
 ## Kurulum
 
@@ -47,14 +52,25 @@ python -m uvicorn app.main:app --reload
 
 Tarayıcıda `http://127.0.0.1:8000`. API dokümantasyonu `/docs` altında.
 
-Pano dört bölümden oluşur:
+Pano bir sevkiyat girdisi ve onun üzerine açılan kartlardan oluşur; her kart bir soruya
+cevap verir. Cevabı bir dosya yüklemeye ya da dışarıdan bir gözleme bağlı olan yedi kart
+(aşağıda *dış gözlem* ve son satır) **cevap yoksa kendini gizler** — boş bir kart,
+olmayan bir cevabı varmış gibi gösterir.
 
-| Bölüm | Ne gösterir |
+| Kart | Hangi soruya cevap veriyor |
 |---|---|
 | **Senaryo çubuğu** | Faktör esası (refakatsiz / refakatli / filo ort. / karşılaştırma esası) ve kapsam (TTW/WTW). Değiştirmek **anında** — yeniden rotalama yok |
 | **KPI kartları** | Seçilen rotanın emisyonu · tam karayoluna işaretli fark · Monte Carlo belirsizlik aralığı · ro-ro esasına duyarlılık |
-| **Harita + karşılaştırma** | Rota çizimi, **yolculuk oynatıcı** ve alternatiflerin moda göre yığılı emisyon çubukları |
-| **Duyarlılık paneli** | Aynı rota, her faktör esası altında — noktalar tam karayolu çizgisini geçtiğinde karar değişir |
+| **Rota + oynatıcı** | Rota çizimi ve **yolculuk oynatıcı** — emisyon zaman içinde nerede birikiyor |
+| **Alternatif karşılaştırması** | Seçeneklerin moda göre yığılı emisyonu |
+| **Faktör esası duyarlılığı** | Aynı rota, her faktör esası altında — noktalar tam karayolu çizgisini geçtiğinde karar değişir |
+| **Bacak dökümü · Kapıdan kapıya süre** | Mesafe, süre, bekleme ve aktarma bacak bacak |
+| **Risk ve maliyet** | Navlun, CO2 geçiş ücreti, EU ETS ve sapma senaryosunun faturası |
+| **Boş dönüş — varsayım ve gözlem** | Faktörün varsaydığı boş dönüş, Eurostat'ın gördüğüne karşı *(dış gözlem)* |
+| **Deniz faktörü — yayımlanan ve ölçülen** | Kullanılan ro-ro faktörü, EU MRV'nin doğruladığı filonun dağılımı üzerinde *(dış gözlem)* |
+| **ISO 14083 öz değerlendirmesi** | Bu rakam bir denetimde ne kadar dayanır |
+| **Ağ kırılganlığı** | Bir bağlantı çalışmazsa koridor ne kaybeder |
+| **Konsolidasyon merkezi · Ters yük · Hat portföyü** | Yüklenen sevkiyat dosyası üzerinden: nerede toplamalı, hangi boş dönüş eşleşir, hangi hat hareket etmeye değer |
 
 Rotalama pahalı (~6 sn, yedi OSRM çağrısı), fiyatlama bedava. Bu yüzden panonun sunduğu
 her senaryo **tek istekte** hesaplanır; sonrasında geçiş yapmak sunucuya hiç gitmez.
@@ -572,6 +588,12 @@ bekleme süresi — km bazlı bir hesabın sıfır saydığı, soğutma faturas�
 
 ## Doğrulama
 
+Bir modeli kendi varsayımıyla doğrulamak doğrulama değildir. Burada iki ayrı sınama var
+ve ikisi de dışarıdan geliyor: motorun gerçek bir raporu **yeniden üretmesi**, ve motorun
+varsayımlarının **bağımsız gözlemlerle karşılaştırılması**.
+
+### 1. Gerçek bir karbon raporunu yeniden üretmek
+
 Sistem, gerçek bir lojistik firmasının iki müşteri için hazırladığı karbon raporlarındaki
 34 sevkiyatla karşılaştırıldı. Veri seti gerçek müşteri bilgisi içerdiği için depoda
 **yoktur**; doğrulama testleri veri yoksa kendini atlar.
@@ -613,6 +635,51 @@ Defter **çıktısız** işlenir: çalıştırıldığında grafikleri ve sayıl
 ama sonuçlar depoya yazılmaz. Defterin metninde açıklama amaçlı birkaç örnek servis
 rotası ve mesafe geçer; sevkiyat satırları, müşteri adları ve tonajlar geçmez.
 
+### 2. Motorun varsayımlarını dışarıdan gözleme karşı tutmak
+
+Yukarıdaki tablo tek bir şeyi kanıtlıyor: motor, kendisine verilen faktörlerle doğru
+aritmetik yapıyor. **Faktörlerin kendisinin bu koridoru tarif edip etmediğini
+kanıtlamıyor.** Bunun için kaynağı bu proje olmayan veri gerekiyor; `data/external/`
+klasöründeki dosyalar indirilmiştir, üretilmemiştir ve hiçbiri hesabın girdisi değildir —
+yalnızca hesabın sınandığı ölçüttür. Türetme betikleri `scripts/` altında.
+
+| Varsayım | Gözlem | Sonuç |
+|---|---|---|
+| GLEC karayolu faktörü **%30 boş dönüş** varsayıyor | Eurostat `road_go_ta_vm`, 29 ülke, 2022–2024 | Uluslararası AB taşımacılığında **~%12**. Faktörün esası bu koridorun trafiği değil |
+| GLEC ro-ro faktörü **0,063** (TTW) | EU MRV / THETIS-MRV, 684 gemi-yılı, doğrulayıcı onaylı | Filonun **orta yarısının içinde**, üç dönemin üçünde de. Manşetin dayandığı sayı için söylenebilecek en güçlü şey |
+| `reference` setinin deniz değeri **0,012** | Aynı kaynak, 234 gemi | Filodaki **hiçbir gemi** o kadar temiz değil (medyanın 0,24 katı) |
+
+**Boş dönüş — ve bunun manşete etkisi.** Koridor kendi kilometreleriyle
+ağırlıklandırıldığında gözlenen oran **%17,4**, kapsam **%70** (Sırbistan ve Türkiye bu
+ankete bildirim yapmıyor; 754 km gözlemsiz ve hiçbiri komşusuyla ikame edilmedi). Aynı
+rotayı gözlenen oranla yeniden fiyatlamak çok modlu cezayı **+%5,1'den +%21,9'a**
+taşıyor — yani bulguyu zayıflatmıyor, güçlendiriyor. Kapsamı söylenmeyen bir ağırlıklı
+ortalama, kontrol edilene kadar doğru görünen türden bir sayıdır; bu yüzden oran
+kapsamsız hiç dolaşmıyor.
+
+**Deniz faktörü — geçen sınav ve asıl bulgu.** 0,063 her dönemde orta yarının içine
+düşüyor (medyanın 1,07× / 1,17× / 1,24× katı). Filo ortalamasının hiçbir gemiye eşit
+olması beklenmez, adil bir orta olması beklenir. Ama **orta yarının kendisi 2,7 kat
+aralığa yayılıyor**: aynı seferi taşıyan iki doğrulanmış gemi arasında bu kadar fark var.
+Hangi filo ortalaması seçilirse seçilsin tek bir geminin gerçeğini veremez — bu, motorun
+değil yöntemin sınırı ve pano bunu rakamla birlikte gösteriyor.
+
+**Türetmeler denetlenebilir.** Her iki gözlem de ham hâliyle depoda duruyor ve
+türetmeleri betiklerden ibaret — bir defalık elle yapılmış bir adım değil:
+
+```bash
+python scripts/import_eurostat.py --check   # islenmis CSV hala ham yanittan mi geliyor
+python scripts/import_mrv.py "data/external/<dosya>.xlsx" --describe
+```
+
+Eurostat türetmesi ağa çıkmaz (indirme ayrı bir adımdır, yoksa yanıtı depoda tutmanın
+anlamı kalmaz) ve `--check` test takımında koşar. THETIS-MRV çalışma kitabı elle
+indirilir; portal bir JavaScript uygulaması, dışa aktarma reCAPTCHA arkasında ve EMSA
+doğrudan dosya adresi yayımlamıyor — betik bunu gizlemek yerine yazıyor.
+
+Ayrıntı, kaynak künyeleri ve gözlemin **yapamadıkları**:
+[`data/external/README.md`](data/external/README.md).
+
 ## Bilinen sınırlar
 
 - **Deniz mesafesi hâlâ referans tablodan alınır.** Korint sorunu çözüldükten sonra
@@ -644,6 +711,20 @@ rotası ve mesafe geçer; sevkiyat satırları, müşteri adları ve tonajlar ge
 - **HVO satırları dolaylı arazi kullanımını (iLUC) içermez.** RED II Ek VIII bunu bitkisel
   kökenli yakıtlara ekliyor ve kazancı silecek büyüklükte; değeri yetkili kaynaktan
   doğrulayamadığım için eklenmedi, her satır dışlandığını yazıyor.
+- **Gözlem, koridorun tamamını görmüyor.** Eurostat'ın boş dönüş anketine Türkiye ve
+  Sırbistan bildirim yapmıyor; pilot koridorun 2.515 karayolu kilometresinin 754'ü (%30)
+  gözlemsiz. Eksik ülke için komşusu ikame **edilmiyor**; oran kapsamıyla birlikte
+  dönüyor ve kapsam %66,7'nin altına düşerse duyarlılık yeniden fiyatlaması hiç
+  üretilmiyor.
+- **Deniz gözleminde tek bir ro-pax gemisi yok** — filtre değil, yayının kendisi. MRV
+  ro-pax'ın taşıma işini yolcu üzerinden ölçtüğü için 415 ro-pax ve 67 konteyner/ro-ro
+  gemisinin tamamı kütle esaslı ton-mil bildirmiyor. Sonuç: GLEC'in **refakatli** satırı
+  (0,093) ağırlıkla ro-pax'ta seyreden bir trafiği tarif ediyor, yani bu gözlemin
+  içermediği bir trafiği. Karşılaştırma yine gösterilir ama `is_comparable=False` ile
+  işaretlidir ve bir sınama sayılmaz.
+- **Hiçbir filo ortalaması tek bir gemiyi tarif edemiyor.** Doğrulanmış filonun orta
+  yarısı 2,7 kat aralığa yayılıyor. Motorun deniz rakamı bu yüzden bir sefer tahmini
+  değil, bir filo tahminidir — ve pano bunu gizlemek yerine yayılımı rakamla veriyor.
 - **Deniz ve demiryolu belirsizliği ölçüm değil.** Deniz bandı tek bir bağımsız
   karşılaştırmaya (searoute, n=1) dayanıyor; demiryolu hiç kontrol edilmedi ve deniz
   değerini ödünç alıyor. `data/distance_uncertainty.csv` her satırda bunu yazıyor.

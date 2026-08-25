@@ -17,10 +17,22 @@ diğer modüllere taşımak için var.
 | **Birim** | Milyon araç-kilometre (`MIO_VKM`), `tra_type=TOTAL` |
 | **Yıllar** | 2022–2024 |
 | **Eurostat güncellemesi** | 2026-07-30 |
+| **Türetme** | `python scripts/import_eurostat.py` (`--fetch` taze indirir, `--check` doğrular) |
 | **Lisans** | Eurostat yeniden kullanım politikası (kaynak gösterilerek serbest) |
 
 `empty_share` = `EMPTY / TOTAL` (tüm taşıma), `intl_empty_share` = aynısı `tra_cov=INTL` için.
 Çapraz tablo doğrudan yayımlandığı için türetme tek bölmeden ibarettir.
+
+**Türetme betiği ağa çıkmaz; indirme ayrı bir adımdır.** Sebebi şu: yeniden türetme
+çevrimdışı çalışmazsa, CSV'nin yanında duran ham yanıt hiçbir şey kanıtlamaz. `--check`
+işlenmiş dosyanın hâlâ ham yanıttan birebir üretilip üretilmediğine bakar ve test
+takımında koşar — kaynağından ayrı düşmüş türetilmiş bir dosya, hiç olmamasından kötüdür,
+çünkü hâlâ kanıt gibi görünür.
+
+**Bildirilen sıfır ile bildirilmemiş ayrı yazılır.** Kıbrıs 2022'de uluslararası
+taşımada 2 milyon araç-km bildiriyor: 1 yüklü, **0 boş**. O sıfır bir gözlemdir. Boş
+bırakmak onu Türkiye'yle aynı işarete sokardı — Türkiye gerçekten bildirmiyor — ve ilk
+türetme tam olarak bunu yapıyordu. Betik bunu düzeltiyor, bir test de sabitliyor.
 
 **Bilinen sınır — Türkiye ve Sırbistan bu veri setinde yok.** Eurostat yalnızca bu ankete bildirim yapan ülkeleri
 yayımlar; Türkiye ve Sırbistan yapmıyor. Pilot koridorun 2.515 karayolu kilometresinin
