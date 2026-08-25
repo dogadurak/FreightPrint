@@ -16,3 +16,4 @@ pypdf>=4.0
 matplotlib>=3.8
 jupyter>=1.0
 nbconvert>=7.0
+pulp>=3.0

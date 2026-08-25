@@ -24,6 +24,7 @@ from ..core.conformance import assess as assess_conformance
 from ..core.disruption import Disruption, assess_disruption, rank_criticality
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
 from ..core.deliverable import report_to_pdf, report_to_xlsx
+from ..core.hub import VEHICLE_CAPACITY_TONNES, HubModelError, plan_hubs
 from ..core.geocode import GeocodingBusy, GeocodingError, search
 from ..core.jobs import DEFAULT_CONCURRENCY, registry
 from ..core.network import build_network, load_terminals
@@ -58,6 +59,9 @@ from .schemas import (
     EtsCostOut,
     EtsLegOut,
     FactorSetOut,
+    HubAssignmentOut,
+    HubPlanOut,
+    HubSiteOut,
     ImbalanceOut,
     JobOut,
     LaneOut,
@@ -1304,4 +1308,74 @@ def backhaul_opportunities(
             for match in report.matches
         ],
         notes=report.notes,
+    )
+
+
+@router.post("/hub-plan", response_model=HubPlanOut)
+def consolidation_hub_plan(
+    file: UploadFile = File(..., description="Shipments as CSV or .xlsx"),
+    max_hubs: int = Form(1),
+    capacity_tonnes: float = Form(VEHICLE_CAPACITY_TONNES),
+    scope: str = Form("WTW"),
+    factor_set: str = Form("glec"),
+) -> HubPlanOut:
+    """Where opening a consolidation hub would pay, and by how much.
+
+    Solved exactly rather than approximated: at this size CBC proves the optimum, and
+    `is_optimal` says whether it did. A heuristic answer is never returned as a proven
+    one, because "the best place" and "a good place" are different claims.
+    """
+    if scope not in {"TTW", "WTW"}:
+        raise HTTPException(status_code=422, detail=f"scope must be TTW or WTW, got {scope!r}")
+    if capacity_tonnes <= 0:
+        raise HTTPException(
+            status_code=422, detail=f"araç kapasitesi pozitif olmalı, {capacity_tonnes} verildi"
+        )
+
+    try:
+        shipments = parse_shipments(_read_upload(file))
+        plan = plan_hubs(
+            shipments, max_hubs=max_hubs, capacity_tonnes=capacity_tonnes,
+            scope=scope, factor_set=factor_set,
+        )
+    except ReportInputError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except HubModelError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except requests.RequestException as error:
+        raise HTTPException(status_code=503, detail=f"road routing unavailable: {error}") from error
+
+    counts = plan.shipments_per_hub
+    return HubPlanOut(
+        is_optimal=plan.is_optimal,
+        opened=[
+            HubSiteOut(
+                id=site.id, name=site.name,
+                lon=site.point[0], lat=site.point[1],
+                shipments=counts.get(site.id, 0),
+            )
+            for site in plan.opened
+        ],
+        assignments=[
+            HubAssignmentOut(
+                reference=item.reference,
+                lane=item.lane,
+                tonnes=round(item.tonnes, 1),
+                hub_id=item.hub_id,
+                hub_name=item.hub_name,
+                is_consolidated=item.is_consolidated,
+                direct_vehicle_km=round(item.direct_vehicle_km, 1),
+                collection_vehicle_km=round(item.collection_vehicle_km, 1),
+            )
+            for item in plan.assignments
+        ],
+        direct_vehicle_km=round(plan.direct_vehicle_km, 1),
+        planned_vehicle_km=round(plan.planned_vehicle_km, 1),
+        saved_vehicle_km=round(plan.saved_vehicle_km, 1),
+        saved_share=round(plan.saved_share, 3),
+        capacity_tonnes=plan.capacity_tonnes,
+        saved_co2_kg=(
+            round_to_significant(plan.saved_co2_kg) if plan.saved_co2_kg is not None else None
+        ),
+        notes=plan.notes,
     )

@@ -211,6 +211,7 @@
         <button type="button" class="ghost" id="portfolio-submit">Hat portföyünü çıkar</button>
         <button type="button" class="ghost" id="vulnerability-submit">Ağ kırılganlığını ölç</button>
         <button type="button" class="ghost" id="backhaul-submit">Boş dönüşleri bul</button>
+        <button type="button" class="ghost" id="hub-submit">Konsolidasyon merkezi seç</button>
         <p class="hint" id="report-status" role="status"></p>
         <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya</a></p>
       </form>
@@ -259,6 +260,15 @@
     </section>
 
     <!-- Hat portföyü: yüklenen dosya hat hat okunur -->
+    <!-- Konsolidasyon merkezi: araç-km üzerinden kesin çözüm. -->
+    <section class="card" id="hub-card" hidden>
+      <div class="card-head">
+        <h2 class="card-title">Konsolidasyon merkezi</h2>
+        <span class="card-note" id="hub-note"></span>
+      </div>
+      <div id="hub"></div>
+    </section>
+
     <!-- Boş dönüş: araç nerede boş kalıyor, yakında ne yükleniyor. -->
     <section class="card" id="backhaul-card" hidden>
       <div class="card-head">

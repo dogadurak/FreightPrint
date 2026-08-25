@@ -2959,3 +2959,150 @@ $("backhaul-submit").addEventListener("click", async () => {
     button.disabled = false;
   }
 });
+
+/* ── consolidation hub ───────────────────────────────────────────────── */
+
+/** Where a hub belongs, and what opening one would be worth.
+ *
+ *  The headline is vehicle-kilometres rather than tonne-kilometres, and the panel says
+ *  so, because the distinction is the whole model: going via anywhere is at least as far
+ *  as going direct, so on tonne-km every hub is a loss and the optimiser opens none.
+ *  Consolidation pays by sharing the trunk leg — eight part-loads become three vehicles
+ *  instead of eight — and only a model counting vehicles can see that.
+ */
+function renderHubPlan(data) {
+  const card = $("hub-card");
+  const slot = $("hub");
+  if (!card || !slot) return;
+
+  $("hub-note").textContent = data.is_optimal
+    ? `kesin çözüm · ${data.capacity_tonnes} ton araç kapasitesi`
+    : "çözücü en iyiyi kanıtlayamadı";
+
+  const consolidated = data.assignments.filter((a) => a.is_consolidated);
+  const headline = data.opened.length
+    ? el("div", { class: "hub-headline" }, [
+        el("div", { class: "hub-figure" }, [
+          el("span", { class: "hub-value" }, `%${Math.round(data.saved_share * 100)}`),
+          el("span", { class: "hub-label" }, "araç-km tasarrufu"),
+        ]),
+        el("div", { class: "hub-figure" }, [
+          el("span", { class: "hub-value" }, nf.format(data.saved_vehicle_km)),
+          el("span", { class: "hub-label" }, "araç-km"),
+        ]),
+        ...(data.saved_co2_kg != null
+          ? [el("div", { class: "hub-figure" }, [
+              el("span", { class: "hub-value" }, nf.format(data.saved_co2_kg)),
+              el("span", { class: "hub-label" }, "kg CO2"),
+            ])]
+          : []),
+      ])
+    : el("p", { class: "hint" },
+        "Hiçbir aday nokta kazandırmıyor — yükler zaten tam kapasiteye yakın veya "
+        + "toplanma bacakları ana bacaktan kazanılanı yiyor.");
+
+  const opened = data.opened.length
+    ? el("div", { class: "match-list" }, data.opened.map((site) =>
+        el("div", { class: "match" }, [
+          el("div", { class: "match-head" }, [
+            el("span", { class: "match-route" }, site.name),
+            el("span", { class: "match-hop" }, `${site.shipments} sevkiyat`),
+          ]),
+          el("p", { class: "match-body" },
+            `${nf.format(data.direct_vehicle_km)} araç-km yerine `
+            + `${nf.format(data.planned_vehicle_km)} araç-km`),
+        ])
+      ))
+    : null;
+
+  slot.replaceChildren(
+    headline,
+    ...(opened ? [el("h3", { class: "sub-title" }, "Açılacak merkez"), opened] : []),
+    ...(consolidated.length
+      ? [el("p", { class: "hint" },
+          `${consolidated.length}/${data.assignments.length} sevkiyat merkez üzerinden, `
+          + "gerisi doğrudan.")]
+      : []),
+    ...data.notes.map((note) => el("p", { class: "provenance" }, note)),
+  );
+
+  card.hidden = false;
+  paintHubPlan(data);
+}
+
+/** The hub and the legs that would feed it.
+ *
+ *  Drawn because the answer is a place. A table can say "İstanbul" and a map can show
+ *  that the five suppliers sit around it while the destination is two thousand
+ *  kilometres away — which is why the trunk leg is the one worth sharing.
+ */
+function paintHubPlan(data) {
+  if (!map || !data.opened.length) return;
+
+  const hubs = {
+    type: "FeatureCollection",
+    features: data.opened.map((site) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [site.lon, site.lat] },
+      properties: { name: site.name, shipments: site.shipments },
+    })),
+  };
+
+  if (map.getSource("hub-sites")) map.getSource("hub-sites").setData(hubs);
+  else map.addSource("hub-sites", { type: "geojson", data: hubs });
+
+  if (!map.getLayer("hub-sites")) {
+    map.addLayer({
+      id: "hub-sites", type: "circle", source: "hub-sites",
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["get", "shipments"], 1, 10, 20, 24],
+        "circle-color": "#1baf7a",
+        "circle-opacity": 0.55,
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2.5,
+      },
+    });
+    const popup = new maplibregl.Popup({ closeButton: false, offset: 12 });
+    map.on("mousemove", "hub-sites", (event) => {
+      const p = event.features[0].properties;
+      map.getCanvas().style.cursor = "pointer";
+      popup.setLngLat(event.lngLat)
+        .setText(`${p.name} — ${p.shipments} sevkiyat toplanıyor`).addTo(map);
+    });
+    map.on("mouseleave", "hub-sites", () => {
+      map.getCanvas().style.cursor = "";
+      popup.remove();
+    });
+  }
+}
+
+$("hub-submit").addEventListener("click", async () => {
+  const button = $("hub-submit");
+  const body = new FormData(reportForm);
+  if (!body.get("file") || !body.get("file").name) {
+    reportStatus.textContent = "Önce bir sevkiyat dosyası seçin.";
+    return;
+  }
+  const scenario = currentScenario();
+  body.set("scope", scenario?.scope ?? "WTW");
+  body.set("factor_set", scenario?.factor_set ?? "glec");
+
+  button.disabled = true;
+  reportStatus.textContent = "Aday noktalar üzerinde en iyi merkez aranıyor…";
+  try {
+    const response = await fetch("/api/hub-plan", { method: "POST", body });
+    const result = await response.json();
+    if (!response.ok) {
+      reportStatus.textContent = result.detail ?? `İstek başarısız (${response.status}).`;
+      return;
+    }
+    renderHubPlan(result);
+    reportStatus.textContent = result.opened.length
+      ? `${result.opened[0].name}: %${Math.round(result.saved_share * 100)} araç-km tasarrufu.`
+      : "Bu talep için kazandıran bir merkez yok.";
+  } catch (error) {
+    reportStatus.textContent = `Sunucuya ulaşılamadı: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+});

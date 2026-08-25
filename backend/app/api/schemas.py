@@ -565,3 +565,44 @@ class BackhaulOut(BaseModel):
     imbalances: list[ImbalanceOut] = []
     matches: list[BackhaulMatchOut] = []
     notes: list[str] = []
+
+
+class HubAssignmentOut(BaseModel):
+    reference: str
+    lane: str
+    tonnes: float
+    hub_id: str | None = None
+    hub_name: str
+    is_consolidated: bool
+    direct_vehicle_km: float
+    collection_vehicle_km: float
+
+
+class HubSiteOut(BaseModel):
+    id: str
+    name: str
+    lon: float
+    lat: float
+    shipments: int
+
+
+class HubPlanOut(BaseModel):
+    """Where a consolidation hub belongs, measured in vehicle-kilometres.
+
+    Not tonne-kilometres: going via anywhere is at least as far as going direct, so on
+    tonne-km the triangle inequality makes every hub a loss and the model would open
+    none. Consolidation pays by *sharing the trunk leg*, which only a model counting
+    vehicles can see.
+    """
+
+    is_optimal: bool
+    opened: list[HubSiteOut] = []
+    assignments: list[HubAssignmentOut] = []
+    direct_vehicle_km: float
+    planned_vehicle_km: float
+    saved_vehicle_km: float
+    saved_share: float
+    capacity_tonnes: float
+    # Absent where no road factor matched the chosen basis — never a zero standing in.
+    saved_co2_kg: float | None = None
+    notes: list[str] = []

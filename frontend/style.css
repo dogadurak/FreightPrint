@@ -959,3 +959,13 @@ td.exposed { color: var(--bad); font-weight: 620; }
   font-variant-numeric: tabular-nums;
 }
 .match-warn { margin: 0.25rem 0 0; font-size: 0.76rem; color: var(--warn-ink); }
+
+/* ── consolidation hub ────────────────────────────────────────────────
+   The saving leads, because it is what decides whether anyone reads on. */
+.hub-headline { display: flex; gap: 1.6rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+.hub-figure { display: grid; gap: 0.1rem; }
+.hub-value {
+  font-size: 1.7rem; font-weight: 700; letter-spacing: -0.025em;
+  color: var(--good); font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.hub-label { font-size: 0.76rem; color: var(--ink-muted); }
