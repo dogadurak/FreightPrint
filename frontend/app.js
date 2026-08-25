@@ -2757,3 +2757,191 @@ $("vulnerability-submit").addEventListener("click", async () => {
     button.disabled = false;
   }
 });
+
+/* ── empty running and backhaul ──────────────────────────────────────── */
+
+/** Where the fleet would be left empty, and what is leaving from near there.
+ *
+ *  The panel keeps repeating one distinction because everything else here depends on
+ *  it: a shipment file records freight moving, not vehicles moving. So these are not
+ *  measured empty kilometres — they are what the flow imbalance would imply if each
+ *  shipment were a dedicated round trip. Presented as a measurement it would be the
+ *  most persuasive wrong number in the whole dashboard.
+ */
+function renderBackhaul(data) {
+  const card = $("backhaul-card");
+  const slot = $("backhaul");
+  if (!card || !slot) return;
+
+  const share = data.empty_km
+    ? Math.round((data.avoidable_empty_km / data.empty_km) * 100)
+    : 0;
+  $("backhaul-note").textContent =
+    `${data.shipments} sevkiyat · ${nf.format(data.empty_km)} km boş dönüş · `
+    + `%${share} eşleştirilebilir`;
+
+  const imbalances = el("table", { class: "vuln-table" }, [
+    el("thead", {}, el("tr", {}, [
+      el("th", {}, "Hat"),
+      el("th", { class: "num" }, "Giden"),
+      el("th", { class: "num" }, "Dönen"),
+      el("th", { class: "num" }, "Boş araç"),
+      el("th", {}, "Nerede kalıyor"),
+      el("th", { class: "num" }, "Boş km"),
+    ])),
+    el("tbody", {}, data.imbalances.map((item) =>
+      el("tr", {}, [
+        el("td", {}, el("span", { class: "vuln-name" }, item.heavy_direction)),
+        el("td", { class: "num" }, String(item.outbound_trips)),
+        el("td", { class: "num" }, item.inbound_trips ? String(item.inbound_trips) : "—"),
+        el("td", { class: "num" }, String(item.surplus_trips)),
+        el("td", {}, item.stranded_at),
+        el("td", { class: "num" }, nf.format(item.empty_km)),
+      ])
+    )),
+  ]);
+
+  const matches = data.matches.length
+    ? el("div", { class: "match-list" }, data.matches.map((match) =>
+        el("div", { class: "match" }, [
+          el("div", { class: "match-head" }, [
+            el("span", { class: "match-route" },
+              `${match.empty_at} → ${match.reload_at}`),
+            el("span", { class: "match-hop" },
+              `${nf.format(match.reposition_km)} km konumlanma`),
+          ]),
+          el("p", { class: "match-body" },
+            `${match.trips} sefer · yeni yük ${match.reload_lane}`),
+          el("p", { class: "match-saving" },
+            `${nf.format(match.avoided_empty_km)} km boş sürüş önlenir `
+            + `(deadhead'in %${Math.round(match.saving_share * 100)}'i)`),
+          ...(match.is_straight_line
+            ? [el("p", { class: "match-warn" },
+                "yol mesafesi hesaplanamadı; kuş uçuşu kullanıldı")]
+            : []),
+        ])
+      ))
+    : el("p", { class: "hint" },
+        "Yakında yüklenecek başka bir sevkiyat yok — bu boş dönüşler bu veriyle "
+        + "eşleştirilemiyor.");
+
+  slot.replaceChildren(
+    el("div", { class: "table-scroll" }, imbalances),
+    el("h3", { class: "sub-title" }, "Ters yük adayları"),
+    matches,
+    ...data.notes.map((note) => el("p", { class: "provenance" }, note)),
+  );
+
+  card.hidden = false;
+  paintBackhaul(data);
+}
+
+/** Draw where vehicles pile up empty, and the short hop that would refill them.
+ *
+ *  This is the half a table cannot show. Empty running looks like a number per lane
+ *  until you see the vehicles collecting at one end of the map with a load departing
+ *  forty kilometres away — at which point the answer is obvious and was never obvious
+ *  in the column.
+ */
+function paintBackhaul(data) {
+  if (!map) return;
+
+  const empties = {
+    type: "FeatureCollection",
+    features: data.imbalances.map((item) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [item.lon, item.lat] },
+      properties: { name: item.stranded_at, empty_km: item.empty_km,
+                    vehicles: item.surplus_trips },
+    })),
+  };
+
+  // A match is drawn as the repositioning hop, not as the load that follows it: the
+  // hop is the part being proposed, and drawing the onward journey would make a
+  // candidate look like a plan.
+  const hops = {
+    type: "FeatureCollection",
+    features: data.matches.map((match) => ({
+      type: "Feature",
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [match.empty_lon, match.empty_lat],
+          [match.reload_lon, match.reload_lat],
+        ],
+      },
+      properties: { label: `${match.empty_at} → ${match.reload_at}` },
+    })),
+  };
+
+  for (const [id, collection] of [["empty-vehicles", empties], ["backhaul-hops", hops]]) {
+    if (map.getSource(id)) map.getSource(id).setData(collection);
+    else map.addSource(id, { type: "geojson", data: collection });
+  }
+
+  if (!map.getLayer("backhaul-hops")) {
+    // Dashed, because it is a proposal rather than a journey anyone has made. Drawn
+    // under the empty-vehicle circles so the circles stay readable where they meet.
+    map.addLayer({
+      id: "backhaul-hops", type: "line", source: "backhaul-hops",
+      paint: {
+        "line-color": "#1baf7a", "line-width": 2.5,
+        "line-dasharray": [2, 1.5], "line-opacity": 0.9,
+      },
+    });
+  }
+
+  if (!map.getLayer("empty-vehicles")) {
+    map.addLayer({
+      id: "empty-vehicles", type: "circle", source: "empty-vehicles",
+      paint: {
+        "circle-radius": ["interpolate", ["linear"], ["get", "empty_km"], 0, 8, 6000, 26],
+        "circle-color": "#eb6834",
+        "circle-opacity": 0.45,
+        "circle-stroke-color": "#eb6834",
+        "circle-stroke-width": 2,
+      },
+    });
+    const popup = new maplibregl.Popup({ closeButton: false, offset: 10 });
+    map.on("mousemove", "empty-vehicles", (event) => {
+      const p = event.features[0].properties;
+      map.getCanvas().style.cursor = "pointer";
+      popup.setLngLat(event.lngLat)
+        .setText(`${p.name}: ${p.vehicles} boş araç, ${nf.format(p.empty_km)} km`)
+        .addTo(map);
+    });
+    map.on("mouseleave", "empty-vehicles", () => {
+      map.getCanvas().style.cursor = "";
+      popup.remove();
+    });
+  }
+}
+
+$("backhaul-submit").addEventListener("click", async () => {
+  const button = $("backhaul-submit");
+  const body = new FormData(reportForm);
+  if (!body.get("file") || !body.get("file").name) {
+    reportStatus.textContent = "Önce bir sevkiyat dosyası seçin.";
+    return;
+  }
+
+  button.disabled = true;
+  reportStatus.textContent = "Akış dengesizliği ve ters yük adayları aranıyor…";
+  try {
+    const response = await fetch("/api/backhaul", { method: "POST", body });
+    const result = await response.json();
+    if (!response.ok) {
+      reportStatus.textContent = result.detail ?? `İstek başarısız (${response.status}).`;
+      return;
+    }
+    renderBackhaul(result);
+    reportStatus.textContent = result.imbalances.length
+      ? `${nf.format(result.empty_km)} km boş dönüş; `
+        + `${nf.format(result.avoidable_empty_km)} km'si eşleştirilebilir.`
+      : "Hatların hepsi dengeli — bu veriyle boş dönüş çıkmıyor.";
+  } catch (error) {
+    reportStatus.textContent = `Sunucuya ulaşılamadı: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+});

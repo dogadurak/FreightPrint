@@ -215,6 +215,7 @@
         <button type="submit" class="ghost btn-audit" id="report-submit">Audit-Ready Sertifika İndir</button>
         <button type="button" class="ghost" id="portfolio-submit">Hat portföyünü çıkar</button>
         <button type="button" class="ghost" id="vulnerability-submit">Ağ kırılganlığını ölç</button>
+        <button type="button" class="ghost" id="backhaul-submit">Boş dönüşleri bul</button>
         <p class="hint" id="report-status" role="status"></p>
         <p class="hint"><a href="/static/ornek_sevkiyatlar.csv" download>Örnek dosya</a></p>
       </form>
@@ -263,6 +264,15 @@
     </section>
 
     <!-- Hat portföyü: yüklenen dosya hat hat okunur -->
+    <!-- Boş dönüş: araç nerede boş kalıyor, yakında ne yükleniyor. -->
+    <section class="card" id="backhaul-card" hidden>
+      <div class="card-head">
+        <h2 class="card-title">Boş dönüş ve ters yük</h2>
+        <span class="card-note" id="backhaul-note"></span>
+      </div>
+      <div id="backhaul"></div>
+    </section>
+
     <!-- Ağ kırılganlığı: hangi parça kaybedilirse ne olur. Merkezilik değil, sonuç. -->
     <section class="card" id="vulnerability-card" hidden>
       <div class="card-head">

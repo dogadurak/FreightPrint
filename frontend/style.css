@@ -959,3 +959,23 @@ td.exposed { color: var(--bad); font-weight: 620; }
 .vuln-pill.is-quiet { background: var(--surface-sunken); color: var(--ink-muted); }
 .vuln-table tr.is-stranded td { background: color-mix(in srgb, var(--bad-wash) 55%, transparent); }
 .vuln-table tr.is-quiet .vuln-name { color: var(--ink-muted); font-weight: 500; }
+
+/* ── backhaul matches ─────────────────────────────────────────────────
+   A candidate, not a plan — so it reads as a card of evidence rather than a
+   row in a schedule. The saving is the largest thing on it because that is
+   what decides whether anyone looks further. */
+.sub-title { margin: 1.2rem 0 0.6rem; font-size: 0.88rem; }
+.match-list { display: grid; gap: 0.55rem; }
+.match {
+  padding: 0.7rem 0.85rem; border-radius: var(--r-sm);
+  background: var(--surface-sunken); border-left: 3px solid var(--rail);
+}
+.match-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.match-route { font-weight: 620; font-size: 0.92rem; }
+.match-hop { font-size: 0.78rem; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.match-body { margin: 0.2rem 0 0; font-size: 0.82rem; color: var(--ink-secondary); }
+.match-saving {
+  margin: 0.3rem 0 0; font-size: 0.92rem; font-weight: 650; color: var(--good);
+  font-variant-numeric: tabular-nums;
+}
+.match-warn { margin: 0.25rem 0 0; font-size: 0.76rem; color: var(--warn-ink); }

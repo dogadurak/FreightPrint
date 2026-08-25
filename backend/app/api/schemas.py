@@ -519,3 +519,49 @@ class VulnerabilityOut(BaseModel):
     # traffic goes, so this is what separates a critical node from a merely central one.
     depended_on: list[str] = []
     notes: list[str] = []
+
+
+class ImbalanceOut(BaseModel):
+    """A lane whose traffic runs mostly one way, and where that leaves the vehicles."""
+
+    lane: str
+    heavy_direction: str
+    outbound_trips: int
+    inbound_trips: int
+    surplus_trips: int
+    ratio: float
+    return_km: float
+    empty_km: float
+    stranded_at: str
+    lon: float
+    lat: float
+
+
+class BackhaulMatchOut(BaseModel):
+    """A load leaving near where a vehicle was left empty. A candidate, not a plan."""
+
+    empty_at: str
+    empty_lane: str
+    reload_at: str
+    reload_lane: str
+    reposition_km: float
+    return_km: float
+    trips: int
+    avoided_empty_km: float
+    saving_share: float
+    empty_lon: float
+    empty_lat: float
+    reload_lon: float
+    reload_lat: float
+    # True when no road route could be computed and a straight line stood in. Flagged
+    # rather than blended: a straight line under-reads wherever geography intervenes.
+    is_straight_line: bool = False
+
+
+class BackhaulOut(BaseModel):
+    shipments: int
+    empty_km: float
+    avoidable_empty_km: float
+    imbalances: list[ImbalanceOut] = []
+    matches: list[BackhaulMatchOut] = []
+    notes: list[str] = []

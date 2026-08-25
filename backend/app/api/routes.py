@@ -19,6 +19,7 @@ from ..core.catchment import (
     MIN_SPACING_DEG,
     build_catchment,
 )
+from ..core.backhaul import DEFAULT_REPOSITION_RADIUS_KM, find_backhauls
 from ..core.conformance import assess as assess_conformance
 from ..core.disruption import Disruption, assess_disruption, rank_criticality
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
@@ -46,6 +47,8 @@ from ..core.sea import BLOCKABLE_PASSAGES, DEFAULT_RESTRICTIONS, SeaRoutingError
 from ..core.uncertainty import load_band, round_to_significant, simulate_emission_range
 from .schemas import (
     AlternativeOut,
+    BackhaulMatchOut,
+    BackhaulOut,
     CatchmentOut,
     CatchmentCellOut,
     CompareRequest,
@@ -55,6 +58,7 @@ from .schemas import (
     EtsCostOut,
     EtsLegOut,
     FactorSetOut,
+    ImbalanceOut,
     JobOut,
     LaneOut,
     PlaceOut,
@@ -1231,4 +1235,73 @@ def network_vulnerability(
             "Mahsur kalan sevkiyat, pahalılaşan sevkiyatla aynı kefeye konmaz; "
             "taşınamayan bir yükün yerine geçecek bir sayı yoktur.",
         ] + survey.notes,
+    )
+
+
+@router.post("/backhaul", response_model=BackhaulOut)
+def backhaul_opportunities(
+    file: UploadFile = File(..., description="Shipments as CSV or .xlsx"),
+    radius_km: float = Form(DEFAULT_REPOSITION_RADIUS_KM),
+) -> BackhaulOut:
+    """Where the fleet would be running empty, and what could be loaded into it.
+
+    Nothing here measures vehicles — a shipment file records freight moving, not trucks.
+    What is measured is flow imbalance, which is a property of the freight; the empty
+    kilometres are what that imbalance would imply if each shipment were a dedicated
+    vehicle round trip. The assumption ships with the answer rather than under it.
+    """
+    if not 10 <= radius_km <= 1000:
+        raise HTTPException(
+            status_code=422,
+            detail=f"yeniden konumlanma yarıçapı 10-1000 km arasında olmalı, {radius_km} verildi",
+        )
+
+    try:
+        shipments = parse_shipments(_read_upload(file))
+        report = find_backhauls(shipments, radius_km=radius_km)
+    except ReportInputError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except requests.RequestException as error:
+        raise HTTPException(status_code=503, detail=f"road routing unavailable: {error}") from error
+
+    return BackhaulOut(
+        shipments=len(shipments),
+        empty_km=round(report.empty_km, 1),
+        avoidable_empty_km=round(report.avoidable_empty_km, 1),
+        imbalances=[
+            ImbalanceOut(
+                lane=item.lane,
+                heavy_direction=item.heavy.key,
+                outbound_trips=item.heavy.trips,
+                inbound_trips=item.inbound_trips,
+                surplus_trips=item.surplus_trips,
+                ratio=round(item.ratio, 3),
+                return_km=round(item.return_km, 1),
+                empty_km=round(item.empty_km, 1),
+                stranded_at=item.stranded_at_name,
+                lon=item.stranded_at[0],
+                lat=item.stranded_at[1],
+            )
+            for item in report.imbalances
+        ],
+        matches=[
+            BackhaulMatchOut(
+                empty_at=match.empty_at,
+                empty_lane=match.empty_lane,
+                reload_at=match.reload_at,
+                reload_lane=match.reload_lane,
+                reposition_km=round(match.reposition_km, 1),
+                return_km=round(match.return_km, 1),
+                trips=match.trips,
+                avoided_empty_km=round(match.avoided_empty_km, 1),
+                saving_share=round(match.saving_share, 3),
+                is_straight_line=match.is_straight_line,
+                empty_lon=match.empty_at_point[0],
+                empty_lat=match.empty_at_point[1],
+                reload_lon=match.reload_at_point[0],
+                reload_lat=match.reload_at_point[1],
+            )
+            for match in report.matches
+        ],
+        notes=report.notes,
     )
