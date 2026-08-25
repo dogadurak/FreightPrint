@@ -54,6 +54,20 @@ function el(tag, attrs = {}, children = []) {
   return node;
 }
 
+/** Text from outside, on its way into markup.
+ *
+ *  Place names, carrier names and lane keys all come out of an uploaded shipment file,
+ *  which is a stranger's text even when the stranger is a colleague. Interpolated raw
+ *  into innerHTML, a destination called `<img src=x onerror=...>` runs. Nothing in the
+ *  engine would notice — it treats the name as a label all the way through and is right
+ *  to; the escaping belongs here, at the one place the string becomes markup.
+ */
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[char]));
+}
+
 const nf = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
 const nf3 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
 const nf1 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
@@ -719,7 +733,7 @@ function drawAlternatives(alternatives, scenario) {
           type: "Feature",
           geometry: { type: "LineString", coordinates },
           properties: {
-            label: `${leg.from_name} → ${leg.to_name}`,
+            label: `${escapeHtml(leg.from_name)} → ${escapeHtml(leg.to_name)}`,
             mode: MODE_LABELS[leg.mode] ?? leg.mode,
             km: nf.format(leg.distance_km),
             co2: nf.format(leg.co2_kg),
@@ -1081,7 +1095,7 @@ function renderLegDetail(scenario) {
   $("leg-detail").innerHTML = `<table>
     <thead><tr><th>Bacak</th><th>km</th><th>kg CO2</th><th>faktör</th></tr></thead>
     <tbody>${legsUnder(scenario, alternative, chosen).map((leg) => `<tr>
-      <td><span class="leg-mark ${leg.mode}"></span>${leg.from_name} → ${leg.to_name}</td>
+      <td><span class="leg-mark ${leg.mode}"></span>${escapeHtml(leg.from_name)} → ${escapeHtml(leg.to_name)}</td>
       <td class="num">${nf.format(leg.distance_km)}</td>
       <td class="num">${nf.format(leg.co2_kg)}</td>
       <td class="num">${nf3.format(leg.factor_value)}</td>
@@ -1253,7 +1267,6 @@ form.addEventListener("submit", async (event) => {
   if (data.get("empty_return_share")) body.empty_return_share = Number(data.get("empty_return_share"));
 
   submitButton.disabled = true;
-  $("download-pdf").hidden = true;
   statusLine.textContent = "Rotalanıyor — soğuk istek birkaç saniye sürebilir…";
   showSkeleton();
   try {
@@ -1283,7 +1296,6 @@ form.addEventListener("submit", async (event) => {
     if (map) map.resize();
     buildDashboard();
     applyScenario();
-    $("download-pdf").hidden = false;
   } catch (error) {
     emptyState.innerHTML = `<div class="error">Sunucuya ulaşılamadı: ${error.message}</div>`;
     emptyState.hidden = false; dashboard.hidden = true;
@@ -1293,24 +1305,26 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-$("download-pdf").addEventListener("click", () => {
-  const element = document.querySelector(".layout");
-  const opt = {
-    margin:       10,
-    filename:     'freightprint_karbon_sertifikasi.pdf',
-    image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2, useCORS: true },
-    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
-  };
-  
-  // hide sidebar in the PDF for a cleaner report? No, layout is responsive, but let's hide the form side temporarily
-  const sidebar = document.querySelector(".sidebar");
-  sidebar.style.display = 'none';
-  
-  html2pdf().set(opt).from(element).save().then(() => {
-    sidebar.style.display = 'flex';
-  });
-});
+/* A "Karbon Sertifikası" button lived here: it screenshotted the dashboard through
+ * html2canvas and saved the image as a PDF. Removed, for three reasons in ascending
+ * order of seriousness.
+ *
+ * It was a worse copy of something real. The engine already produces a PDF report with
+ * embedded fonts, Turkish number formatting, the factor basis and every source — a
+ * document a customer can check. A rasterised screenshot has none of that: the numbers
+ * are pixels, unsearchable and unselectable, and the basis they rest on is off-screen.
+ *
+ * It cost a 900 KB CDN dependency for that.
+ *
+ * And it called the result a certificate. This engine does not certify anything, and
+ * says so in the one module that would know: the ISO 14083 assessment opens with "bu
+ * bir öz değerlendirmedir, belgelendirme değildir". The brief is explicit too — this is
+ * not an audit tool and its output is not presented as a verdict on anyone. A button
+ * labelled "Sertifika İndir" contradicted both, and it is the kind of contradiction a
+ * reviewer finds first.
+ *
+ * The real report is where it always was: Toplu rapor → PDF.
+ */
 
 const reportForm = $("report-form");
 const reportStatus = $("report-status");
@@ -1828,7 +1842,7 @@ function renderRiskCost(scenario) {
     : `<table>
         <thead><tr><th>Ülke</th><th>km</th><th>kg CO2</th><th>€</th></tr></thead>
         <tbody>${toll.countries.map((c) => `<tr class="${c.priced ? "" : "muted-row"}">
-          <td>${c.country}${c.priced ? "" : `<br><span class="card-note">${c.reason}</span>`}</td>
+          <td>${escapeHtml(c.country)}${c.priced ? "" : `<br><span class="card-note">${escapeHtml(c.reason)}</span>`}</td>
           <td class="num">${nf.format(c.distance_km)}</td>
           <td class="num">${nf.format(c.co2_kg)}</td>
           <td class="num">${c.priced ? eur.format(c.cost_eur) : "—"}</td>
@@ -2325,7 +2339,7 @@ function renderPortfolio(data) {
       : "";
 
     return `<tr ${lane.empty_miles_risk ? 'style="background-color:rgba(230,103,103,0.05);"' : ''}>
-      <td class="lane-name">${lane.key}<br><span class="card-note">${
+      <td class="lane-name">${escapeHtml(lane.key)}<br><span class="card-note">${
         lane.shipments} sevkiyat · ${nf.format(lane.tonne_km)} ton-km</span>${emptyMilesWarning}</td>
       <td class="num">${nf3.format(lane.intensity_kg_per_tonne_km)}</td>
       <td class="num">${nf.format(lane.baseline_co2_kg)}
@@ -2385,7 +2399,7 @@ function renderCarrierScorecard(data) {
   const maxIntensity = Math.max(...data.carriers.map(c => c.intensity_kg_per_tonne_km), 0.0001);
   const rows = data.carriers.map((c) => {
     return `<tr>
-      <td><strong>${c.carrier}</strong></td>
+      <td><strong>${escapeHtml(c.carrier)}</strong></td>
       <td class="num">${c.shipments}</td>
       <td class="num">${nf.format(c.tonnes)}</td>
       <td class="num">${nf.format(c.tonne_km)}</td>

@@ -169,3 +169,42 @@ def test_the_route_input_anchors_its_own_swap_button(stylesheet):
     assert len(parts) == 4 and parts[1] != parts[3], (
         f"padding {padding.group(1)!r} reserves no extra room on the right"
     )
+
+
+# Words this engine does not get to use about its own output. The brief's section 3 is
+# explicit that it is not an audit tool and its figures are not a verdict on anyone, and
+# the ISO 14083 module opens by saying it certifies nothing. A control labelled with one
+# of these contradicts both, and a reviewer finds that before they find anything else.
+FORBIDDEN_CLAIMS = ("sertifika", "certificate", "certified", "belgelendir", "onaylı rapor")
+
+
+def test_the_interface_never_claims_to_certify(page, script):
+    """A "Karbon Sertifikası" button once screenshotted the dashboard and saved it under
+    that name. The engine does not certify anything and says so in the one module that
+    would know, so nothing on screen may say otherwise."""
+    # The rule is about what a reader sees, so comments are exempt — one of them exists
+    # precisely to record why the word is banned.
+    comment = ("/*", "*", "//", "<!--", "#")
+
+    for surface, text in (("index.html", page), ("app.js", script)):
+        for claim in FORBIDDEN_CLAIMS:
+            offending = [
+                line for line in text.splitlines()
+                if claim in line.lower() and not line.strip().startswith(comment)
+            ]
+            assert not offending, (
+                f"{surface} claims to {claim}: {offending[0].strip()[:90]}"
+            )
+
+
+def test_the_page_loads_no_script_it_does_not_use(page, script):
+    """A CDN tag is a network dependency, a supply-chain surface and a slower first
+    paint. `turf.min.js` was fetched on every load and referenced nowhere; html2pdf was
+    900 KB serving one button that has since gone."""
+    tags = re.findall(r'<script src="(https?://[^"]+)"', page)
+
+    for url in tags:
+        library = url.rsplit("/", 1)[-1].split(".")[0].split("-")[0]
+        assert library in script, (
+            f"{url} is loaded on every page and never used"
+        )

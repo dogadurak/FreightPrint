@@ -57,6 +57,10 @@ jobs:
       - name: Dashboard script loads
         run: node scripts/check_frontend_boots.js
 
+      # Lane keys, carrier names and place names all come out of an uploaded file.
+      - name: Text from uploaded files is escaped
+        run: node scripts/check_escaping.js
+
       - name: Run tests
         working-directory: backend
         run: python -m pytest -q -ra

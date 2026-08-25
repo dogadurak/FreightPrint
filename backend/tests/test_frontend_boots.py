@@ -42,14 +42,19 @@ def _engine() -> tuple[list[str], dict] | None:
     return None
 
 
-def test_the_dashboard_script_loads_without_throwing():
+@pytest.mark.parametrize(
+    "check",
+    ["check_frontend_boots.js", "check_escaping.js"],
+    ids=["loads-without-throwing", "escapes-text-from-uploaded-files"],
+)
+def test_the_dashboard_script(check):
     engine = _engine()
     if engine is None:
         pytest.skip("no JavaScript engine found (node or VS Code); CI always has node")
 
     command, extra_env = engine
     result = subprocess.run(
-        [*command, str(CHECK)],
+        [*command, str(REPO / "scripts" / check)],
         capture_output=True,
         text=True,
         env={**os.environ, **extra_env},
