@@ -111,19 +111,44 @@ def load_service_schedules(path: Path | None = None) -> dict[tuple[str, str], Se
 def build_network(
     terminals: dict[str, Terminal] | None = None,
     service_legs: list[dict] | None = None,
+    closed_terminals: frozenset[str] = frozenset(),
+    suspended_legs: frozenset[tuple[str, str]] = frozenset(),
 ) -> nx.Graph:
+    """The service network, optionally with parts of it taken out.
+
+    The exclusions are how disruption is modelled: a terminal that has stopped handling
+    and a service that has stopped sailing are the two things that actually happen, and
+    both are answered by rebuilding the graph without them and routing again. Doing it
+    here rather than by deleting from a built graph keeps one description of what the
+    network is, so a disrupted run and a normal one cannot drift apart.
+
+    A closed terminal is removed rather than merely disconnected, so nothing can route
+    *through* it or hand it a shipment as an endpoint.
+    """
     terminals = terminals if terminals is not None else load_terminals()
     service_legs = service_legs if service_legs is not None else load_service_legs()
 
+    unknown_closures = closed_terminals - set(terminals)
+    if unknown_closures:
+        raise ValueError(f"cannot close unknown terminal(s): {sorted(unknown_closures)}")
+
     graph = nx.Graph()
     for terminal in terminals.values():
+        if terminal.id in closed_terminals:
+            continue
         graph.add_node(terminal.id, terminal=terminal)
+
+    # Keyed both ways round: a service runs in both directions, so suspending it has to
+    # suspend it in both. Naming only one would leave a one-way corridor nobody operates.
+    suspended = {frozenset(pair) for pair in suspended_legs}
 
     for leg in service_legs:
         origin, destination = leg["from_terminal"], leg["to_terminal"]
         unknown = {origin, destination} - set(terminals)
         if unknown:
             raise ValueError(f"service_legs.csv references unknown terminal(s): {sorted(unknown)}")
+        if {origin, destination} & closed_terminals or frozenset((origin, destination)) in suspended:
+            continue
         graph.add_edge(
             origin,
             destination,
@@ -142,5 +167,11 @@ def nearest_terminals(
 ) -> list[Terminal]:
     candidates = terminals.values()
     if connected_only is not None:
-        candidates = [t for t in candidates if connected_only.degree(t.id) > 0]
+        # `in` before `degree`: a closed terminal is not a node at all, and asking a
+        # graph for the degree of something it does not contain raises rather than
+        # answering zero.
+        candidates = [
+            t for t in candidates
+            if t.id in connected_only and connected_only.degree(t.id) > 0
+        ]
     return sorted(candidates, key=lambda t: haversine_km(point, t.coords))[:limit]

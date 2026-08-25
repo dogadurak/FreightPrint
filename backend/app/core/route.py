@@ -73,8 +73,12 @@ def _build_routing_graph(
     destination: tuple[float, float],
     terminals: dict[str, Terminal],
     candidate_terminals: int,
+    closed_terminals: frozenset[str] = frozenset(),
+    suspended_legs: frozenset[tuple[str, str]] = frozenset(),
 ) -> nx.Graph:
-    graph = build_network(terminals)
+    graph = build_network(
+        terminals, closed_terminals=closed_terminals, suspended_legs=suspended_legs
+    )
     for _, _, data in graph.edges(data=True):
         data["distance_km"] = data["ref_distance_km"]
 
@@ -212,6 +216,8 @@ def find_route_alternatives(
     compare_computed_distances: bool = False,
     with_sea_tracks: bool = True,
     dominance_tolerance_km: float = 1.0,
+    closed_terminals: frozenset[str] = frozenset(),
+    suspended_legs: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[RouteAlternative]:
     """Find multimodal alternatives between two arbitrary (lon, lat) points.
 
@@ -224,7 +230,10 @@ def find_route_alternatives(
     by moving the journey off the road. Callers rank and trim on what they care about.
     """
     terminals = load_terminals()
-    graph = _build_routing_graph(origin, destination, terminals, candidate_terminals)
+    graph = _build_routing_graph(
+        origin, destination, terminals, candidate_terminals,
+        closed_terminals=closed_terminals, suspended_legs=suspended_legs,
+    )
     endpoint_names = {ORIGIN_NODE: origin_name, DESTINATION_NODE: destination_name}
 
     all_road: RouteAlternative | None = None
