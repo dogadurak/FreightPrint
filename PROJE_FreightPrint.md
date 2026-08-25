@@ -14,6 +14,11 @@ Bir sevkiyatın kalkış ve varış noktasını girdiğinde, gerçek yol/deniz/d
 güzergâh risklerini karşılaştırmalı olarak sunan ve müşteriye teslim edilebilir karbon raporu üreten
 açık kaynak sistem.
 
+Bir sevkiyat dosyası verildiğinde aynı motor portföy ölçeğinde çalışır: hangi hatta müdahale etmenin
+karşılığı var, ağın hangi parçası kaybedilirse ne olur, araçlar nerede boş dönüyor ve yakında ne
+yükleniyor. Tekil sevkiyat ile portföy aynı hesap çekirdeğini kullanır; ikincisi birincisinin
+tekrarıdır, ayrı bir model değil.
+
 ---
 
 ## 2. Proje nereden çıktı — saha doğrulaması
@@ -60,10 +65,26 @@ Bu raporlar sistemin **doğrulama veri seti** olarak kullanılacak (bkz. Bölüm
 
 Bu bölüm önemli. Ajan ve ileride README yazılırken bu çerçeve korunmalı.
 
+> **Revizyon — 25 Ağustos 2026.** Bu tablodaki *"klasik rota optimizasyonu (VRP/TSP)
+> değil"* satırı kaldırıldı ve yerine *"operasyonel sevkiyat sistemi değil"* kondu.
+>
+> **Neden:** İlk yazımda dışlanma sebebi kapsam kaymasıydı — sınırlı sayıda gerçek servis
+> alternatifi karşılaştırmak isteniyordu ve VRP oraya sığmıyordu. O sınır artık geçildi:
+> sistem talep kümesinin tamamını yeniden rotalayabiliyor (ağ kırılganlığı, Bölüm 5 Modül D)
+> ve akış dengesizliğinden ters yük adayı çıkarabiliyor (Modül E). Bu ikisi zaten
+> "karşılaştırma"nın ötesinde, kısıt altında hesaplama.
+>
+> **Yeni sınır neyi hâlâ dışarıda tutuyor:** Optimizasyon burada bir **analiz** aracıdır,
+> bir icra aracı değil. "Bu depo şuraya kurulsaydı kaç ton-km ve kaç ton CO2 tasarruf
+> edilirdi", "sürücü çalışma saatlerine uyan bir plan mümkün mü ve neye mal olur" meşru
+> sorulardır. "Bugün 14:00'te şu aracı şu müşteriye gönder" değildir. Fark, çıktının
+> savunulabilir olup olmamasında: birincisi varsayımlarıyla birlikte incelenebilir,
+> ikincisi canlı veri, filo durumu ve sürücü vardiyası ister — hiçbiri bu sistemde yok.
+
 | Bu proje… | Açıklama |
 |---|---|
 | ❌ Mevcut raporların hatasını bulan bir denetim aracı **değil** | Eldeki gerçek raporlar yalnızca sistem kurulduktan sonra, kendi hesabımızın tutarlılığını ölçmek için kullanılır. Dışarıya "şu firmanın raporu hatalı" şeklinde sunulmaz. |
-| ❌ Klasik rota optimizasyonu (VRP/TSP) **değil** | Araç filosu rotalama yapmıyoruz. Var olan sınırlı sayıda gerçek servis alternatifini karşılaştırıyoruz. |
+| ❌ Operasyonel sevkiyat sistemi (TMS) **değil** | Bu sistem plan yapar ve analiz eder; sevk emri vermez, araç atamaz, günlük operasyonu yürütmez. Optimizasyon çıktısı "bu plan ne kadara mal olurdu" sorusunun cevabıdır, dağıtıma verilecek bir görev listesi değil. |
 | ❌ Gerçek zamanlı gemi takip panosu **değil** | Canlı takip değil, planlama ve raporlama aracı. |
 | ❌ "Dijital ikiz" **değil** | Sınırı belirsiz bir kavram; kapsam kayması yaratır. Kullanılmayacak. |
 | ❌ Savaş/saldırı kaynaklı ek ücreti **ortadan kaldırmaz** | Bu maliyet dışsaldır. Sistemin yaptığı, bu maliyeti **görünür, hesaplanabilir ve doğrulanabilir** kılmaktır. Pazarlama dilinde "maliyeti azaltır" denmeyecek. |
@@ -188,6 +209,41 @@ Fizibilitesi önce test edilecek (bkz. Bölüm 11 riskler).
 - Terminal bekleme süresi ve bu sırada oluşan emisyon
 - Hıza bağlı emisyon: gemi emisyonu hızla doğrusal değil, kabaca kübik artar. Sabit faktör yerine
   gerçek hız profili kullanmak sistemin en bilimsel katkısı olur.
+
+### Modül D — Ağ kırılganlığı (v2)
+
+Ağın hangi parçası kaybedilirse ne olur. Yöntem kasten sade, çünkü sade bir yöntem tartışılabilir
+bir yöntemdir: talep olduğu gibi alınır, ağdan bir parça (terminal veya servis bacağı) çıkarılır,
+her şey yeniden rotalanır ve fark ölçülür. Merkezilik skoru kullanılmaz — bir terminal çok yol
+üzerinde olup yine de ucuza kaybedilebilir, çünkü bir liman ötede yerine geçen vardır. Arasındalık
+bunu ayırt edemez, yeniden rotalama edebilir.
+
+Çıktı kalemleri:
+- Parça bazında: kaç sevkiyat taşınamaz hâle geliyor, kaçının rotası değişiyor
+- Fazladan kg CO2 ve süre farkı
+- Terminallerin kritiklik sıralaması ve harita üzerinde gösterimi
+
+**Dürüstlük notları.** Taşınamayan sevkiyat, pahalılaşan sevkiyatla aynı kefeye konmaz; "gidemez"in
+yerine geçecek bir sayı yoktur ve ortalamaya karıştırmak en ağır kesintiyi olduğundan hafif gösterir.
+Karbon farkı hiçbir zaman negatif olamaz: rota en düşük emisyona göre seçildiği için bir kapanma ağı
+iyileştiremez, negatif çıkması esas aramanın eksik olduğu anlamına gelir. Süre farkı ise işaretlidir —
+rota süreye göre seçilmediğinden zorunlu bir alternatif gerçekten daha hızlı olabilir.
+
+### Modül E — Boş dönüş ve ters yük (v2)
+
+Araçların nerede boş kaldığı ve yakınında ne yüklendiği. Karayolu taşımacılığında önlenebilir
+maliyetin en büyük kalemi budur ve tamamen mekânsal bir sorudur.
+
+Çıktı kalemleri:
+- Hat bazında akış dengesizliği ve dönüş yükü olmayan sefer sayısı
+- İma edilen boş kilometre ve nerede birikiyor
+- Ters yük adayları: yakında kalkan bir yük, konumlanma mesafesi, önlenen boş kilometre
+
+**Dürüstlük notu — bu modülün en önemli maddesi.** Sevkiyat dosyası **yükün** hareketini kaydeder,
+aracınkini değil. Bu yüzden burada hiçbir şey boş kilometre *ölçmez*; ölçülen şey akış dengesizliğidir
+ve boş kilometre, "her sevkiyat kendine ait bir gidiş-dönüş olsaydı" varsayımından türetilir. Varsayım
+çıktının içinde yazılıdır. Eşleşmeler de adaydır: tarihlerin, römork tipinin ve taşıyıcının uyması
+gerekir, hiçbiri sevkiyat dosyasında yoktur.
 
 ---
 
@@ -544,8 +600,26 @@ Her fazın sonunda **gösterilebilir bir çıktı** olacak. Bu, projenin yarım 
 
 ## 14. Ajan için özet talimat
 
-> Bu projede Faz 0 ve Faz 1'den başla. Önce veri kaynaklarının erişilebilirliğini test et,
-> sonra çok modlu rota motorunu kur. Emisyon hesabına, doğrulanabilir bir rota motoru
-> çalışmadan geçme. Yeni özellik önerilerini v2 listesine yaz, v1 kapsamına ekleme.
-> Kod Türkçe yorumlanabilir ama değişken ve fonksiyon adları İngilizce olsun.
-> Her fazın sonunda çalışan bir çıktı üret; yarım bırakılmış modül bırakma.
+> **Bu talimat 25 Ağustos 2026'da güncellendi. Aşağıdaki "başla" maddesi artık geçerli
+> değil — Faz 0–8 tamamlandı.** Bugün depoyu açan bir ajanın yapması gereken ilk şey
+> kodu okumak, ikinci şey testleri çalıştırmaktır.
+>
+> **Mevcut durum:** Modül A, B, D ve E çalışıyor; Modül C (AIS) fizibilite sonucu
+> Akdeniz için kapandı. Motor tekil sevkiyat ve portföy ölçeğinde çalışıyor, web arayüzü
+> ve toplu rapor (CSV/Excel/PDF) hazır. Test paketi ağdan bağımsızdır ve CI'da koşar.
+>
+> **Değişmeyen kurallar:**
+> - Hiçbir sayı kaynaksız girmez. Her faktör `source`, `year` ve `is_verified` taşır;
+>   türetme olan kendini ilan eder. Makul görünmek, kaynaklı olmakla aynı şey değildir.
+>   Kaynağı bulunamayan bir düzeltme koda değil, yapılacaklar listesine yazılır.
+> - Bölüm 3'teki duruş korunur. Arayüz "sertifika", "denetim" veya "onaylı" demez;
+>   motor belgelendirme yapmaz ve bunu kendi ISO 14083 modülünde yazar.
+> - Ölçülemeyen şey ölçülmüş gibi sunulmaz. Bir varsayımdan türetilen her rakam
+>   varsayımını yanında taşır (bkz. Modül E).
+> - Yeni özellik önerilerini v2 listesine yaz, çalışan bir modülün içine sıkıştırma.
+> - Kod Türkçe yorumlanabilir ama değişken ve fonksiyon adları İngilizce olsun.
+> - Her fazın sonunda çalışan bir çıktı üret; yarım bırakılmış modül bırakma.
+>
+> *(Özgün talimat, kayıt için: "Bu projede Faz 0 ve Faz 1'den başla. Önce veri
+> kaynaklarının erişilebilirliğini test et, sonra çok modlu rota motorunu kur. Emisyon
+> hesabına, doğrulanabilir bir rota motoru çalışmadan geçme.")*
