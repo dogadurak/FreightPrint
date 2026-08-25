@@ -75,6 +75,8 @@ class Imbalance:
     heavy: Movement
     light: Movement | None
     return_km: float
+    # True when the deadhead distance is a straight line because no road route came back.
+    return_is_straight_line: bool = False
 
     @property
     def lane(self) -> str:
@@ -184,17 +186,24 @@ def _road_km(origin: tuple[float, float], destination: tuple[float, float]) -> t
     Marmara — so a match resting on one is flagged rather than presented alongside a
     routed figure as though the two were the same kind of number.
 
-    The two exceptions caught here are named on purpose. A bare `except Exception` would
-    also swallow the test suite's own network guard, which is how an unsourced terrain
-    lookup once ran in production and never once under test.
+    Only `RoadRoutingError` is caught, and the distinction is the point. That one means
+    *these two points* have no road between them — an island, a bad coordinate — which a
+    straight line can stand in for. A `RequestException` means the routing server is
+    unreachable, so every distance in the answer would be a straight line and every
+    empty kilometre would read about a third short, while the response looked exactly
+    like a real one. That is left to propagate, and the endpoint reports the outage.
+
+    A bare `except Exception` would swallow both, and the test suite's own network guard
+    with them — which is how an unsourced terrain lookup once ran in production and
+    never once under test.
     """
     try:
         # Called through the module rather than by an imported name, so it goes through
         # the same seam every other module and every test in this repo already uses.
-        # A  here looked identical and silently ignored
-        # the stub, which meant a unit test reaching the live routing server.
+        # Importing the name directly looked identical and silently ignored the stub,
+        # which meant a unit test reaching the live routing server.
         return routing.road_route(origin, destination).distance_km, False
-    except (RoadRoutingError, requests.RequestException):
+    except RoadRoutingError:
         return haversine_km(origin, destination), True
 
 
@@ -217,8 +226,11 @@ def find_imbalances(shipments: list[ShipmentRow]) -> list[Imbalance]:
         if heavy.trips == (light.trips if light else 0):
             continue  # balanced: nothing comes back empty under this model
 
-        return_km, _ = _road_km(heavy.destination, heavy.origin)
-        imbalances.append(Imbalance(heavy=heavy, light=light, return_km=return_km))
+        return_km, indicative = _road_km(heavy.destination, heavy.origin)
+        imbalances.append(
+            Imbalance(heavy=heavy, light=light, return_km=return_km,
+                      return_is_straight_line=indicative)
+        )
 
     return sorted(imbalances, key=lambda i: -i.empty_km)
 
@@ -236,6 +248,7 @@ def find_backhauls(
     """
     report = BackhaulReport()
     report.imbalances = find_imbalances(shipments)
+
     movements = _movements(shipments)
 
     if TRIPS_ARE_DEDICATED:

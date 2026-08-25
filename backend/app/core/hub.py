@@ -164,16 +164,25 @@ def _vehicles(tonnes: float, capacity: float) -> int:
     return max(1, ceil(tonnes / capacity))
 
 
-def _road_km(origin, destination) -> float:
+def _road_km(origin, destination, fell_back: list) -> float:
     """Road distance, falling back to a straight line rather than failing the plan.
 
-    A missing road answer would otherwise drop a candidate silently, which changes the
-    optimum without saying so. The straight line under-reads, so it makes a site look
-    slightly better than it is — recorded in `notes` rather than hidden.
+    One unroutable pair should not lose the whole answer, and a straight line is a fair
+    stand-in for one leg among many — it under-reads by roughly a third, so it makes
+    that site look slightly better than it is, and the count is reported.
+
+    An outage is a different thing wearing the same clothes, and the exception type
+    already tells them apart. `RoadRoutingError` means *these two points* have no road
+    between them — an island, a bad coordinate — and standing in for that one pair is
+    reasonable. A `RequestException` means the routing server is unreachable, so *every*
+    distance would become a straight line and the plan would not be slightly optimistic
+    but a different plan entirely, returned with no sign anything was wrong. That one is
+    left to propagate, and the endpoint reports it as the outage it is.
     """
     try:
         return routing.road_route(origin, destination).distance_km
-    except (RoadRoutingError, requests.RequestException):
+    except RoadRoutingError:
+        fell_back.append(1)
         return haversine_km(origin, destination)
 
 
@@ -210,17 +219,26 @@ def plan_hubs(
     destinations = {s.destination for s in shipments}
 
     # Distances, computed once. Everything below is arithmetic on these.
+    fell_back: list = []
     to_site = {
-        (i, site.id): _road_km(shipment.origin, site.point)
+        (i, site.id): _road_km(shipment.origin, site.point, fell_back)
         for i, shipment in enumerate(shipments)
         for site in sites
     }
     trunk = {
-        (site.id, destination): _road_km(site.point, destination)
+        (site.id, destination): _road_km(site.point, destination, fell_back)
         for site in sites
         for destination in destinations
     }
-    direct = {i: _road_km(s.origin, s.destination) for i, s in enumerate(shipments)}
+    direct = {i: _road_km(s.origin, s.destination, fell_back) for i, s in enumerate(shipments)}
+
+    measured = len(to_site) + len(trunk) + len(direct)
+    if fell_back:
+        plan.notes.append(
+            f"{len(fell_back)}/{measured} mesafe yoldan hesaplanamadi ve kus ucusu "
+            "alindi. Kus ucusu yaklasik ucte bir kisa okur, yani o noktalari oldugundan "
+            "iyi gosterir."
+        )
 
     trips = {i: _vehicles(s.tonnage, capacity_tonnes) for i, s in enumerate(shipments)}
     plan.direct_vehicle_km = sum(trips[i] * direct[i] for i in range(len(shipments)))

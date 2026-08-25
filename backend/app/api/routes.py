@@ -1228,6 +1228,14 @@ def network_vulnerability(
     except requests.RequestException as error:
         raise HTTPException(status_code=503, detail=f"road routing unavailable: {error}") from error
 
+    # Every shipment failing to price is not an analysis with nothing in it — it is a
+    # request that could not be answered. `assess_disruption` records each failure and
+    # keeps going, which is right per shipment and wrong for the whole run: an empty
+    # ranking returned as 200 reads as "your network has no weak points".
+    if shipments and not survey.outcomes:
+        detail = survey.notes[0] if survey.notes else "hiçbir sevkiyat fiyatlanamadı"
+        raise HTTPException(status_code=422, detail=detail)
+
     depended_on = sorted({t for o in survey.outcomes for t in o.normal_terminals})
 
     out = []
