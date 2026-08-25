@@ -208,3 +208,34 @@ def test_the_page_loads_no_script_it_does_not_use(page, script):
         assert library in script, (
             f"{url} is loaded on every page and never used"
         )
+
+
+def test_every_panel_the_page_offers_is_actually_rendered(page, script):
+    """A card in the markup with nothing calling its renderer is a panel that never
+    appears, and nothing errors — it simply stays `hidden` forever.
+
+    This has now happened twice. The benchmark module was written, tested and reachable
+    from nowhere; the panel for it was added and, for a moment, called by nobody. Both
+    times the code was correct and the feature did not exist.
+    """
+    cards = set(re.findall(r'id="([a-z-]+)-card"', page))
+    assert cards, "no result cards found; this test is checking nothing"
+
+    for card in cards:
+        # Every card is revealed by something that also renders into it.
+        assert f'$("{card}-card")' in script, f"{card}-card is never shown or hidden"
+
+
+@pytest.mark.parametrize(
+    "renderer",
+    ["renderEmptyRunning", "renderVulnerability", "renderBackhaul", "renderHubPlan"],
+)
+def test_a_renderer_that_exists_is_a_renderer_that_is_called(script, renderer):
+    """Defining it is half the work; the half that makes it a feature is the call."""
+    assert f"function {renderer}(" in script, f"{renderer} is gone"
+
+    calls = [
+        line for line in script.splitlines()
+        if f"{renderer}(" in line and not line.strip().startswith(("function", "*", "//"))
+    ]
+    assert calls, f"{renderer} is defined and never called"

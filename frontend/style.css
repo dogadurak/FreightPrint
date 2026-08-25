@@ -969,3 +969,8 @@ td.exposed { color: var(--bad); font-weight: 620; }
   color: var(--good); font-variant-numeric: tabular-nums; line-height: 1.1;
 }
 .hub-label { font-size: 0.76rem; color: var(--ink-muted); }
+
+/* The observed figure leads; the assumption beside it is context, not a result. */
+.hub-value.neutral { color: var(--ink-secondary); }
+.hub-value.warn { color: var(--warn-ink); }
+.provenance.warn-text { color: var(--warn-ink); }

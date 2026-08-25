@@ -1194,6 +1194,9 @@ function applyScenario() {
 
   const chosen = scenario.totals[selectedIndex];
   const shown = payload.alternatives.find((a) => a.label === chosen.label);
+  // Follows the selected alternative: the observation is weighted by the countries that
+  // route crosses, so an all-road run and a multimodal one do not share an answer.
+  renderEmptyRunning(shown, chosen);
   drawAlternatives(payload.alternatives, scenario);
   // The player belongs to one alternative; switching scenario or route reloads it.
   resetPlayer(shown);
@@ -3106,3 +3109,85 @@ $("hub-submit").addEventListener("click", async () => {
     button.disabled = false;
   }
 });
+
+/* ── observed empty running ──────────────────────────────────────────── */
+
+/** What this engine assumes about empty running, against what Eurostat observes.
+ *
+ *  The only panel here that compares the engine to something outside it. Everything
+ *  else on this dashboard is the engine's own arithmetic; this is the one place a
+ *  reader can see whether an assumption inside the factor matches the traffic the route
+ *  actually crosses.
+ *
+ *  It is not expected to match, and a panel built to show agreement would be worthless.
+ *  GLEC's 30% describes the fleet its factor was measured on — which includes national
+ *  work, where empty running is genuinely higher. What matters is the size and
+ *  direction of the gap, and how much of the route the observation covers.
+ */
+function renderEmptyRunning(alternative, total) {
+  const card = $("empty-running-card");
+  const slot = $("empty-running");
+  if (!card || !slot) return;
+
+  const e = alternative?.empty_running;
+  if (!e) { card.hidden = true; return; }
+
+  const pct = (v) => `%${(v * 100).toFixed(1)}`;
+  $("empty-running-note").textContent = e.source;
+
+  const figures = el("div", { class: "hub-headline" }, [
+    el("div", { class: "hub-figure" }, [
+      el("span", { class: "hub-value" }, pct(e.observed_share)),
+      el("span", { class: "hub-label" }, "gözlenen — bu rotanın ülkeleri"),
+    ]),
+    ...(e.factor_share != null
+      ? [el("div", { class: "hub-figure" }, [
+          el("span", { class: "hub-value neutral" }, pct(e.factor_share)),
+          el("span", { class: "hub-label" }, "faktörün varsaydığı"),
+        ])]
+      : []),
+    el("div", { class: "hub-figure" }, [
+      el("span", { class: `hub-value ${e.is_representative ? "" : "warn"}` },
+        `%${Math.round(e.coverage * 100)}`),
+      el("span", { class: "hub-label" },
+        `rotanın kapsanan payı · ${nf.format(e.covered_km)}/${nf.format(e.total_km)} km`),
+    ]),
+  ]);
+
+  // The sensitivity is the reason the panel is worth reading: on this corridor the
+  // assumption moves the all-road baseline far more than a multimodal option whose
+  // road legs are short, so it moves the comparison itself.
+  const repriced = total?.co2_at_observed_empty_kg;
+  const sensitivity = repriced
+    ? el("p", { class: "hint" }, [
+        el("strong", {}, `${nf.format(total.total_co2_kg)} kg`),
+        document.createTextNode(" faktörün varsayımıyla, "),
+        el("strong", {}, `${nf.format(repriced)} kg`),
+        document.createTextNode(" gözlenen oranla — aynı rota, aynı mesafe."),
+      ])
+    : el("p", { class: "hint" },
+        "Bu seçenek için yeniden fiyatlama verilmedi: gözlem rotanın yeterli bir "
+        + "kısmını kapsamıyor.");
+
+  const byCountry = Object.entries(e.per_country).sort((a, b) => b[1] - a[1]);
+  const observedRow = el("p", { class: "provenance" },
+    "Gözlemi olan ülkeler: "
+    + byCountry.map(([iso, share]) => `${iso} ${pct(share)}`).join(" · "));
+
+  const missing = Object.entries(e.missing_km).sort((a, b) => b[1] - a[1]);
+  const missingRow = missing.length
+    ? el("p", { class: "provenance warn-text" },
+        "Gözlemi olmayan: "
+        + missing.map(([iso, km]) => `${iso} ${nf.format(km)} km`).join(" · ")
+        + " — hiçbiri bir komşuyla ikame edilmedi.")
+    : null;
+
+  slot.replaceChildren(
+    figures,
+    sensitivity,
+    observedRow,
+    ...(missingRow ? [missingRow] : []),
+    ...e.notes.map((note) => el("p", { class: "provenance" }, note)),
+  );
+  card.hidden = false;
+}

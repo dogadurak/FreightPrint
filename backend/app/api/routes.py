@@ -6,6 +6,7 @@ from ..core.emissions import (
     FactorNotFoundError,
     calculate_route_emission,
     calculate_shipment,
+    find_factor,
     leg_countries,
     load_emission_factors,
     load_tree_factors,
@@ -20,6 +21,7 @@ from ..core.catchment import (
     build_catchment,
 )
 from ..core.backhaul import DEFAULT_REPOSITION_RADIUS_KM, find_backhauls
+from ..core.benchmarks import corridor_empty_running, observed
 from ..core.conformance import assess as assess_conformance
 from ..core.disruption import Disruption, assess_disruption, rank_criticality
 from ..core.cost import CostInputError, calculate_ets, compare_reroute
@@ -58,6 +60,7 @@ from .schemas import (
     ConformanceOut,
     EtsCostOut,
     EtsLegOut,
+    EmptyRunningOut,
     FactorSetOut,
     HubAssignmentOut,
     HubPlanOut,
@@ -404,6 +407,84 @@ def _ets_out(shipment, route, terminals, request: RouteRequest) -> EtsCostOut | 
     )
 
 
+def _repriced_at_observed(route, common: dict) -> float | None:
+    """The route priced with road empty running taken from the survey, not the factor.
+
+    Returns None rather than a number when the observation covers too little of the
+    route to stand for it — a sensitivity computed over a third of a journey would look
+    like a finding and be an artefact.
+    """
+    if not any(leg.mode == "road" for leg in route.legs):
+        return None
+    observation = corridor_empty_running(route)
+    if not observation.is_representative:
+        return None
+    try:
+        repriced = calculate_route_emission(
+            route, empty_return_share=observation.rate, **common
+        )
+    except (FactorNotFoundError, ValueError):
+        return None
+    return round_to_significant(repriced.total_co2_kg)
+
+
+def _empty_running_out(route, factor_share: float | None) -> EmptyRunningOut | None:
+    """Eurostat's observation for the countries this route actually crosses.
+
+    Route-level rather than scenario-level for the observation, because it follows the
+    geography: an all-road run through seven countries and a multimodal one through two
+    are not exposed to the same haulage. The comparison against the factor is passed in,
+    because *that* does depend on which basis is selected.
+    """
+    if not any(leg.mode == "road" for leg in route.legs):
+        return None
+
+    observation = corridor_empty_running(route)
+    if not observation.covered_km:
+        return None
+
+    ratio = factor_share / observation.rate if factor_share and observation.rate else None
+    verdict = None
+    if ratio is not None:
+        verdict = "above" if ratio > 1.15 else "below" if ratio < 0.85 else "near"
+
+    reference = observed()
+    notes = [
+        "Gözlem, rotanın her ülkede kaç kilometre geçtiğine göre ağırlıklandırıldı; "
+        "AB ortalaması en çok taşıyan ülkelerin ağırlığını taşır, bu yükün geçtiği "
+        "ülkelerin değil.",
+    ]
+    if observation.missing:
+        uncovered = ", ".join(
+            f"{iso} {km:,.0f} km" for iso, km in
+            sorted(observation.missing.items(), key=lambda item: -item[1])
+        )
+        notes.append(
+            f"Şu ülkeler bu ankete bildirim yapmıyor ve hiçbir ikame kullanılmadı: "
+            f"{uncovered}. Oran, rotanın %{observation.coverage * 100:.0f}'i üzerinden."
+        )
+    if factor_share is not None:
+        notes.append(
+            "Faktörün varsaydığı pay, yayımcının kendi ölçtüğü filoya aittir; gözlemle "
+            "birebir eşleşmesi beklenmez. Fark, faktörün bu koridora ne kadar oturduğudur."
+        )
+
+    return EmptyRunningOut(
+        observed_share=round(observation.rate, 4),
+        coverage=round(observation.coverage, 3),
+        covered_km=round(observation.covered_km, 1),
+        total_km=round(observation.total_km, 1),
+        per_country={iso: round(share, 4) for iso, share in observation.per_country.items()},
+        missing_km={iso: round(km, 1) for iso, km in observation.missing.items()},
+        is_representative=observation.is_representative,
+        factor_share=factor_share,
+        ratio=round(ratio, 3) if ratio else None,
+        verdict=verdict,
+        source=f"Eurostat road_go_ta_vm, {reference.year}, {reference.basis} araç-km",
+        notes=notes,
+    )
+
+
 def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals) -> ScenarioOut:
     """Reprice already-routed alternatives. No OSRM call, so this is effectively free.
 
@@ -534,7 +615,14 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals)
                 ),
                 total_cost_eur=round(d["total_cost"], 2),
                 total_hours=round(d["total_hours"], 1),
-                tradeoff_tags=d["tags"]
+                tradeoff_tags=d["tags"],
+                # The same route, road legs repriced at what Eurostat observes on the
+                # countries it crosses. This is the sensitivity that matters most on
+                # this corridor: the factor assumes 30% empty running, the survey sees
+                # about 17% weighted along the route, and the gap moves the all-road
+                # baseline far more than it moves a multimodal option whose road legs
+                # are short. Absent where too little of the route is observed to say.
+                co2_at_observed_empty_kg=_repriced_at_observed(route, common)
             )
         )
 
@@ -615,6 +703,16 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
 
         saving = shipment.saving_co2_kg
         reefer = _reefer_out(route, request)
+        # What the primary basis assumes about empty running, so the observation beside
+        # it has something to be compared against. None where this basis carries no road
+        # row — the observation still stands on its own.
+        try:
+            road_factor_share = find_factor(
+                load_emission_factors(), "road", scope=request.scope,
+                fuel_type=request.road_fuel_type, factor_set=request.factor_set,
+            ).basis_empty_share
+        except FactorNotFoundError:
+            road_factor_share = None
         alternatives.append(
             AlternativeOut(
                 label=shipment.label,
@@ -640,6 +738,7 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
                 emission_range=emission_range,
                 risk=_risk_out(route),
                 timeline=_timeline_out(route),
+                empty_running=_empty_running_out(route, road_factor_share),
                 reefer=reefer,
                 total_with_reefer_co2_kg=(
                     round_to_significant(shipment.total_co2_kg + reefer.co2_kg)

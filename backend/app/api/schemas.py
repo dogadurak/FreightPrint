@@ -149,6 +149,31 @@ class LegOut(BaseModel):
     track_is_indicative: bool = False
 
 
+class EmptyRunningOut(BaseModel):
+    """What Eurostat observes on the countries this route crosses, and how much of it.
+
+    The rate never travels without its coverage. A weighted mean quietly taken over part
+    of a journey and presented as the journey's rate is the kind of number that survives
+    until somebody checks it — and on the pilot corridor almost a third of the road
+    distance is in countries that do not report at all.
+    """
+
+    observed_share: float
+    coverage: float
+    covered_km: float
+    total_km: float
+    per_country: dict[str, float] = {}
+    # Country ISO to kilometres with no observation behind them.
+    missing_km: dict[str, float] = {}
+    is_representative: bool
+    # What the chosen factor assumes, for comparison.
+    factor_share: float | None = None
+    ratio: float | None = None
+    verdict: str | None = None
+    source: str = ""
+    notes: list[str] = []
+
+
 class RangeOut(BaseModel):
     low_co2_kg: float
     high_co2_kg: float
@@ -169,6 +194,10 @@ class AlternativeOut(BaseModel):
     emission_range: RangeOut | None = None
     risk: RouteRiskOut | None = None
     timeline: TimelineOut | None = None
+    # Observed empty running for the countries this alternative crosses. Route-level
+    # because it follows the geography: an all-road run through seven countries and a
+    # multimodal one through two are not exposed to the same haulage.
+    empty_running: "EmptyRunningOut | None" = None
     reefer: "ReeferOut | None" = None
     total_with_reefer_co2_kg: float | None = None
     playback: "PlaybackOut | None" = None
@@ -266,6 +295,10 @@ class ScenarioTotalOut(BaseModel):
     total_cost_eur: float | None = None
     total_hours: float | None = None
     tradeoff_tags: list[str] = []
+    # The same route repriced with the road legs at the empty running Eurostat actually
+    # observes on the countries it crosses, instead of the share the factor assumes.
+    # Absent where no observation covers enough of the route to stand for it.
+    co2_at_observed_empty_kg: float | None = None
 
 
 class ScenarioOut(BaseModel):
