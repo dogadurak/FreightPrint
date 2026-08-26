@@ -177,6 +177,8 @@ def list_terminals() -> list[TerminalOut]:
             lon=terminal.coords[0],
             lat=terminal.coords[1],
             is_connected=graph.degree(terminal.id) > 0,
+            source=terminal.source,
+            source_id=terminal.source_id,
         )
         for terminal in terminals.values()
     ]

@@ -17,6 +17,11 @@ class TerminalOut(BaseModel):
     lon: float
     lat: float
     is_connected: bool
+    # The outside record this place is tied to. Empty for the four Turkish terminals,
+    # which appear in none of the European reference sets this project can reach — the
+    # same gap Eurostat and RINF already showed.
+    source: str = ""
+    source_id: str = ""
 
 
 class RoadFuelOut(BaseModel):

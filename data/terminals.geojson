@@ -3,83 +3,291 @@
   "features": [
     {
       "type": "Feature",
-      "properties": {"id": "pendik", "name": "Pendik", "country": "TR", "type": "roro_port"},
-      "geometry": {"type": "Point", "coordinates": [29.2500, 40.8667]}
+      "properties": {
+        "id": "pendik",
+        "name": "Pendik",
+        "country": "TR",
+        "type": "roro_port",
+        "source": "",
+        "source_id": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          29.25,
+          40.8667
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "yalova", "name": "Yalova", "country": "TR", "type": "roro_port"},
-      "geometry": {"type": "Point", "coordinates": [29.2769, 40.6550]}
+      "properties": {
+        "id": "yalova",
+        "name": "Yalova",
+        "country": "TR",
+        "type": "roro_port",
+        "source": "",
+        "source_id": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          29.2769,
+          40.655
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "ambarli", "name": "Ambarli", "country": "TR", "type": "port"},
-      "geometry": {"type": "Point", "coordinates": [28.6900, 40.9700]}
+      "properties": {
+        "id": "ambarli",
+        "name": "Ambarli",
+        "country": "TR",
+        "type": "port",
+        "source": "",
+        "source_id": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          28.69,
+          40.97
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "mersin", "name": "Mersin", "country": "TR", "type": "port"},
-      "geometry": {"type": "Point", "coordinates": [34.6300, 36.7900]}
+      "properties": {
+        "id": "mersin",
+        "name": "Mersin",
+        "country": "TR",
+        "type": "port",
+        "source": "NGA Pub. 151",
+        "source_id": "MERSIN"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          34.63,
+          36.79
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "halkali", "name": "Halkali", "country": "TR", "type": "rail_terminal"},
-      "geometry": {"type": "Point", "coordinates": [28.7800, 41.0300]}
+      "properties": {
+        "id": "halkali",
+        "name": "Halkali",
+        "country": "TR",
+        "type": "rail_terminal",
+        "source": "",
+        "source_id": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          28.78,
+          41.03
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "trieste", "name": "Trieste", "country": "IT", "type": "roro_rail_hub"},
-      "geometry": {"type": "Point", "coordinates": [13.7600, 45.6400]}
+      "properties": {
+        "id": "trieste",
+        "name": "Trieste",
+        "country": "IT",
+        "type": "roro_rail_hub",
+        "source": "NGA Pub. 151",
+        "source_id": "TRIESTE"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          13.76,
+          45.64
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "bari", "name": "Bari", "country": "IT", "type": "roro_port"},
-      "geometry": {"type": "Point", "coordinates": [16.8700, 41.1400]}
+      "properties": {
+        "id": "bari",
+        "name": "Bari",
+        "country": "IT",
+        "type": "roro_port",
+        "source": "NGA Pub. 151",
+        "source_id": "BARI"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          16.87,
+          41.14
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "patras", "name": "Patras", "country": "GR", "type": "roro_port"},
-      "geometry": {"type": "Point", "coordinates": [21.7346, 38.2466]}
+      "properties": {
+        "id": "patras",
+        "name": "Patras",
+        "country": "GR",
+        "type": "roro_port",
+        "source": "NGA Pub. 151",
+        "source_id": "PATRAI"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          21.7346,
+          38.2466
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "sete", "name": "Sete", "country": "FR", "type": "roro_port"},
-      "geometry": {"type": "Point", "coordinates": [3.6970, 43.4030]}
+      "properties": {
+        "id": "sete",
+        "name": "Sete",
+        "country": "FR",
+        "type": "roro_port",
+        "source": "NGA Pub. 151",
+        "source_id": "SETE"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.697,
+          43.403
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "duisburg", "name": "Duisburg", "country": "DE", "type": "rail_terminal"},
-      "geometry": {"type": "Point", "coordinates": [6.7300, 51.4500]}
+      "properties": {
+        "id": "duisburg",
+        "name": "Duisburg",
+        "country": "DE",
+        "type": "rail_terminal",
+        "source": "ERA RINF",
+        "source_id": "DE00EDG"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.73,
+          51.45
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "koln", "name": "Koln", "country": "DE", "type": "rail_terminal"},
-      "geometry": {"type": "Point", "coordinates": [6.9603, 50.9375]}
+      "properties": {
+        "id": "koln",
+        "name": "Koln",
+        "country": "DE",
+        "type": "rail_terminal",
+        "source": "ERA RINF",
+        "source_id": "DE000KK"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.9603,
+          50.9375
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "ostrava", "name": "Ostrava", "country": "CZ", "type": "rail_terminal"},
-      "geometry": {"type": "Point", "coordinates": [18.2625, 49.8209]}
+      "properties": {
+        "id": "ostrava",
+        "name": "Ostrava",
+        "country": "CZ",
+        "type": "rail_terminal",
+        "source": "ERA RINF",
+        "source_id": "CZ34414"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          18.2625,
+          49.8209
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "regensburg", "name": "Regensburg", "country": "DE", "type": "rail_terminal"},
-      "geometry": {"type": "Point", "coordinates": [12.0974, 49.0134]}
+      "properties": {
+        "id": "regensburg",
+        "name": "Regensburg",
+        "country": "DE",
+        "type": "rail_terminal",
+        "source": "ERA RINF",
+        "source_id": "DE0NRHA"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          12.0974,
+          49.0134
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "wels", "name": "Wels", "country": "AT", "type": "rail_terminal"},
-      "geometry": {"type": "Point", "coordinates": [14.0333, 48.1667]}
+      "properties": {
+        "id": "wels",
+        "name": "Wels",
+        "country": "AT",
+        "type": "rail_terminal",
+        "source": "ERA RINF",
+        "source_id": "AT01968"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          14.0333,
+          48.1667
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "lambach", "name": "Lambach", "country": "AT", "type": "rail_terminal"},
-      "geometry": {"type": "Point", "coordinates": [13.8833, 48.0833]}
+      "properties": {
+        "id": "lambach",
+        "name": "Lambach",
+        "country": "AT",
+        "type": "rail_terminal",
+        "source": "ERA RINF",
+        "source_id": "AT01086"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          13.8833,
+          48.0833
+        ]
+      }
     },
     {
       "type": "Feature",
-      "properties": {"id": "chitila", "name": "Chitila", "country": "RO", "type": "rail_terminal"},
-      "geometry": {"type": "Point", "coordinates": [25.9800, 44.5100]}
+      "properties": {
+        "id": "chitila",
+        "name": "Chitila",
+        "country": "RO",
+        "type": "rail_terminal",
+        "source": "ERA RINF",
+        "source_id": "RO30110"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          25.98,
+          44.51
+        ]
+      }
     }
   ]
 }

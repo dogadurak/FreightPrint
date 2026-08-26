@@ -57,3 +57,56 @@ def test_nearest_terminals_skips_terminals_without_service_legs():
 def test_corinth_canal_box_covers_the_isthmus_but_not_open_sea():
     assert CORINTH_CANAL_BOX.contains(Point(22.99, 37.93))
     assert not CORINTH_CANAL_BOX.intersects(Point(23.5, 37.0))
+
+
+# ── where a terminal came from ────────────────────────────────────────────────
+
+def test_most_terminals_are_tied_to_an_outside_record():
+    """Sixteen points typed from knowledge held up a corridor whose every distance is
+    measured between them, and none of them said where it came from."""
+    from app.core.network import load_terminals
+
+    terminals = load_terminals().values()
+    sourced = [t for t in terminals if t.source]
+
+    assert len(sourced) >= 12
+    assert {t.source for t in sourced} == {"NGA Pub. 151", "ERA RINF"}
+    assert all(t.source_id for t in sourced), "a source with no identifier in it"
+
+
+def test_the_terminals_with_no_outside_record_are_all_turkish():
+    """The third time this gap has appeared, and it is the same gap each time: Türkiye
+    does not report to Eurostat's road survey, does not file to RINF, and is not in
+    Pub 151's port list beyond Istanbul, Derince and Mersin. A fact about European
+    reference data rather than about this project — so it is left visible."""
+    from app.core.network import load_terminals
+
+    unsourced = [t for t in load_terminals().values() if not t.source]
+
+    assert {t.country for t in unsourced} == {"TR"}
+    assert {t.id for t in unsourced} == {"pendik", "yalova", "ambarli", "halkali"}
+
+
+def test_the_hand_typed_coordinates_agree_with_the_published_ones():
+    """The check that came free with the provenance, and it is a pass: every port this
+    project placed by hand sits within 1.8 km of the position NGA Pub. 151 prints."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    spec = importlib.util.spec_from_file_location(
+        "source_terminals", repo / "scripts" / "source_terminals.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["source_terminals"] = module
+    spec.loader.exec_module(module)
+
+    if not module.PUB151_TEXT.exists():
+        pytest.skip("Pub 151 not present locally")
+
+    rows, problems = module.review()
+    gaps = [r["coordinate_gap_km"] for r in rows if r["coordinate_gap_km"] != ""]
+
+    assert not problems, f"a terminal has drifted from its published position: {problems}"
+    assert len(gaps) >= 5
+    assert max(gaps) < module.MAX_COORDINATE_GAP_KM

@@ -28,6 +28,13 @@ class Terminal:
     type: str
     lon: float
     lat: float
+    # Which outside record this place was tied to, and its identifier there. Sixteen
+    # points typed from knowledge held up a corridor whose every distance is measured
+    # between them, and not one of them said where it came from. Twelve are now tied to
+    # NGA Pub. 151 or ERA RINF; the four that are empty are all Turkish, and empty is
+    # the finding rather than an oversight.
+    source: str = ""
+    source_id: str = ""
 
     @property
     def coords(self) -> tuple[float, float]:
@@ -57,6 +64,8 @@ def load_terminals(path: Path | None = None) -> dict[str, Terminal]:
             type=props["type"],
             lon=lon,
             lat=lat,
+            source=props.get("source", ""),
+            source_id=props.get("source_id", ""),
         )
     return terminals
 
