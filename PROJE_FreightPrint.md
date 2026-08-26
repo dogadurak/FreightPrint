@@ -392,7 +392,7 @@ soruyu sınıyor: **motora verilen sayılar bu koridoru tarif ediyor mu?** Hepsi
 | **Eurostat `road_go_ta_vm`** | GLEC karayolu faktörünün varsaydığı %30 boş dönüş | Uluslararası AB taşımacılığında ~%12. Koridor ağırlıklı %17,4, kapsam %70 (TR ve RS bildirmiyor) |
 | **EU MRV / THETIS-MRV** | GLEC ro-ro faktörü 0,063 | 684 gemi-yılı. Filonun **orta yarısının içinde**, üç dönemin üçünde de. Orta yarı 2,7 kat aralığa yayılıyor |
 | **NGA Pub. 151** | Deniz **mesafeleri** | 6/6 bacakta tablo %9–26 yüksek |
-| **ERA RINF** | Demiryolu ağı ve mesafeleri | Ülke içinde doğru (%0,7 hata), ama Avusturya'nın bildirimi %23 bütünlükte — koridor rotalanamıyor |
+| **ERA RINF** | Demiryolu ağı ve mesafeleri | Ülke içinde doğru (500 km'lik bacakta %1,0 fark), ama Avusturya'nın bildirimi %23 bütünlükte — koridor rotalanamıyor |
 | **OpenStreetMap / OpenRailRouting** | Demiryolu mesafeleri | 7/7 bacakta tablo %4–33 düşük. RINF ile çapraz kontrollü |
 | **OpenStreetMap / Overpass** | Demiryolu terminal **konumları** | 8/8 bulundu. Limanlar <1 km, yük terminalleri 3,5–4,0 km sapıyor — koordinatlar terminal değil şehir düzeyinde |
 
@@ -669,7 +669,7 @@ Her fazın sonunda **gösterilebilir bir çıktı** olacak. Bu, projenin yarım 
 > Akdeniz için kapandı. Motor tekil sevkiyat ve portföy ölçeğinde çalışıyor, web arayüzü
 > ve toplu rapor (CSV/Excel/PDF) hazır. Test paketi ağdan bağımsızdır ve CI'da koşar.
 >
-> **Beş dış kaynak bağlandı** (Bölüm 8.3): Eurostat boş dönüş anketi, EU MRV doğrulanmış
+> **Altı dış kaynak bağlandı** (Bölüm 8.3): Eurostat boş dönüş anketi, EU MRV doğrulanmış
 > gemi emisyonları, NGA Pub. 151 liman mesafeleri, ERA RINF demiryolu kaydı,
 > OpenStreetMap demiryolu rotalama. Her biri `data/external/` altında, betikle türetiliyor
 > ve `--check` ile doğrulanıyor.

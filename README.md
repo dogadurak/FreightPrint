@@ -3,12 +3,13 @@
 Çok modlu yük taşımacılığı karbon ve rota analiz motoru.
 Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
-**Durum:** Planın tüm fazları (0–8) tamamlandı. 636 test geçiyor.
+**Durum:** Planın tüm fazları (0–8) tamamlandı. 649 test geçiyor.
 
 Motorun hesabı iki ayrı şeye karşı sınanıyor: gerçek bir müşteri karbon raporunu yeniden
 üretmesine, ve kendi varsayımlarının **dışarıdan indirilmiş gözlemlerle** karşılaştırılmasına
 (Eurostat boş dönüş anketi, EU MRV doğrulanmış gemi emisyonları, NGA Pub. 151 liman arası
-mesafeleri). Hepsi aşağıdaki [Doğrulama](#doğrulama) bölümünde.
+mesafeleri, ERA RINF demiryolu kaydı, OpenStreetMap demiryolu rotalaması ve terminal
+konumları). Hepsi aşağıdaki [Doğrulama](#doğrulama) bölümünde.
 
 ## Kurulum
 
