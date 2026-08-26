@@ -1031,3 +1031,14 @@ td.exposed { color: var(--bad); font-weight: 620; }
   content: "▲"; margin-right: 0.25rem; color: var(--warn-ink); font-size: 0.85em;
 }
 .band-note { color: var(--warn-ink); flex-basis: 100%; }
+
+/* Deniz mesafesi kartı: bacak başına başlık. */
+.sea-distance-leg {
+  margin: 1.1rem 0 0.5rem; font-size: 0.9rem; font-weight: 600;
+  color: var(--ink-secondary);
+}
+.sea-distance-leg:first-child { margin-top: 0; }
+#sea-distance code {
+  background: var(--surface-sunken); padding: 0.1em 0.35em;
+  border-radius: 3px; font-size: 0.95em;
+}

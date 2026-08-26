@@ -1238,6 +1238,7 @@ function applyScenario() {
   renderEmptyRunning(shown, chosen);
   // Same idea, the other assumption: the sea factor against the ships EMSA verified.
   renderSeaFactor(shown);
+  renderSeaDistance(shown);
   drawAlternatives(payload.alternatives, scenario);
   // The player belongs to one alternative; switching scenario or route reloads it.
   resetPlayer(shown);
@@ -3150,6 +3151,78 @@ $("hub-submit").addEventListener("click", async () => {
     button.disabled = false;
   }
 });
+
+/* ── the sea distance against the publication that surveys it ─────────── */
+
+/** The carrier's own kilometres beside NGA Pub. 151's, per sea leg.
+ *
+ *  Sea is 87% of this corridor's emissions, and until Pub 151 was imported the distance
+ *  carrying all of it had one independent cross-check in total. It now has six, and every
+ *  one says the same thing: the service table reads high, by 9% to 26%.
+ *
+ *  Deliberately shown rather than applied. The engine still prices with the carrier's
+ *  figure, exactly as it still prices with GLEC's empty-running assumption and GLEC's
+ *  ro-ro factor — this project reports what an assumption rests on instead of quietly
+ *  replacing it. The two numbers answer different questions: what the service is planned
+ *  at, and how far the ports are apart. Collapsing them would lose the disagreement,
+ *  which is the part worth reading.
+ */
+function renderSeaDistance(alternative) {
+  const card = $("sea-distance-card");
+  const slot = $("sea-distance");
+  if (!card || !slot) return;
+
+  const legs = alternative?.sea_distances ?? [];
+  if (!legs.length) { card.hidden = true; return; }
+
+  $("sea-distance-note").textContent =
+    "NGA Pub. 151, Distances Between Ports — Yunanistan'ın güneyinden";
+
+  slot.replaceChildren(...legs.flatMap((leg) => {
+    const pct = leg.delta_pct;
+    const figures = el("div", { class: "hub-headline" }, [
+      el("div", { class: "hub-figure" }, [
+        el("span", { class: "hub-value neutral" }, `${nf.format(leg.engine_km)} km`),
+        el("span", { class: "hub-label" }, "taşıyıcının verdiği — motor bunu kullanıyor"),
+      ]),
+      el("div", { class: "hub-figure" }, [
+        el("span", { class: "hub-value" }, `${nf.format(leg.published_km)} km`),
+        el("span", { class: "hub-label" }, "yayının ölçtüğü"),
+      ]),
+      el("div", { class: "hub-figure" }, [
+        el("span", { class: "hub-value warn" }, `%${pct > 0 ? "+" : ""}${pct.toFixed(1)}`),
+        el("span", { class: "hub-label" }, "fark"),
+      ]),
+    ]);
+
+    // How much of the published side is survey and how much is our own geometry. Pub 151
+    // does not list Pendik or Yalova, so Istanbul stands for them and the hop is measured
+    // from coordinates — small here, but a figure that stops saying so stops being one.
+    const share = el("p", { class: "provenance" },
+      `Yayında birebir yazan: ${nf.format(leg.published_nm)} deniz mili. `
+      + `Terminale ulaşmak için eklenen ölçülmüş fark: ${leg.estimated_nm > 0 ? "+" : ""}`
+      + `${leg.estimated_nm.toFixed(1)} deniz mili — cevabın %`
+      + `${(leg.estimated_share * 100).toFixed(1)}'i.`);
+
+    const line = leg.source_line
+      ? el("p", { class: "provenance" }, [
+          document.createTextNode("Kaynak satır: "),
+          el("code", {}, leg.source_line),
+        ])
+      : null;
+
+    return [
+      el("h3", { class: "sea-distance-leg" }, `${leg.from_terminal} → ${leg.to_terminal}`),
+      figures,
+      el("p", { class: "hint" },
+        "Motor taşıyıcının rakamıyla fiyatlıyor; bu, yerine geçen değil yanında duran "
+        + "bir gözlem. Boş dönüş ve ro-ro faktöründe olduğu gibi."),
+      share,
+      ...(line ? [line] : []),
+    ];
+  }));
+  card.hidden = false;
+}
 
 /* ── the sea factor against the ships EMSA verified ───────────────────── */
 

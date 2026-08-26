@@ -3,12 +3,12 @@
 Çok modlu yük taşımacılığı karbon ve rota analiz motoru.
 Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
-**Durum:** Planın tüm fazları (0–8) tamamlandı. 576 test geçiyor.
+**Durum:** Planın tüm fazları (0–8) tamamlandı. 636 test geçiyor.
 
 Motorun hesabı iki ayrı şeye karşı sınanıyor: gerçek bir müşteri karbon raporunu yeniden
 üretmesine, ve kendi varsayımlarının **dışarıdan indirilmiş gözlemlerle** karşılaştırılmasına
-(Eurostat boş dönüş anketi, EU MRV doğrulanmış gemi emisyonları). İkisi de aşağıdaki
-[Doğrulama](#doğrulama) bölümünde.
+(Eurostat boş dönüş anketi, EU MRV doğrulanmış gemi emisyonları, NGA Pub. 151 liman arası
+mesafeleri). Hepsi aşağıdaki [Doğrulama](#doğrulama) bölümünde.
 
 ## Kurulum
 
@@ -68,6 +68,7 @@ olmayan bir cevabı varmış gibi gösterir.
 | **Risk ve maliyet** | Navlun, CO2 geçiş ücreti, EU ETS ve sapma senaryosunun faturası |
 | **Boş dönüş — varsayım ve gözlem** | Faktörün varsaydığı boş dönüş, Eurostat'ın gördüğüne karşı *(dış gözlem)* |
 | **Deniz faktörü — yayımlanan ve ölçülen** | Kullanılan ro-ro faktörü, EU MRV'nin doğruladığı filonun dağılımı üzerinde *(dış gözlem)* |
+| **Deniz mesafesi — taşıyıcı ve yayın** | Servis tablosunun km'si, NGA Pub. 151'in ölçtüğüne karşı *(dış gözlem)* |
 | **ISO 14083 öz değerlendirmesi** | Bu rakam bir denetimde ne kadar dayanır |
 | **Ağ kırılganlığı** | Bir bağlantı çalışmazsa koridor ne kaybeder |
 | **Konsolidasyon merkezi · Ters yük · Hat portföyü** | Yüklenen sevkiyat dosyası üzerinden: nerede toplamalı, hangi boş dönüş eşleşir, hangi hat hareket etmeye değer |
@@ -660,6 +661,7 @@ yalnızca hesabın sınandığı ölçüttür. Türetme betikleri `scripts/` alt
 | GLEC karayolu faktörü **%30 boş dönüş** varsayıyor | Eurostat `road_go_ta_vm`, 29 ülke, 2022–2024 | Uluslararası AB taşımacılığında **~%12**. Faktörün esası bu koridorun trafiği değil |
 | GLEC ro-ro faktörü **0,063** (TTW) | EU MRV / THETIS-MRV, 684 gemi-yılı, doğrulayıcı onaylı | Filonun **orta yarısının içinde**, üç dönemin üçünde de. Manşetin dayandığı sayı için söylenebilecek en güçlü şey |
 | `reference` setinin deniz değeri **0,012** | Aynı kaynak, 234 gemi | Filodaki **hiçbir gemi** o kadar temiz değil (medyanın 0,24 katı) |
+| Deniz **mesafesi** taşıyıcının verdiği rakam | NGA Pub. 151, *Distances Between Ports* | Altı bacağın altısında da servis tablosu **%9–26 yüksek** |
 
 **Boş dönüş — ve bunun manşete etkisi.** Koridor kendi kilometreleriyle
 ağırlıklandırıldığında gözlenen oran **%17,4**, kapsam **%70** (Sırbistan ve Türkiye bu
@@ -688,6 +690,18 @@ Eurostat türetmesi ağa çıkmaz (indirme ayrı bir adımdır, yoksa yanıtı d
 anlamı kalmaz) ve `--check` test takımında koşar. THETIS-MRV çalışma kitabı elle
 indirilir; portal bir JavaScript uygulaması, dışa aktarma reCAPTCHA arkasında ve EMSA
 doğrudan dosya adresi yayımlamıyor — betik bunu gizlemek yerine yazıyor.
+
+**Deniz mesafesi — en büyük kaldıraç, en geç gelen hakem.** Bu koridorun emisyonunun
+%87,4'ü deniz bacağından geliyor ve mesafesinin bağımsız kontrolü tek bir searoute
+karşılaştırmasıydı. NGA Pub. 151 altı bacağın altısını da ölçüyor ve altısında da servis
+tablosu yüksek çıkıyor (%9,4–26,1). Yayın ayrıca Korint Kanalı rotasını ayrı yayımlıyor —
+ro-ro geçemediği için doğru karşılaştırma "Yunanistan'ın güneyinden".
+
+**Düzeltme bilinçli olarak uygulanmadı.** Motor taşıyıcının rakamıyla fiyatlamaya devam
+ediyor, Pub 151 panoda yanında duruyor — tıpkı boş dönüşte ve ro-ro faktöründe olduğu
+gibi. Bu projenin bütün dış doğrulamaları aynı desende çalışır: varsayımı sessizce
+değiştirmez, neye dayandığını söyler. Uygulansaydı multimodal ceza +%19,4'ten +%7,3'e
+inerdi; bulgu ayakta kalır ama üçte birine düşerdi.
 
 Ayrıntı, kaynak künyeleri ve gözlemin **yapamadıkları**:
 [`data/external/README.md`](data/external/README.md).

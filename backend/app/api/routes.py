@@ -24,6 +24,7 @@ from ..core.backhaul import DEFAULT_REPOSITION_RADIUS_KM, find_backhauls
 from ..core.benchmarks import (
     MRV_SCOPE,
     BenchmarkUnavailable,
+    check_sea_distance,
     compare_sea_factor,
     corridor_empty_running,
     observed,
@@ -87,6 +88,7 @@ from .schemas import (
     RouteResponse,
     RouteRiskOut,
     SailingOut,
+    SeaDistanceOut,
     SeaFactorOut,
     ScheduleStepOut,
     ScenarioOut,
@@ -514,6 +516,32 @@ def _distance_bases(simulated) -> list[DistanceBasisOut]:
     ]
 
 
+def _sea_distances_out(route) -> list[SeaDistanceOut]:
+    """What the publication says about each sea leg this route sails.
+
+    Empty where a leg has no terminals to look up — a ferry crossing split out of a road
+    leg has none, and its distance came from OSRM rather than the service table.
+    """
+    out = []
+    for leg in route.legs:
+        if leg.mode != "sea":
+            continue
+        check = check_sea_distance(leg.from_id, leg.to_id)
+        if check is None:
+            continue
+        out.append(SeaDistanceOut(
+            from_terminal=check.from_terminal, to_terminal=check.to_terminal,
+            engine_km=round(leg.distance_km, 1),
+            published_km=check.published_km,
+            delta_pct=round((leg.distance_km - check.published_km) / check.published_km * 100, 1),
+            published_nm=check.published_nm, estimated_nm=check.estimated_nm,
+            estimated_share=check.estimated_share,
+            is_representative=check.is_representative,
+            via=check.via, source_line=check.source_line,
+        ))
+    return out
+
+
 def _sea_factor_out(route, request: RouteRequest) -> SeaFactorOut | None:
     """The sea factor this route priced with, against the ships EMSA actually verified.
 
@@ -830,6 +858,7 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
                 timeline=_timeline_out(route),
                 empty_running=_empty_running_out(route, road_factor_share),
                 sea_factor=_sea_factor_out(route, request),
+                sea_distances=_sea_distances_out(route),
                 reefer=reefer,
                 total_with_reefer_co2_kg=(
                     round_to_significant(shipment.total_co2_kg + reefer.co2_kg)

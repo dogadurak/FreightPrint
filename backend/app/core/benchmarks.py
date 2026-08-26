@@ -467,3 +467,81 @@ def compare_sea_factor(
         is_comparable=not accompanied,
         notes=notes,
     )
+
+
+# ── the sea distance against the publication that surveys it ──────────────────
+
+# NGA Pub. 151 *Distances Between Ports*, the standard reference for port-to-port
+# distance. Derived by `scripts/import_pub151.py`, which keeps the published figure apart
+# from the hop it adds to reach a terminal the publication does not list.
+#
+# **Reported beside the engine's number, never substituted for it.** That is the same
+# footing as the Eurostat empty-running survey and the EU MRV fleet: this project's job
+# is to say what an assumption rests on, not to overwrite a carrier's own figure with a
+# survey taken for a different purpose. The two answer different questions - what this
+# service is planned at, and how far the ports are apart - and collapsing them would lose
+# the disagreement, which is the interesting part.
+PUB151 = EXTERNAL_DIR / "port_distances_pub151.csv"
+
+# A ro-ro ship cannot transit the Corinth Canal, so the canal figures are read but never
+# used for comparison. Faz 0 established this; it is the reason the corridor exists.
+SEA_ROUTE_BASIS = "south of Greece"
+
+
+@dataclass(frozen=True)
+class SeaDistanceCheck:
+    """One sea leg's distance, as the carrier gives it and as the publication surveys it."""
+
+    from_terminal: str
+    to_terminal: str
+    engine_km: float
+    published_km: float
+    published_nm: float
+    estimated_nm: float
+    estimated_share: float
+    via: str
+    source_line: str
+
+    @property
+    def delta_pct(self) -> float:
+        return (self.engine_km - self.published_km) / self.published_km * 100
+
+    @property
+    def is_representative(self) -> bool:
+        """Whether the published half of the figure dominates it."""
+        return self.estimated_share <= 0.20
+
+
+@lru_cache(maxsize=1)
+def load_sea_distances(path: Path | None = None) -> dict[tuple[str, str], SeaDistanceCheck]:
+    path = path or PUB151
+    if not path.exists():
+        return {}
+    checks: dict[tuple[str, str], SeaDistanceCheck] = {}
+    with open(path, encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            # Only the route a ro-ro can actually sail, and only rows that survived the
+            # importer's arithmetic guard.
+            if not row["adjusted_km"] or row["via"] == "via Corinth Canal":
+                continue
+            checks[(row["from_terminal"], row["to_terminal"])] = SeaDistanceCheck(
+                from_terminal=row["from_terminal"], to_terminal=row["to_terminal"],
+                engine_km=float(row["reference_km"]) if row["reference_km"] else 0.0,
+                published_km=float(row["adjusted_km"]),
+                published_nm=float(row["published_nm"]),
+                estimated_nm=float(row["estimated_nm"]),
+                estimated_share=float(row["estimated_share"]),
+                via=row["via"], source_line=row["source_line"],
+            )
+    return checks
+
+
+def check_sea_distance(from_id: str | None, to_id: str | None) -> SeaDistanceCheck | None:
+    """The publication's figure for one leg, whichever way round it is sailed.
+
+    A service runs both ways over the same water, and the publication lists the pair once.
+    """
+    if not from_id or not to_id:
+        return None
+    checks = load_sea_distances()
+    return checks.get((from_id, to_id)) or checks.get((to_id, from_id))

@@ -208,6 +208,30 @@ class DistanceBasisOut(BaseModel):
     basis: str
 
 
+class SeaDistanceOut(BaseModel):
+    """One sea leg's distance, as the carrier gives it and as NGA Pub. 151 surveys it.
+
+    Reported beside the engine's figure and never substituted for it, on the same footing
+    as the Eurostat empty-running survey and the EU MRV fleet. The two answer different
+    questions — what this service is planned at, and how far the ports are apart — and
+    collapsing them would lose the disagreement, which is the part worth reading.
+    """
+
+    from_terminal: str
+    to_terminal: str
+    engine_km: float
+    published_km: float
+    delta_pct: float
+    # The published figure and the hop added to reach a terminal Pub 151 does not list,
+    # kept apart so a reader can see how much of the comparison is survey.
+    published_nm: float
+    estimated_nm: float
+    estimated_share: float
+    is_representative: bool
+    via: str = ""
+    source_line: str = ""
+
+
 class RangeOut(BaseModel):
     low_co2_kg: float
     high_co2_kg: float
@@ -239,6 +263,8 @@ class AlternativeOut(BaseModel):
     # The sea factor against the verified EU fleet. Present only where this alternative
     # actually sails: an all-road option has no sea factor to check.
     sea_factor: "SeaFactorOut | None" = None
+    # Per sea leg, so a route with two crossings reports both.
+    sea_distances: list[SeaDistanceOut] = []
     reefer: "ReeferOut | None" = None
     total_with_reefer_co2_kg: float | None = None
     playback: "PlaybackOut | None" = None

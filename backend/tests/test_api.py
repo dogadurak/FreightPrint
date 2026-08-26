@@ -896,3 +896,48 @@ def test_a_computed_road_distance_claims_no_service_table_source(client):
     road = next(a for a in payload["alternatives"] if a["is_all_road"])["legs"][0]
 
     assert road["distance_source"] == ""
+
+
+# ── the sea distance beside the publication that surveys it ───────────────────
+
+def test_the_sea_distance_comparison_reaches_a_caller(client):
+    """Sea is 87% of this corridor's emissions and its distance had one cross-check in
+    total. Six now exist and every one says the service table reads high."""
+    legs = _multimodal(client)["sea_distances"]
+
+    assert legs, "the comparison built for the biggest lever reaches nobody"
+    leg = legs[0]
+    assert leg["published_km"] < leg["engine_km"]
+    assert leg["delta_pct"] > 9
+
+
+def test_the_engine_still_prices_with_the_carriers_figure(client):
+    """Chosen deliberately, and the same footing as every other external check here: the
+    observation is reported beside the assumption, never substituted for it. An engine
+    that quietly swapped in a survey taken for a different purpose would stop reproducing
+    the report it is validated against."""
+    alternative = _multimodal(client)
+    sea_leg = next(leg for leg in alternative["legs"] if leg["mode"] == "sea")
+    comparison = alternative["sea_distances"][0]
+
+    assert sea_leg["distance_km"] == comparison["engine_km"]
+    assert sea_leg["distance_km"] != comparison["published_km"]
+
+
+def test_the_published_half_of_the_comparison_is_declared(client):
+    """Pub 151 lists neither Pendik nor Yalova, so Istanbul stands for them and the hop is
+    measured from coordinates. Small here — but a figure that stops saying so stops being
+    one, which is how the Pendik offset was assumed at twice its real size."""
+    leg = _multimodal(client)["sea_distances"][0]
+
+    assert leg["published_nm"] > 0
+    assert leg["estimated_share"] < 0.10
+    assert leg["is_representative"] is True
+    assert "Trieste" in leg["source_line"], "the line it was read from is not carried"
+
+
+def test_an_all_road_option_has_no_sea_distance_to_compare(client):
+    payload = _post(client).json()
+    road = next(a for a in payload["alternatives"] if a["is_all_road"])
+
+    assert road["sea_distances"] == []
