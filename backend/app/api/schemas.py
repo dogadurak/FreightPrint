@@ -66,7 +66,16 @@ class RouteRequest(BaseModel):
     # orthogonal to the factor set and applies identically across every scenario.
     is_reefer: bool = False
     load_uncertainty: float = Field(default=0.0, ge=0, lt=1)
-    distance_uncertainty: float = Field(default=0.05, ge=0, lt=1)
+    # None means "use the per-mode table", which is the point of having one.
+    #
+    # This defaulted to 0.05 and so switched off the feature the README describes at
+    # length: every band the dashboard ever drew was a flat five per cent on every mode.
+    # The measured difference is not cosmetic — the all-road band on the pilot corridor
+    # is 7.0% flat against 2.6% per-mode, because road distance is computed here by OSRM
+    # and checked against 30 reported ones, while sea and rail come from a reference
+    # table with one independent check between them. A single figure is simultaneously
+    # too wide for road and too narrow for sea, which is the reason the table exists.
+    distance_uncertainty: float | None = Field(default=None, ge=0, lt=1)
     max_alternatives: int | None = Field(default=None, ge=1, le=20)
     carbon_price_eur: float = Field(default=80.0, ge=0, le=10_000)
     ets_year: int = Field(default=2026, ge=2024, le=2100)
@@ -174,10 +183,31 @@ class EmptyRunningOut(BaseModel):
     notes: list[str] = []
 
 
+class DistanceBasisOut(BaseModel):
+    """What one mode's distance spread rests on, said out loud.
+
+    `is_measured` is the field that matters. Road's spread comes from comparing 30
+    reported distances against independently routed ones — that is accuracy. Rail's comes
+    from nowhere: sample size zero, carried over from sea because the two share a source
+    table, and the data file calls it "a placeholder that happens to be non-zero rather
+    than a finding". Both used to arrive at the caller as an identical anonymous number.
+    """
+
+    mode: str
+    relative: float
+    sample_size: int
+    is_measured: bool
+    basis: str
+
+
 class RangeOut(BaseModel):
     low_co2_kg: float
     high_co2_kg: float
     confidence: float
+    # The provenance of the band, per mode. A range assembled partly from an unmeasured
+    # spread must not look like one that was measured throughout.
+    bases: list[DistanceBasisOut] = []
+    unmeasured_modes: list[str] = []
 
 
 class AlternativeOut(BaseModel):

@@ -65,6 +65,20 @@ class EmissionRange:
     high_co2_kg: float
     samples: int
     confidence: float
+    # What each mode's spread actually rests on, for the modes this route uses.
+    #
+    # Without this the band is a number with no provenance, and one of the numbers
+    # feeding it has none. `distance_uncertainty.csv` says of rail: sample_size 0,
+    # is_measured no, "a placeholder that happens to be non-zero rather than a finding" —
+    # it borrows the sea figure because the two share a lineage, not because rail was
+    # ever measured. That admission sat in a CSV nothing read, which is the same as not
+    # admitting it. A band drawn partly from an unmeasured spread has to say so wherever
+    # it is shown.
+    bases: tuple["DistanceUncertainty", ...] = ()
+
+    @property
+    def unmeasured_modes(self) -> tuple[str, ...]:
+        return tuple(b.mode for b in self.bases if not b.is_measured)
 
     def rounded(self, digits: int = 3) -> tuple[float, float]:
         return (
@@ -186,10 +200,17 @@ def simulate_emission_range(
 
     totals.sort()
     tail = (1 - confidence) / 2
+    # Only the modes this route actually uses, and only when the per-mode table was the
+    # source. A caller who passed one spread for everything overrode the table, and
+    # reporting its bases would describe a calculation that did not happen.
+    used = dict.fromkeys(mode for _, mode, _, _ in leg_inputs)
+    bases = tuple(by_mode[m] for m in used if m in by_mode) if by_mode else ()
+
     return EmissionRange(
         low_co2_kg=totals[int(tail * samples)],
         median_co2_kg=totals[samples // 2],
         high_co2_kg=totals[min(int((1 - tail) * samples), samples - 1)],
         samples=samples,
         confidence=confidence,
+        bases=bases,
     )

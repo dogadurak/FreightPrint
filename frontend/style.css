@@ -1015,3 +1015,19 @@ td.exposed { color: var(--bad); font-weight: 620; }
 }
 .verdict-chip.ok { background: var(--good-wash); color: var(--good); }
 .verdict-chip.off { background: var(--warn-wash); color: var(--warn-ink); border: 1px solid var(--warn-border); }
+
+/* ── belirsizlik bandının dayanağı ────────────────────────────────────────
+   Band bir sayının ne kadar bilindiğine dair bir iddia. Bir kısmı hiç ölçülmemiş
+   bir yayılıma dayanıyorsa, iddia göründüğünden zayıf demektir — o yüzden hangi
+   modun neye dayandığı bandın yanında yazıyor. */
+.band-provenance {
+  display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: baseline;
+  margin: -0.4rem 0 1rem; font-size: 0.76rem; color: var(--ink-muted);
+}
+.band-basis { display: inline-flex; align-items: baseline; gap: 0.2rem; }
+.band-basis strong { color: var(--ink-secondary); font-weight: 600; }
+.band-basis.unmeasured strong { color: var(--warn-ink); }
+.band-basis.unmeasured::before {
+  content: "▲"; margin-right: 0.25rem; color: var(--warn-ink); font-size: 0.85em;
+}
+.band-note { color: var(--warn-ink); flex-basis: 100%; }

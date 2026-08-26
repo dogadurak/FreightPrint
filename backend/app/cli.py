@@ -75,7 +75,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="how far below --load-factor utilisation may fall, 0-1",
     )
     parser.add_argument(
-        "--distance-uncertainty", type=float, default=0.05, help="relative distance error, 0-1"
+        # Omitted means the per-mode table, not a flat figure. Defaulting to 0.05 here
+        # silently overrode data/distance_uncertainty.csv, which is the only place that
+        # knows road is measured and rail is not.
+        "--distance-uncertainty", type=float, default=None,
+        help="relative distance error 0-1; omit for the per-mode table "
+             "(data/distance_uncertainty.csv)",
     )
     parser.add_argument("--alternatives", type=int, default=3)
     parser.add_argument(

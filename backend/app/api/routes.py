@@ -66,6 +66,7 @@ from .schemas import (
     ConformanceOut,
     EtsCostOut,
     EtsLegOut,
+    DistanceBasisOut,
     EmptyRunningOut,
     FactorSetOut,
     HubAssignmentOut,
@@ -492,6 +493,22 @@ def _empty_running_out(route, factor_share: float | None) -> EmptyRunningOut | N
     )
 
 
+def _distance_bases(simulated) -> list[DistanceBasisOut]:
+    """Where each mode's distance spread came from, worst-supported first.
+
+    Ordered so the weakest basis is the one a reader meets first. Rail's spread has a
+    sample size of zero and belongs at the top of that list, not buried under road's
+    thirty comparisons.
+    """
+    return [
+        DistanceBasisOut(
+            mode=basis.mode, relative=basis.relative, sample_size=basis.sample_size,
+            is_measured=basis.is_measured, basis=basis.basis,
+        )
+        for basis in sorted(simulated.bases, key=lambda b: (b.is_measured, b.sample_size))
+    ]
+
+
 def _sea_factor_out(route, request: RouteRequest) -> SeaFactorOut | None:
     """The sea factor this route priced with, against the ships EMSA actually verified.
 
@@ -651,7 +668,9 @@ def _price_scenario(routes, request: RouteRequest, scenario, factors, terminals)
             )
             low, high = simulated.rounded()
             emission_range = RangeOut(
-                low_co2_kg=low, high_co2_kg=high, confidence=simulated.confidence
+                low_co2_kg=low, high_co2_kg=high, confidence=simulated.confidence,
+                bases=_distance_bases(simulated),
+                unmeasured_modes=list(simulated.unmeasured_modes),
             )
         except (FactorNotFoundError, ValueError):
             emission_range = None
@@ -760,7 +779,9 @@ def calculate_routes(request: RouteRequest) -> RouteResponse:
             )
             low, high = simulated.rounded()
             emission_range = RangeOut(
-                low_co2_kg=low, high_co2_kg=high, confidence=simulated.confidence
+                low_co2_kg=low, high_co2_kg=high, confidence=simulated.confidence,
+                bases=_distance_bases(simulated),
+                unmeasured_modes=list(simulated.unmeasured_modes),
             )
         except (FactorNotFoundError, ValueError):
             emission_range = None

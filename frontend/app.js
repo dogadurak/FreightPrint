@@ -944,10 +944,49 @@ function updateKpis(scenario) {
     (v) => (range ? `${nf.format(v)} – ${nf.format(range.high_co2_kg)} kg` : "—"),
     range ? `±%${bandWidth.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} · %${
       Math.round(range.confidence * 100)} güven · Monte Carlo` : "hesaplanamadı");
+  // Where the band comes from, mode by mode. Half of it rests on a spread nobody
+  // measured: the rail figure has a sample size of zero and is borrowed from sea because
+  // the two share a source table. That admission lived in a CSV nothing read, which is
+  // the same as not making it, so it is stated beside every band it affects.
+  renderBandProvenance(range);
   set("sens", ratio ?? 0,
     (v) => (ratio ? `×${v.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : "—"),
     ratio === null ? "tek esas" : `${nf.format(low)}–${nf.format(high)} kg · ${acrossBases.length} GLEC esası`);
 }
+
+/** What the uncertainty band actually rests on, per mode.
+ *
+ *  A band is a claim about how well a number is known, so a band assembled partly from
+ *  a spread nobody measured is a weaker claim than it looks. On this corridor road's
+ *  ±1.9% comes from comparing thirty reported distances against independently routed
+ *  ones; sea's ±4.2% rests on a single cross-check; rail's is the sea figure borrowed,
+ *  sample size zero, because rail has never been checked against anything at all.
+ *
+ *  Shown worst-supported first, because that is the one that decides how much the band
+ *  is worth.
+ */
+function renderBandProvenance(range) {
+  const slot = $("band-provenance");
+  if (!slot) return;
+  if (!range?.bases?.length) { slot.hidden = true; return; }
+
+  const pct = (v) => `%${(v * 100).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`;
+  slot.replaceChildren(
+    ...range.bases.map((b) =>
+      el("span", { class: `band-basis ${b.is_measured ? "" : "unmeasured"}` }, [
+        el("strong", {}, `${b.mode} ±${pct(b.relative)}`),
+        document.createTextNode(
+          b.is_measured ? ` · ${b.sample_size} örnek` : ` · ölçülmedi (n=${b.sample_size})`),
+      ])),
+    ...(range.unmeasured_modes.length
+      ? [el("span", { class: "band-note" },
+          `${range.unmeasured_modes.join(" ve ")} mesafesi bağımsız olarak `
+          + "doğrulanmadı — bandın o kısmı ölçüm değil, yer tutucu.")]
+      : []),
+  );
+  slot.hidden = false;
+}
+
 
 function buildComparison(scenario) {
   $("comparison-chart").innerHTML = `<div class="bars">${
