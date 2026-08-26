@@ -143,6 +143,18 @@ Gerekçe:
 Aşağıdaki mesafeler doğrulama veri setindeki firma tablosundan alınmıştır.
 **Bunlar başlangıç referansıdır; sistem kendi mesafesini hesaplayacak ve bu değerlerle karşılaştıracaktır.**
 
+> **2026-08-26 — bu karşılaştırma yapıldı ve her iki modda da fark çıktı.**
+> Deniz bacakları NGA Pub. 151 *Distances Between Ports* ile ölçüldü: altı bacağın
+> altısında da tablo **%9–26 yüksek**. Demiryolu bacakları OpenStreetMap üzerinden
+> ölçüldü ve ERA RINF ile çapraz kontrol edildi: yedi bacağın yedisinde de tablo
+> **%4–33 düşük** — yani ters yönde.
+>
+> **Tablo yerinde bırakıldı, ölçüm yanına kondu.** Bu, projenin bütün dış
+> doğrulamalarındaki desendir (Bölüm 8.3): motor varsayımı sessizce değiştirmez, neye
+> dayandığını söyler. İkisi birden uygulansaydı çok modlu ceza +%19,4'ten +%10,4'e
+> inerdi — düzeltmeler birbirini kısmen götürdüğü için bulgu ayakta kalıyor, ki bu
+> bulgunun tek bir kötü sayıdan doğmadığının kanıtı.
+
 | Kalkış | Varış | Mod | Referans km |
 |---|---|---|---|
 | Pendik | Trieste | Deniz | 2500 |
@@ -350,6 +362,12 @@ Karbon fiyatı parametre olarak girilir (piyasa fiyatı değişkendir).
 | **THETIS-MRV (EMSA)** | Gemi bazlı yıllık CO2 (AB'ye uğrayan gemiler) | https://mrv.emsa.europa.eu | Ücretsiz. Deniz emisyon faktörünü kalibre etmek ve doğrulamak için. |
 | **GLEC Framework / ISO 14083** | Emisyon faktörü ve metodoloji çerçevesi | Smart Freight Centre | Hesabın hangi standarda dayandığını belirtmek için. |
 
+> **2026-08-26 — bu tablo planlandığı hâliyle duruyor; ne olduğu Bölüm 8.3'te.**
+> Kısaca: searoute kullanılıyor ama Korint Kanalı hatası bulundu ve düzeltildi;
+> OpenRailwayMap demiryolu ölçümü için gerçekten kullanıldı; THETIS-MRV ro-ro faktörünü
+> doğruladı; World Port Index yerine aynı kurumun **Pub. 151** yayını kullanıldı, çünkü
+> konum değil **mesafe** gerekiyordu; TEN-T/GISCO kullanılmadı.
+
 ### 8.2 Fizibilitesi önce test edilecekler
 
 | Kaynak | Ne için | Risk |
@@ -357,6 +375,35 @@ Karbon fiyatı parametre olarak girilir (piyasa fiyatı değişkendir).
 | **Ham AIS (Akdeniz/Adriyatik)** | Modül C: gerçek mesafe, süre, hız, bekleme | ⚠️ Ücretsiz gemi bazlı AIS verisinin coğrafi kapsamı düzensiz. Danimarka (`aisdata.ais.dk`) ve ABD (`marinecadastre.gov`, CC0) için mükemmel açık veri var; Akdeniz için sınırlı. **Projeye başlamadan test edilmeli.** |
 | **Savaş riskli deniz bölgeleri** | Modül B: risk poligonları | ⚠️ Sigorta piyasasının ilan ettiği bölgeler kamuya açık duyurulur, ancak prim oranları pazarlıkla belirlenir ve açık veri değildir. Poligonlar elle sayısallaştırılabilir; prim oranı **kullanıcı girdisi** olarak tasarlanmalı. |
 | **Sınır kapısı bekleme süreleri** | Kapıkule vb. kuyruk süresi ve rölanti emisyonu | ⚠️ Düzenli ve güvenilir açık veri bulmak zor. Veri kaynağı doğrulanmadan kapsama alınmayacak. |
+
+**Sonuçlar:** Akdeniz için ücretsiz gemi bazlı AIS **çıkmaz** (Faz 0'da test edildi;
+EMODnet yalnızca toplu yoğunluk, AISHub karşılıklı istasyon paylaşımı istiyor). Savaş
+riski bölgeleri elle sayısallaştırıldı ve prim kullanıcı girdisi olarak tasarlandı.
+Sınır kapısı süreleri kapsama **alınmadı**.
+
+### 8.3 Dış doğrulama kaynakları — indirilmiş, üretilmemiş
+
+Bölüm 9 motorun kendi aritmetiğini bir müşteri raporuna karşı sınıyor. Bu bölüm ayrı bir
+soruyu sınıyor: **motora verilen sayılar bu koridoru tarif ediyor mu?** Hepsi
+`data/external/` altında, her biri bir betikle türetiliyor ve `--check` ile doğrulanıyor.
+
+| Kaynak | Neyi sınıyor | Sonuç |
+|---|---|---|
+| **Eurostat `road_go_ta_vm`** | GLEC karayolu faktörünün varsaydığı %30 boş dönüş | Uluslararası AB taşımacılığında ~%12. Koridor ağırlıklı %17,4, kapsam %70 (TR ve RS bildirmiyor) |
+| **EU MRV / THETIS-MRV** | GLEC ro-ro faktörü 0,063 | 684 gemi-yılı. Filonun **orta yarısının içinde**, üç dönemin üçünde de. Orta yarı 2,7 kat aralığa yayılıyor |
+| **NGA Pub. 151** | Deniz **mesafeleri** | 6/6 bacakta tablo %9–26 yüksek |
+| **ERA RINF** | Demiryolu ağı ve mesafeleri | Ülke içinde doğru (%0,7 hata), ama Avusturya'nın bildirimi %23 bütünlükte — koridor rotalanamıyor |
+| **OpenStreetMap / OpenRailRouting** | Demiryolu mesafeleri | 7/7 bacakta tablo %4–33 düşük. RINF ile çapraz kontrollü |
+
+**Değişmeyen kural: gözlem varsayımın yerine geçmez, yanına konur.** Motor GLEC'in %30'uyla,
+taşıyıcının km'siyle ve servis tablosuyla fiyatlamaya devam eder; pano her birinin neye
+dayandığını gösterir. Sessizce değiştirmek, motoru doğrulandığı raporu yeniden
+üretemez hâle getirir.
+
+**Ulaşılamayan kaynak:** UNECE'nin kendi UN/LOCODE yayını otomatik isteklere **403**
+dönüyor; topluluk aynaları birbiriyle tutmuyor (2,0 MB / 7,3 MB). Terminaller bunun
+yerine Pub. 151 ve RINF'e bağlandı — 16'nın 12'si. Kalan dördü (Pendik, Yalova, Ambarlı,
+Halkalı) **hepsi Türk**, ve bu boşluk Eurostat'ta ve RINF'te de aynen çıkıyor.
 
 ---
 
@@ -600,13 +647,29 @@ Her fazın sonunda **gösterilebilir bir çıktı** olacak. Bu, projenin yarım 
 
 ## 14. Ajan için özet talimat
 
-> **Bu talimat 25 Ağustos 2026'da güncellendi. Aşağıdaki "başla" maddesi artık geçerli
-> değil — Faz 0–8 tamamlandı.** Bugün depoyu açan bir ajanın yapması gereken ilk şey
-> kodu okumak, ikinci şey testleri çalıştırmaktır.
+> **Bu talimat 26 Ağustos 2026'da güncellendi. Aşağıdaki "başla" maddesi artık geçerli
+> değil — Faz 0–8 tamamlandı ve üzerine bir dış doğrulama turu yapıldı.** Bugün depoyu
+> açan bir ajanın yapması gereken ilk şey kodu okumak, ikinci şey testleri çalıştırmaktır.
 >
 > **Mevcut durum:** Modül A, B, D ve E çalışıyor; Modül C (AIS) fizibilite sonucu
 > Akdeniz için kapandı. Motor tekil sevkiyat ve portföy ölçeğinde çalışıyor, web arayüzü
 > ve toplu rapor (CSV/Excel/PDF) hazır. Test paketi ağdan bağımsızdır ve CI'da koşar.
+>
+> **Beş dış kaynak bağlandı** (Bölüm 8.3): Eurostat boş dönüş anketi, EU MRV doğrulanmış
+> gemi emisyonları, NGA Pub. 151 liman mesafeleri, ERA RINF demiryolu kaydı,
+> OpenStreetMap demiryolu rotalama. Her biri `data/external/` altında, betikle türetiliyor
+> ve `--check` ile doğrulanıyor.
+>
+> **Bu turun en pahalı dersi ve yeni kural:** Bu projenin en sık hatası yanlış sayı değil,
+> **hiç kimseye ulaşmayan doğru sayı** oldu. Bir alan ayrıştırılıp hiçbir kodun okumaması,
+> bir varsayılanın bir özelliği sessizce kapatması, bir karşılaştırmanın yalnızca kendi
+> testinden erişilebilir olması — hepsi yaşandı. `scripts/check_data_fields.py` artık bu
+> kalıbı CI'da yakalıyor ve ilk çalışmasında iki tane buldu.
+>
+> İkinci kural: **genelleştirmeden önce tek bir vakayı elle doğrula**, ve doğrulamayı
+> ayrıştırıcıyla aynı anlayıştan değil bağımsız bir şeyden (aritmetik, coğrafya) kur. Bu
+> turda yakalanan yaklaşık yirmi hatanın çoğu, toplu sonucu makul görünürken tek vakaya
+> bakılınca çıktı.
 >
 > **Değişmeyen kurallar:**
 > - Hiçbir sayı kaynaksız girmez. Her faktör `source`, `year` ve `is_verified` taşır;
@@ -617,6 +680,12 @@ Her fazın sonunda **gösterilebilir bir çıktı** olacak. Bu, projenin yarım 
 > - Ölçülemeyen şey ölçülmüş gibi sunulmaz. Bir varsayımdan türetilen her rakam
 >   varsayımını yanında taşır (bkz. Modül E).
 > - Yeni özellik önerilerini v2 listesine yaz, çalışan bir modülün içine sıkıştırma.
+> - **Dış gözlem varsayımın yerine geçmez, yanına konur.** Eurostat GLEC'in %30'unu,
+>   Pub. 151 taşıyıcının km'sini, OSM servis tablosunu değiştirmez — hepsi panoda
+>   yanlarında durur. Sessizce değiştirmek, motoru doğrulandığı raporu yeniden üretemez
+>   hâle getirir ve projenin iki hikâyesini birbirinden koparır.
+> - **Bir modül, verisi bir kullanıcıya ulaşana kadar bitmiş sayılmaz.** "Kuruldu" ile
+>   "bağlandı" ayrı şeylerdir; ikincisini uçtan uca test etmeden iddia etme.
 > - Kod Türkçe yorumlanabilir ama değişken ve fonksiyon adları İngilizce olsun.
 > - Her fazın sonunda çalışan bir çıktı üret; yarım bırakılmış modül bırakma.
 >
