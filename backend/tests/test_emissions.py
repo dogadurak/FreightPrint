@@ -18,6 +18,17 @@ REFERENCE_ROAD_FACTOR = 0.121
 REFERENCE_SEA_FACTOR = 0.012
 REFERENCE_RAIL_FACTOR = 0.016
 
+# Named, not inherited. These constants are the validation dataset's own basis, so every
+# test that asserts them has to ask for that basis by name — otherwise it is really
+# asserting whatever the engine currently defaults to, and would break the day that
+# product decision changes. It did change, and they did break.
+#
+# It is also the basis with no utilisation built in (load factor 1.0, empty share 0.0),
+# which is what makes it the right one for testing the arithmetic itself: with a
+# publisher's own assumptions folded into the value, "double the empty share, double the
+# emissions" is no longer the relationship under test.
+REFERENCE = "reference"
+
 
 def _leg(mode, distance_km, ferry_km=0.0):
     return Leg(
@@ -36,9 +47,11 @@ def _route(label, legs):
 def test_reference_factors_match_the_source_report():
     factors = load_emission_factors()
 
-    assert find_factor(factors, "road").value == REFERENCE_ROAD_FACTOR
-    assert find_factor(factors, "sea").value == REFERENCE_SEA_FACTOR
-    assert find_factor(factors, "rail").value == REFERENCE_RAIL_FACTOR
+    ref = lambda mode: find_factor(factors, mode, factor_set=REFERENCE).value
+
+    assert ref("road") == REFERENCE_ROAD_FACTOR
+    assert ref("sea") == REFERENCE_SEA_FACTOR
+    assert ref("rail") == REFERENCE_RAIL_FACTOR
 
 
 def test_glec_factors_match_the_published_tables():
@@ -95,7 +108,7 @@ def test_every_factor_declares_scope_source_and_year():
 
 def test_leg_emission_is_distance_times_tonnage_times_factor():
     route = _route("test", [_leg("road", 100)])
-    shipment = calculate_route_emission(route, tonnage=24)
+    shipment = calculate_route_emission(route, tonnage=24, factor_set=REFERENCE)
 
     assert shipment.total_co2_kg == pytest.approx(100 * 24 * REFERENCE_ROAD_FACTOR)
 
@@ -134,7 +147,7 @@ def test_a_ferry_split_does_not_hand_its_figures_to_the_real_sea_leg():
 
 def test_ferry_km_inside_a_road_leg_is_charged_at_the_sea_factor():
     route = _route("crete", [_leg("road", 643, ferry_km=137)])
-    shipment = calculate_route_emission(route, tonnage=24)
+    shipment = calculate_route_emission(route, tonnage=24, factor_set=REFERENCE)
 
     expected = 24 * (506 * REFERENCE_ROAD_FACTOR + 137 * REFERENCE_SEA_FACTOR)
     assert shipment.total_co2_kg == pytest.approx(expected)
@@ -188,7 +201,7 @@ def test_a_fuller_load_than_the_publisher_assumed_lowers_the_factor():
 
 
 def test_partial_load_raises_emissions_per_ton_km():
-    factor = find_factor(load_emission_factors(), "road")
+    factor = find_factor(load_emission_factors(), "road", factor_set=REFERENCE)
 
     assert effective_factor_value(factor, load_factor=0.5) == pytest.approx(factor.value * 2)
     assert effective_factor_value(factor, empty_return_share=1.0) == pytest.approx(factor.value * 2)
@@ -241,7 +254,7 @@ def test_trimming_keeps_the_cleanest_option_not_the_shortest():
 
 def test_all_road_baseline_stays_first_even_when_it_emits_most():
     routes = [_route("all-road", [_leg("road", 2515)]), _route("via sea", [_leg("sea", 2500)])]
-    shipments = calculate_shipment(routes, tonnage=24)
+    shipments = calculate_shipment(routes, tonnage=24, factor_set=REFERENCE)
 
     ranked = lowest_emission_first(routes, shipments)
 

@@ -503,10 +503,22 @@ Doğrulanmış faktör setleri:
 
 | Set | Kapsam | Deniz esası | Kaynak |
 |---|---|---|---|
-| `reference` | TTW | 0,012 | Müşteri raporunun kendi değerleri — karşılaştırma için |
-| `glec` | TTW + WTW | 0,063 refakatsiz | GLEC Framework 2019 (Tem 2022), Tablo 38/42/45 |
+| `glec` **(varsayılan)** | TTW + WTW | 0,063 refakatsiz | GLEC Framework 2019 (Tem 2022), Tablo 38/42/45 |
+| `reference` | TTW | 0,012 | Müşteri raporunun kendi değerleri — yeniden üretim için |
 | `glec_accompanied` | TTW + WTW | 0,093 refakatli | Çekici ve şoför de gemide |
 | `glec_freight_average` | TTW + WTW | 0,042 filo ort. | Clean Shipping Index ölçümü |
+
+**Varsayılanın `glec` olmasının iki sebebi var, ve ilki teknik.** `reference` seti yalnızca
+TTW satırı taşıyor; onunla `--scope WTW` çalışmıyor. Kapsamların yarısında kırılan bir set
+varsayılan olamaz. İkincisi: EU MRV'ye göre `reference` setinin 0,012'lik deniz değerinin
+altında **hiçbir doğrulanmış ro-ro gemisi yok**, `glec`'in 0,063'ü ise filonun orta
+yarısının içinde ([Doğrulama](#doğrulama)). Varsayılan, aracın hiç kimse seçim yapmadığında
+öne sürdüğü rakamdır — dışarıdan doğrulanmamış bir esasın orada durması savunulamaz.
+
+`reference` kaybolmadı, yeri değişti: **müşteri raporunu yeniden üretmek için adıyla
+seçilen esas**. Doğrulama modülü de artık onu adıyla istiyor
+([validation.py](backend/app/core/validation.py)) — varsayılana bağlı kalsaydı, ürünün
+hangi standardı öne çıkardığı değiştiğinde projenin baş kanıtı da onunla kayardı.
 
 ```bash
 python -m app.cli --origin=... --destination=... --factor-set glec --scope WTW
@@ -702,7 +714,8 @@ Ayrıntı, kaynak künyeleri ve gözlemin **yapamadıkları**:
 - **Aktarma süreleri sektör tipik değerleri**, ölçüm değil. Gümrük ve sınır kapısı
   bekleme süreleri hiç dâhil değil — gerçek kapıdan kapıya süre daha uzun olabilir.
 - **`reference` seti WTW desteklemez.** Müşteri raporu yalnızca TTW değerleri verdiği için
-  `--scope WTW` bu setle çalışmaz; `--factor-set glec` kullanın.
+  `--scope WTW` bu setle çalışmaz. Varsayılan `glec` olduğundan bu artık kimseyi kazara
+  vurmuyor; `reference`'ı adıyla seçen biri TTW'de kalmak zorunda.
 - **Demiryolu için dizel çekiş varsayılıyor.** GLEC'in dizel satırı hem TTW hem WTW verdiği
   için tutarlı bir çift oluşturuyor. Trieste–Köln gibi elektrikli koridorlarda gerçek değer
   0,0091 WTW, yani mevcut varsayım muhafazakâr (yüksek) yönde.

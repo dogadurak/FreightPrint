@@ -4,6 +4,7 @@ import sys
 import requests
 
 from .core.emissions import (
+    DEFAULT_FACTOR_SET,
     FactorNotFoundError,
     calculate_shipment,
     load_emission_factors,
@@ -38,8 +39,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scope", default="TTW", choices=["TTW", "WTW"])
     parser.add_argument(
         "--factor-set",
-        default="reference",
-        help="which factor set to price with, e.g. reference or glec",
+        # From the engine rather than spelled again here: two copies of a default are two
+        # places to forget, and this one had already drifted from the engine's.
+        default=DEFAULT_FACTOR_SET,
+        help=f"which factor set to price with, e.g. glec or reference "
+             f"(default: {DEFAULT_FACTOR_SET})",
     )
     parser.add_argument(
         "--fuel",

@@ -8,6 +8,16 @@ from .geocode import normalise_country
 from .route import Leg, RouteAlternative
 
 DEFAULT_DATASET = Path(__file__).resolve().parents[3] / "dogrulama_veriseti.csv"
+
+# The basis the source report itself used, named here rather than inherited.
+#
+# Reproducing a document means pricing it the way the document was priced, so this must
+# not follow the engine's default factor set. That default is a product decision about
+# which published standard to lead with, and it has changed. A validation that quietly
+# tracks it stops validating the report and starts comparing the report against whatever
+# the product happens to prefer — so the headline evidence of this whole project would
+# move for a reason that has nothing to do with the engine being right or wrong.
+REPORT_FACTOR_SET = "reference"
 MATCH_THRESHOLD = 0.01
 
 
@@ -135,7 +145,8 @@ def compare_emissions(
             record=record,
             reported_co2_kg=record.reported_total_co2_kg,
             recalculated_co2_kg=calculate_route_emission(
-                record.as_route(), tonnage=record.tonnage, factors=factors
+                record.as_route(), tonnage=record.tonnage, factors=factors,
+                factor_set=REPORT_FACTOR_SET,
             ).total_co2_kg,
         )
         for record in selected
@@ -155,6 +166,7 @@ def compare_all_road_baseline(records: list[ShipmentRecord]) -> list[EmissionCom
                 ),
                 tonnage=record.tonnage,
                 factors=factors,
+                factor_set=REPORT_FACTOR_SET,
             ).total_co2_kg,
         )
         for record in records

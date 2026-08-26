@@ -5,7 +5,7 @@ from pathlib import Path
 from .network import DATA_DIR
 from .route import RouteAlternative
 
-DEFAULT_FACTOR_SET = "reference"
+DEFAULT_FACTOR_SET = "glec"
 DEFAULT_SCOPE = "TTW"
 
 
