@@ -245,6 +245,36 @@ CORRIDOR_LEGS = [
     ("trieste", "patras", "TRIESTE", "Patrai"),
 ]
 
+# Legs Pub 151 does not publish, reached through the nearest port it does.
+#
+# The publication lists neither Istanbul-Patrai nor Patrai-Trieste, which left the Patras
+# way-call resting on the project's own unverified figures - and those turned out to be
+# the most inflated numbers in the table, so the correction built on them understated
+# itself. Patrai's own entry names two ports that stand in.
+#
+# Neither is a substitution. Each is a published distance to a named port plus the
+# measured offset to the terminal actually wanted, and the sign of that offset is argued
+# from the geography rather than assumed:
+#
+#   Derince is 27 nm east of Pendik, so it is further from the Dardanelles and its
+#   published distance to Patrai is longer. The offset is subtracted.
+#
+#   Pula is 46 nm south of Trieste, at the mouth of the gulf rather than its head, so its
+#   published distance to Patrai is shorter. The offset is added, and the published figure
+#   stands on its own as a floor.
+# (published-from, published-to, required route, the neighbour's position, the terminal
+# it stands in for, and the sign of the correction).
+#
+# Naming the terminal outright rather than inferring it from the sign, because inferring
+# it took Pula to stand in for Patras instead of Trieste and produced 2,014 km where the
+# answer is 1,114 - a 39% disagreement pointing the opposite way to every other leg.
+VIA_NEIGHBOUR = {
+    ("pendik", "patras"): ("PATRAI", "Derince", "south of Greece",
+                           (29.825, 40.743056), "pendik", -1),
+    ("trieste", "patras"): ("PATRAI", "Pula", "",
+                            (13.835278, 44.868889), "trieste", +1),
+}
+
 TERMINALS = REPO / "data" / "terminals.geojson"
 SERVICE_LEGS = REPO / "data" / "service_legs.csv"
 
@@ -288,7 +318,12 @@ def published_distances(block: str, target: str) -> list:
     """Every distance the block publishes for one destination: (via, nm, raw line)."""
     joined = []
     for line in (l.rstrip() for l in block.splitlines()):
-        if joined and joined[-1].endswith(",") and line.strip():
+        # Continue the previous entry when it ends mid-clause. Two shapes occur: a line
+        # broken after its comma, and a line broken inside the route qualifier -
+        # "Derince, Turkey (south of" / "Greece), 648". Only handling the comma left
+        # every Patrai entry unreadable, and Patrai is the leg with no other arbiter.
+        unclosed = joined and joined[-1].count("(") > joined[-1].count(")")
+        if joined and line.strip() and (joined[-1].endswith(",") or unclosed):
             joined[-1] = joined[-1] + " " + line.strip()
         else:
             joined.append(line)
@@ -334,10 +369,33 @@ def derive() -> int:
         except (ValueError, LookupError):
             entries = []
 
+        if not entries and (origin, destination) in VIA_NEIGHBOUR:
+            near_port, near_name, want_via, near_pos, stands_for, sign = VIA_NEIGHBOUR[
+                (origin, destination)]
+            for via, nm, raw in published_distances(port_block(text, near_port), near_name):
+                if want_via and via != want_via:
+                    continue
+                hop = great_circle_nm(near_pos, terminals[stands_for])
+                chained = nm + sign * hop
+                km = chained * KM_PER_NAUTICAL_MILE
+                rows.append({
+                    "from_terminal": origin, "to_terminal": destination,
+                    "reference_km": reference_km, "via": via or "tek rota",
+                    "nautical_miles": round(chained, 1), "pub151_km": round(km, 1),
+                    "terminal_offset_km": round(sign * hop * KM_PER_NAUTICAL_MILE, 1),
+                    "adjusted_km": round(km, 1),
+                    "delta_pct": (round((reference_km - km) / km * 100, 1)
+                                  if reference_km else ""),
+                    "status": f"komsu limandan zincirlendi: {near_port}->{near_name} {nm} nm",
+                    "source_line": raw,
+                })
+            if any(r["from_terminal"] == origin and r["to_terminal"] == destination
+                   for r in rows):
+                continue
+
         if not entries:
-            # Pub 151 lists a selection per port, not every pair: Patrai's own entry names
-            # neither Istanbul nor Trieste, and Mersin's names Pula but not Trieste.
-            # Absent is reported, never filled in from a neighbouring port.
+            # Pub 151 lists a selection per port, not every pair. Where no neighbouring
+            # port can stand in either, absent is reported and never filled in.
             rows.append({
                 "from_terminal": origin, "to_terminal": destination,
                 "reference_km": reference_km, "via": "", "nautical_miles": "",

@@ -340,24 +340,40 @@ karşılaştırmak, iki farklı yolculuğu kıyaslamaktı.
 | Patras uğrağıyla | ~2.675 km | projenin kendi rakamları, **doğrulanmamış** |
 | **Servis karışımıyla ağırlıklı** | **~2.348 km** | 2 Patras + 1 Bari + 3 direkt |
 
-Bari uğrağı neredeyse hiçbir şey eklemiyor — Bari zaten Adriyatik'te yol üstünde. Patras
-eklemesi büyük, ama Pub 151 o iki bacağı yayımlamıyor, yani boyutu doğrulanamıyor.
+Bari uğrağı neredeyse hiçbir şey eklemiyor — Bari zaten Adriyatik'te yol üstünde.
 
-**Açıklanamayan fark %14,7'den %6,5'e iniyor.** Bulgu duruyor ama yarısı uğrakmış.
+**Patras bacakları da yayında yok, ama komşu limandan zincirlenebiliyor.** `PATRAI`
+girdisi iki liman adı veriyor: **Derince** (Pendik'in 27 deniz mili doğusunda, İzmit
+Körfezi'nde) ve **Pula** (Trieste'nin 46 deniz mili güneyinde). İkisi de ikame değil —
+adı geçen bir limana yayımlanmış mesafe, artı istenen terminale olan **ölçülmüş** fark,
+ve farkın işareti coğrafyadan savunuluyor:
+
+| Bacak | Projede | Zincirleme | Fark |
+|---|---|---|---|
+| pendik → patras | 1.450 km | `PATRAI→Derince 648 nm` − 27 nm = **1.150 km** | **+%26,1** |
+| trieste → patras | 1.225 km | `PATRAI→Pula 555 nm` + 46 nm = **1.114 km** | **+%10,0** |
+
+Ve bu, önceki sonucu **tersine çeviriyor.** "Uğrak farkın yarısını açıklıyor" derken
+uğrağın boyutunu projenin kendi Patras rakamlarıyla hesaplamıştım — işaretlediğim
+zayıflığın ta kendisi. O rakamlar tablodaki en şişik olanlarmış:
+
+| Ağırlıklandırma | Sonuç | Açıklanamayan |
+|---|---|---|
+| Patras bacakları projenin rakamıyla | 2.348 km | %6,5 |
+| **Patras bacakları Pub 151'den** | **2.211 km** | **%13,1** |
+
+Uğrak, 14,7 puanın yalnızca **1,6'sını** açıklıyor.
 
 ### Yapılmayanlar ve neden
 
-**Bu düzeltme motora uygulanmadı.** Uğrak hesaba katıldığında multimodal cezası
-**+%19,4'ten +%13,0'a** düşüyor (uğrak yok sayılsaydı yanlışlıkla +%6,0 denirdi). Kalan
-belirsizlikler:
+**Bu düzeltme motora uygulanmadı.** Uygulanırsa multimodal cezası **+%19,4'ten +%7,3'e**
+düşüyor. Kalan belirsizlikler:
 
-- **Patras bacaklarının hakemi yok.** Ağırlıklı ortalamanın en büyük bileşeni projenin
-  kendi doğrulanmamış rakamına dayanıyor — yani düzeltmenin kendisi kısmen düzeltilmek
-  istenen sayıdan besleniyor.
 - **Hangi sevkiyatın hangi seferde gittiği bilinmiyor.** Müşteri raporu 12 sevkiyatın
-  hepsi için tek bir 2.500 kullanmış.
-- **Altı bacağın üçünün hakemi yok.** Pub 151 her çifti yayımlamıyor: `PATRAI` başlığı
-  var ama kendi listesinde ne İstanbul ne Trieste geçiyor.
+  hepsi için tek bir 2.500 kullanmış; hangilerinin Patras'a uğradığı belli değil.
+- **Mersin–Trieste'nin hakemi yok** ve komşu liman zinciri de kurulamadı.
+- **Pub 151 2001 baskısı.** Liman arası mesafe coğrafyaya bağlı, yıllara değil — ama
+  kaydedilmesi gereken bir sınır.
 
 ### Referans rakamlar ölçüm değil, planlama sayısı
 
