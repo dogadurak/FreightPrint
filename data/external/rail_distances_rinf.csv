@@ -1,0 +1,8 @@
+from_terminal,to_terminal,reference_km,rinf_km,delta_pct,path_sections,route_countries,from_opid,to_opid,from_op_name,to_op_name,is_verified_choice,status
+trieste,wels,420.0,748.7,78.3,182,IT SI HU SK AT,IT03471,AT01968,TRIESTE CAMPO MARZIO,Wels Vbf-Terminal,yes,supheli: sinir sapmasi
+trieste,lambach,380.0,759.5,99.9,184,IT SI HU SK AT,IT03471,AT01086,TRIESTE CAMPO MARZIO,Lambach,yes,supheli: sinir sapmasi
+trieste,koln,950.0,1357.1,42.9,350,IT SI HU SK AT DE,IT03471,DE000KK,TRIESTE CAMPO MARZIO,Koln Hbf,no,supheli: sinir sapmasi
+trieste,duisburg,1020.0,1411.8,38.4,371,IT SI HU SK AT DE,IT03471,DE00EDG,TRIESTE CAMPO MARZIO,Duisburg Hbf,no,supheli: sinir sapmasi
+trieste,ostrava,670.0,824.0,23.0,203,IT SI HU SK CZ,IT03471,CZ34414,TRIESTE CAMPO MARZIO,Ostrava-Kuncice,yes,supheli: sinir sapmasi
+trieste,regensburg,540.0,857.3,58.8,213,IT SI HU SK AT DE,IT03471,DE0NRHA,TRIESTE CAMPO MARZIO,Regensburg Hafen,yes,supheli: sinir sapmasi
+halkali,chitila,515.0,,,,,,,,,,kayitta yok: halkali (TR)

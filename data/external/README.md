@@ -201,3 +201,49 @@ gerekçesi yok. Türkiye ayağı için tekrar gündeme gelebilir — RINF'in gö
 ## Deniz mesafesine hakem — henüz aranmadı ⏳
 
 Faz 11. Çıkmaz çıkması da geçerli bir sonuç sayılacak.
+
+---
+
+## rinf_rail_graph.json + rail_distances_rinf.csv — ÇALIŞIYOR AMA SONUÇLARI KULLANILMAZ
+
+| | |
+|---|---|
+| **Kaynak** | ERA RINF, `graph.data.era.europa.eu/repositories/rinf-plus` (açık SPARQL) |
+| **Türetme** | `python scripts/import_rinf.py` (`--fetch` grafiği indirir, `--check` doğrular) |
+| **Kapsam** | 12 koridor ülkesi · 47.198 hat kesimi · hepsi uzunluk taşıyor |
+| **Durum** | **6/7 bacak için yol bulundu, 0 tanesi makul.** Aşağıya bakın. |
+
+Zincirin her halkası çalışıyor: grafik iniyor, `uopid` ile birleşiyor (47.198/47.198),
+terminaller işletme noktalarına bağlanıyor, en kısa yol hesaplanıyor. **Ama çıkan
+mesafeler demiryolunun değil.**
+
+```
+trieste->wels   elle 420 km | RINF 748,7 km | +78,3%   IT SI HU SK AT
+```
+
+Yol İtalya'dan Slovenya, Macaristan ve Slovakya üzerinden Avusturya'ya gidiyor —
+Tarvisio'dan doğrudan geçiş grafikte yok. 182 kesimlik bu yolun her parçası gerçek, ama
+bütünü Alpler'in etrafından dolaşıyor. Grafikte **94 ayrı bileşen** ve ortalama **2,19
+derece** var; bir demiryolu ağı için fazla seyrek. Eksik olan sınır bağlantıları.
+
+Bu yüzden hiçbir satır `ok` demiyor: geçtiği ülke sayısı makul sınırı aşan her satır
+`supheli: sinir sapmasi` olarak işaretleniyor ve bir test bunu sabitliyor. **Mevcut elle
+yazılmış mesafeler yerinde kalıyor** — türetilenler onlardan daha iyi olduğu
+kanıtlanana kadar değiştirilmeyecek.
+
+### İki ek sınır
+
+**Koordinat eşleştirmesi bu koridorda çalışmıyor.** RINF 60.571 işletme noktasının
+yaklaşık 2.700'ü için konum yayımlıyor, ve koridor ülkelerinde konumu olan 1.415 noktanın
+**1.401'i Avusturya'da**. Almanya, İtalya, Çekya ve Romanya hiç yayımlamıyor. İlk deneme
+Wels ile Lambach'ı doğru bağladı, diğer her terminali 100–500 km uzaktaki bir Avusturya
+istasyonuna bağladı.
+
+Bunun yerine terminaller `data/rinf_terminal_map.csv` ile **adla ve elle** bağlanıyor.
+Bu bir karar, ve karar gerekçesiyle, reddedilen alternatifleriyle birlikte dosyada
+duruyor. Elle yazılmış mesafeden farkı şu: uçları insan seçiyor, **aradaki kilometreleri
+kayıt veriyor.**
+
+**İki uç doğrulanmamış.** Köln Eifeltor ve Duisburg'un intermodal terminali ada göre
+bulunamadı; ikisi de şehrin ana garına bağlandı ve satırlarda `is_verified_choice=no`
+yazıyor. O mesafeler "terminale" değil "şehre" okunmalıdır.
