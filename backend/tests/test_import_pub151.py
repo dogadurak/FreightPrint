@@ -94,10 +94,10 @@ def test_the_marmara_offset_is_measured_rather_than_assumed():
     import_pub151.derive()
     by_leg = {(r["from_terminal"], r["to_terminal"]): r for r in rows()}
 
-    pendik = float(by_leg[("pendik", "trieste")]["terminal_offset_km"])
-    yalova = float(by_leg[("yalova", "sete")]["terminal_offset_km"])
+    pendik = float(by_leg[("pendik", "trieste")]["estimated_nm"])
+    yalova = float(by_leg[("yalova", "sete")]["estimated_nm"])
 
-    assert 25 < pendik < 32, "Pendik is about 15 nautical miles from Istanbul"
+    assert 14 < pendik < 17, "Pendik is about 15 nautical miles from Istanbul"
     assert yalova > pendik, "Yalova is further down the Marmara than Pendik"
 
 
@@ -155,8 +155,8 @@ def test_a_leg_the_publication_omits_can_be_chained_through_a_neighbour():
     assert "Derince" in pendik["status"] and "Pula" in trieste["status"]
     # Derince is further from the Dardanelles, so Pendik's leg is shorter than what was
     # published; Pula is short of Trieste, so Trieste's leg is longer.
-    assert float(pendik["terminal_offset_km"]) < 0
-    assert float(trieste["terminal_offset_km"]) > 0
+    assert float(pendik["estimated_nm"]) < 0
+    assert float(trieste["estimated_nm"]) > 0
 
 
 @needs_publication
@@ -204,3 +204,42 @@ def test_an_entry_wrapped_inside_its_route_qualifier_is_rejoined():
     found = import_pub151.published_distances(block, "Derince")
 
     assert found == [("south of Greece", 648, "Derince, Turkey (south of Greece), 648")]
+
+
+@needs_publication
+def test_the_published_number_is_kept_apart_from_this_project_s_arithmetic():
+    """Every figure here is a published distance plus a hop to the terminal actually
+    wanted — Istanbul to Pendik, Derince to Pendik, Pula to Trieste. Those hops are
+    measured rather than guessed, but a great circle across open water is still an
+    approximation of a sailing distance, and folded into one column it stops announcing
+    itself. On this corridor it runs from 1.3% to 7.7% of the answer.
+    """
+    import_pub151.derive()
+    priced = [r for r in rows() if r["adjusted_km"]]
+
+    assert priced
+    for row in priced:
+        total = float(row["published_nm"]) + float(row["estimated_nm"])
+        assert float(row["nautical_miles"]) == pytest.approx(total, abs=0.2)
+        assert float(row["estimated_share"]) < 0.10
+        assert row["is_representative"] == "yes"
+
+
+def test_a_figure_that_is_mostly_estimate_is_flagged():
+    """The threshold has to be able to fail. Past a fifth the number is describing this
+    project's geometry more than the publication's survey, and calling it a reading of
+    Pub 151 would be a claim about a source that supplied a minority of it."""
+    mostly = import_pub151._row("a", "b", 1000.0, "", published_nm=100, estimated_nm=60)
+
+    assert mostly["is_representative"] == "no"
+    assert float(mostly["estimated_share"]) > import_pub151.MAX_ESTIMATED_SHARE
+
+
+def test_a_rejected_row_keeps_the_number_it_refused():
+    """So the refusal can be checked. A row that dropped its evidence would leave the
+    next reader with a status line and nothing to test it against."""
+    refused = import_pub151._row("a", "b", 2750.0, "", published_nm=637, rejected=True,
+                                 status="elendi: kus ucusundan kisa")
+
+    assert refused["published_nm"] == 637
+    assert refused["adjusted_km"] == "" and refused["delta_pct"] == ""

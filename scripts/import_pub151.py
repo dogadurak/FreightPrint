@@ -285,6 +285,21 @@ VIA_NEIGHBOUR = {
                             (13.835278, 44.868889), "trieste", +1),
 }
 
+# How much of a figure may be this project's own arithmetic before it stops being a
+# reading of the publication.
+#
+# Every distance here is a published number plus or minus a hop: Istanbul to Pendik,
+# Derince to Pendik, Pula to Trieste. Those hops are measured from coordinates rather
+# than guessed, but a measured great-circle across open water is still an approximation
+# of a sailing distance, and an approximation folded into a chain stops announcing
+# itself. So the published half and the estimated half are written to separate columns
+# and their ratio travels with the answer.
+#
+# The worst case here is Trieste-Patras at 8% estimated; the Marmara offsets are 1-2%.
+# Beyond a fifth the row is flagged, because at that point the figure is describing this
+# project's geometry more than the publication's survey.
+MAX_ESTIMATED_SHARE = 0.20
+
 TERMINALS = REPO / "data" / "terminals.geojson"
 SERVICE_LEGS = REPO / "data" / "service_legs.csv"
 
@@ -351,6 +366,39 @@ def published_distances(block: str, target: str) -> list:
     return found
 
 
+def _row(origin, destination, reference_km, via, published_nm=None, estimated_nm=0.0,
+         status="", source_line="", rejected=False) -> dict:
+    """One leg, with the publication's own number kept apart from this project's.
+
+    `published_nm` is what the page literally says. `estimated_nm` is the hop added to
+    reach the terminal actually wanted, signed, and measured from coordinates. Keeping
+    them in one column would make a figure that is 92% survey look identical to one that
+    is 50% arithmetic.
+    """
+    row = {
+        "from_terminal": origin, "to_terminal": destination,
+        "reference_km": reference_km, "via": via,
+        "published_nm": "" if published_nm is None else round(published_nm, 1),
+        "estimated_nm": round(estimated_nm, 1) if published_nm is not None else "",
+        "estimated_share": "", "nautical_miles": "", "adjusted_km": "",
+        "delta_pct": "", "is_representative": "", "status": status,
+        "source_line": source_line,
+    }
+    if published_nm is None or rejected:
+        return row
+
+    total = published_nm + estimated_nm
+    km = round(total * KM_PER_NAUTICAL_MILE, 1)
+    share = abs(estimated_nm) / total if total else 1.0
+    row.update({
+        "nautical_miles": round(total, 1), "adjusted_km": km,
+        "estimated_share": round(share, 3),
+        "is_representative": "yes" if share <= MAX_ESTIMATED_SHARE else "no",
+        "delta_pct": (round((reference_km - km) / km * 100, 1) if reference_km else ""),
+    })
+    return row
+
+
 def derive() -> int:
     if not TEXT.exists():
         if RAW.exists():
@@ -388,17 +436,12 @@ def derive() -> int:
                 hop = great_circle_nm(near_pos, terminals[stands_for])
                 chained = nm + sign * hop
                 km = chained * KM_PER_NAUTICAL_MILE
-                rows.append({
-                    "from_terminal": origin, "to_terminal": destination,
-                    "reference_km": reference_km, "via": via or "tek rota",
-                    "nautical_miles": round(chained, 1), "pub151_km": round(km, 1),
-                    "terminal_offset_km": round(sign * hop * KM_PER_NAUTICAL_MILE, 1),
-                    "adjusted_km": round(km, 1),
-                    "delta_pct": (round((reference_km - km) / km * 100, 1)
-                                  if reference_km else ""),
-                    "status": f"komsu limandan zincirlendi: {near_port}->{near_name} {nm} nm",
-                    "source_line": raw,
-                })
+                rows.append(_row(
+                    origin, destination, reference_km, via or "tek rota",
+                    published_nm=nm, estimated_nm=sign * hop,
+                    status=f"komsu limandan zincirlendi: {near_port}->{near_name} {nm} nm",
+                    source_line=raw,
+                ))
             if any(r["from_terminal"] == origin and r["to_terminal"] == destination
                    for r in rows):
                 continue
@@ -406,13 +449,10 @@ def derive() -> int:
         if not entries:
             # Pub 151 lists a selection per port, not every pair. Where no neighbouring
             # port can stand in either, absent is reported and never filled in.
-            rows.append({
-                "from_terminal": origin, "to_terminal": destination,
-                "reference_km": reference_km, "via": "", "nautical_miles": "",
-                "pub151_km": "", "terminal_offset_km": offset_km, "adjusted_km": "",
-                "delta_pct": "", "status": port + " listesinde " + target + " yayimlanmamis",
-                "source_line": "",
-            })
+            rows.append(_row(
+                origin, destination, reference_km, "",
+                status=port + " listesinde " + target + " yayimlanmamis",
+            ))
             continue
 
         for via, nm, raw in entries:
@@ -425,25 +465,18 @@ def derive() -> int:
             # reference. A number that cannot be sailed is not a disagreement to report.
             straight = great_circle_nm(terminals[origin], terminals[destination])
             if nm < straight * MIN_OF_GREAT_CIRCLE:
-                rows.append({
-                    "from_terminal": origin, "to_terminal": destination,
-                    "reference_km": reference_km, "via": via, "nautical_miles": nm,
-                    "pub151_km": round(km, 1), "terminal_offset_km": offset_km,
-                    "adjusted_km": "", "delta_pct": "",
-                    "status": (f"elendi: {nm} nm, kus ucusu {straight:.0f} nm'den kisa "
-                               f"(blok tasmasi ya da kirpilma)"),
-                    "source_line": raw,
-                })
+                rows.append(_row(
+                    origin, destination, reference_km, via, published_nm=nm,
+                    rejected=True, source_line=raw,
+                    status=(f"elendi: {nm} nm, kus ucusu {straight:.0f} nm'den kisa "
+                            f"(blok tasmasi ya da kirpilma)"),
+                ))
                 continue
-            rows.append({
-                "from_terminal": origin, "to_terminal": destination,
-                "reference_km": reference_km, "via": via, "nautical_miles": nm,
-                "pub151_km": round(km, 1), "terminal_offset_km": offset_km,
-                "adjusted_km": adjusted,
-                "delta_pct": (round((reference_km - adjusted) / adjusted * 100, 1)
-                              if reference_km else ""),
-                "status": "ok", "source_line": raw,
-            })
+            rows.append(_row(
+                origin, destination, reference_km, via,
+                published_nm=nm, estimated_nm=offset_km / KM_PER_NAUTICAL_MILE,
+                status="ok", source_line=raw,
+            ))
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("w", encoding="utf-8", newline="") as f:
@@ -457,10 +490,12 @@ def derive() -> int:
         if row["status"] != "ok":
             print("  %8s->%-8s %s" % (row["from_terminal"], row["to_terminal"], row["status"]))
             continue
-        print("  %8s->%-8s %5s nm = %7.1f km (%s) | proje %.0f km | fark %+6.1f%%" % (
-            row["from_terminal"], row["to_terminal"], row["nautical_miles"],
-            row["adjusted_km"], row["via"] or "tek rota", row["reference_km"],
-            row["delta_pct"]))
+        print("  %8s->%-8s %6s nm = %7.1f km (%s) | proje %.0f km | fark %+6.1f%% "
+              "| tahmin payi %%%.1f%s" % (
+                  row["from_terminal"], row["to_terminal"], row["published_nm"],
+                  row["adjusted_km"], row["via"] or "tek rota", row["reference_km"],
+                  row["delta_pct"], float(row["estimated_share"]) * 100,
+                  "" if row["is_representative"] == "yes" else "  [TAHMIN AGIR BASIYOR]"))
     return len(rows)
 
 

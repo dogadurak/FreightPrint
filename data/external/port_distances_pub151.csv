@@ -1,9 +1,9 @@
-from_terminal,to_terminal,reference_km,via,nautical_miles,pub151_km,terminal_offset_km,adjusted_km,delta_pct,status,source_line
-pendik,trieste,2500.0,south of Greece,1162,2152.0,28.0,2180.0,14.7,ok,"Trieste, Italy (south of Greece), 1,162"
-pendik,trieste,2500.0,via Corinth Canal,1063,1968.7,28.0,1996.7,25.2,ok,"Trieste, Italy (via Corinth Canal), 1,063"
-pendik,bari,1755.0,south of Greece,851,1576.1,28.0,1604.1,9.4,ok,"Bari, Italy (south of Greece), 851"
-pendik,bari,1755.0,via Corinth Canal,755,1398.3,28.0,1426.3,23.0,ok,"Bari, Italy (via Corinth Canal), 755"
-pendik,patras,1450.0,south of Greece,620.8,1149.8,-50.3,1149.8,26.1,komsu limandan zincirlendi: PATRAI->Derince 648 nm,"Derince, Turkey (south of Greece), 648"
-yalova,sete,3100.0,,1442,2670.6,47.5,2718.1,14.1,ok,"Sete, France, 1,442"
-mersin,trieste,2750.0,south of Greece,1306.4,2419.5,85.9,2419.5,13.7,komsu limandan zincirlendi: MERSIN->Pula 1260 nm,"Pula, Croatia (south of Greece), 1,260"
-trieste,patras,1225.0,tek rota,601.4,1113.8,85.9,1113.8,10.0,komsu limandan zincirlendi: PATRAI->Pula 555 nm,"Pula, Croatia, 555"
+from_terminal,to_terminal,reference_km,via,published_nm,estimated_nm,estimated_share,nautical_miles,adjusted_km,delta_pct,is_representative,status,source_line
+pendik,trieste,2500.0,south of Greece,1162,15.1,0.013,1177.1,2180.0,14.7,yes,ok,"Trieste, Italy (south of Greece), 1,162"
+pendik,trieste,2500.0,via Corinth Canal,1063,15.1,0.014,1078.1,1996.7,25.2,yes,ok,"Trieste, Italy (via Corinth Canal), 1,063"
+pendik,bari,1755.0,south of Greece,851,15.1,0.017,866.1,1604.1,9.4,yes,ok,"Bari, Italy (south of Greece), 851"
+pendik,bari,1755.0,via Corinth Canal,755,15.1,0.02,770.1,1426.3,23.0,yes,ok,"Bari, Italy (via Corinth Canal), 755"
+pendik,patras,1450.0,south of Greece,648,-27.2,0.044,620.8,1149.8,26.1,yes,komsu limandan zincirlendi: PATRAI->Derince 648 nm,"Derince, Turkey (south of Greece), 648"
+yalova,sete,3100.0,,1442,25.6,0.017,1467.6,2718.1,14.1,yes,ok,"Sete, France, 1,442"
+mersin,trieste,2750.0,south of Greece,1260,46.4,0.036,1306.4,2419.5,13.7,yes,komsu limandan zincirlendi: MERSIN->Pula 1260 nm,"Pula, Croatia (south of Greece), 1,260"
+trieste,patras,1225.0,tek rota,555,46.4,0.077,601.4,1113.8,10.0,yes,komsu limandan zincirlendi: PATRAI->Pula 555 nm,"Pula, Croatia, 555"
