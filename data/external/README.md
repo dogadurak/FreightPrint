@@ -115,3 +115,89 @@ konteyner gemisi değerine yakın" notunu taşıyordu. MRV bunu şüpheden gözl
 çeviriyor: dönemdeki **234 doğrulanmış ro-ro gemisinin hiçbiri** o kadar temiz değil
 (medyanın 0,24 katı). Bu esasla fiyatlanan bir rapor deniz ayağını yaklaşık dört kat
 eksik gösteriyor.
+
+---
+
+# Faz 9.0 — kaynak fizibilitesi
+
+Bu bölüm veri değil, **kaynak testi** kaydı. Projede Faz 0 aynı işi yapmış ve işe
+yaramıştı (searoute'un Korint hatası ve PortWatch'un yanlış adresi orada çıkmıştı), o
+yüzden ağ ve demiryolu işine başlamadan önce her aday kaynak *indirilmeyi deneyerek*
+sınandı. Çıkmaz çıkanlar da burada: bulunamadığını yazmak, aramamış gibi yapmaktan iyidir.
+
+Test tarihi: **26 Ağustos 2026.**
+
+## ERA RINF — AÇIK, kimlik doğrulaması yok ✅
+
+Avrupa Birliği Demiryolu Ajansı'nın **Altyapı Kaydı**: 2019/777 sayılı Uygulama
+Tüzüğü'nün zorunlu kıldığı, altyapı işletmecilerinin kendi bildirdiği resmî kayıt.
+
+**Adres bulmak işin kendisiydi**, çünkü belgelenen yollar kapalı:
+
+| Denenen | Sonuç |
+|---|---|
+| `data-interop.era.europa.eu` (topluluk projelerinin işaret ettiği) | **DNS'te yok** — adres ölmüş |
+| `rinf.data.era.europa.eu/sparql` | JavaScript uygulaması, API değil |
+| `rinf.data.era.europa.eu/api/v1/openapi.json` | **401** — belgelenen API kimlik istiyor |
+| **`graph.data.era.europa.eu/repositories/rinf-plus`** | **200, açık, 47,4 milyon üçlü** |
+
+Sonuncusu, RINF web uygulamasının kendi `main.js` paketi okunarak bulundu — THETIS-MRV'de
+de aynı şey yapılmıştı. GraphDB deposu, standart SPARQL, anahtar gerekmiyor.
+
+**İçinde bu projenin ihtiyaç duyduğu her şey var:**
+
+| Ne | Sayı / alan |
+|---|---|
+| `OperationalPoint` (düğüm) | 60.571 — `opName`, `uopid`, `opType`, `inCountry` |
+| Koordinat | `geosparql:hasGeometry` → `asWKT`, ör. `POINT(18.7305 45.23)` |
+| `SectionOfLine` (kenar) | 69.457 — `opStart`, `opEnd`, **`lengthOfSectionOfLine`** (km) |
+| Hız | `Track` üstünde **`maximumPermittedSpeed`** |
+| TEN-T | `TENTCorridor` 176.761, `TENCorridor` 113.995 |
+
+Yani **resmî uzunluklarla rotalanabilir bir demiryolu grafiği** ve gerçek izin verilen
+hız. `schedule.py`'deki `RAIL_SPEED_KMH = 40.0` sabitinin yerine ölçülmüş değer koyulabilir.
+
+Projenin kendi terminalleri arandı, dördü de bulundu:
+
+```
+AT01080  Wels Vbf                  IT03471  TRIESTE CAMPO MARZIO
+DE95937  Duisburg Hbf              CZ34414  Ostrava-Kuncice
+```
+
+**Bilinen sınır — 27 ülke, Türkiye ve Sırbistan yok.** RINF bir AB/AEA kaydı; Türkiye
+altyapı işletmecisi bildirim yapmıyor. Almanya 23.932, Fransa 13.443, Çekya 3.905,
+İtalya 3.640, Romanya 2.329, Avusturya 1.489, Bulgaristan 350 kesim — ama `TUR` ve `SRB`
+hiç yok.
+
+Pratik sonucu net: mevcut 7 demiryolu bacağının **6'sı** (Trieste çıkışlı hepsi) resmî
+kayıttan kaynaklandırılabilir; **Halkalı–Chitila** bacağının Türkiye ayağı kaynaklanamaz.
+Bu, Eurostat boş dönüş verisindeki durumun birebir aynısı — ve çözümü de aynı olacak:
+ikame etmek değil, **kapsamı ölçüp yazmak.**
+
+## UN/LOCODE — indirilebilir, ama kaynağı netleştirilmeli ⚠️
+
+Liman ve terminal kodları, koordinatlarıyla; `Function` sütunu bir yerin liman mı,
+demiryolu terminali mi, karayolu terminali mi olduğunu söylüyor — terminal
+kaynaklandırması için doğrudan uygun.
+
+İki kopya da indi, **ama boyutları tutmuyor**: `datasets/un-locode` (GitHub) 2,0 MB,
+`datahub.io` 7,3 MB. İkisi de UNECE'nin kendisi değil, topluluk aynası. Bu projenin
+kuralı gereği kullanılmadan önce UNECE'nin kendi yayınına bağlanması ve sürümün
+sabitlenmesi gerekiyor. **Faz 9.1'in ilk işi bu.**
+
+## TEN-T / TENtec — çözülmedi ⏳
+
+`ec.europa.eu/transport/infrastructure/tentec/tentec-portal/api/` → **404**.
+`data.europa.eu` arama API'si çalışıyor (200, JSON), yani veri kümesi oradan aranabilir
+ama hangi katmanın indirilebilir olduğu henüz bilinmiyor. RINF zaten `TENTCorridor`
+taşıdığı için bu, muhtemelen ayrı bir kaynağa gerek bırakmayacak.
+
+## OpenStreetMap / Overpass — yedek plana düştü ⏳
+
+Çağrı biçimim yüzünden 406 döndü, kapalı olduğu anlamına gelmiyor. Ama RINF açık çıktığı
+için OSM artık **10b yedeği**: resmî kayıt varken kalabalık kaynaklı veriyi esas almanın
+gerekçesi yok. Türkiye ayağı için tekrar gündeme gelebilir — RINF'in görmediği tek yer orası.
+
+## Deniz mesafesine hakem — henüz aranmadı ⏳
+
+Faz 11. Çıkmaz çıkması da geçerli bir sonuç sayılacak.
