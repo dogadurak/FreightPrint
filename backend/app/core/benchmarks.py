@@ -545,3 +545,47 @@ def check_sea_distance(from_id: str | None, to_id: str | None) -> SeaDistanceChe
         return None
     checks = load_sea_distances()
     return checks.get((from_id, to_id)) or checks.get((to_id, from_id))
+
+
+# ── the rail distance, measured on track rather than typed ────────────────────
+
+# OpenStreetMap track through the OpenRailRouting service, cross-checked against ERA RINF
+# on the legs RINF can route by itself. `scripts/import_openrail.py` writes both, so the
+# corroboration is re-run whenever the distances are.
+#
+# RINF is the better source and cannot do this corridor: Austria files 1,402 operational
+# points joined by 1,334 sections, and every rail leg here crosses it. Where RINF's
+# filing is whole the two agree to 0.7% over 500 km, which is what makes the
+# crowd-sourced network usable for the rest.
+OPENRAIL = EXTERNAL_DIR / "rail_distances_osm.csv"
+
+
+@lru_cache(maxsize=1)
+def load_rail_distances(path: Path | None = None) -> dict[tuple[str, str], float]:
+    """Measured track kilometres per leg, empty if the corroboration failed.
+
+    An all-or-nothing read on purpose. The OSM figures are only evidence because RINF
+    agrees with them where it can; if that stops holding, the right answer is to report
+    nothing rather than to report numbers whose backing has gone.
+    """
+    path = path or OPENRAIL
+    if not path.exists():
+        return {}
+    measured: dict[tuple[str, str], float] = {}
+    with open(path, encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    if any(row["kind"] == "cross_check" and row["agrees"] == "no" for row in rows):
+        return {}
+    for row in rows:
+        if row["kind"] != "corridor" or not row["osm_km"]:
+            continue
+        origin, destination = row["leg"].split("->")
+        measured[(origin, destination)] = float(row["osm_km"])
+    return measured
+
+
+def check_rail_distance(from_id: str | None, to_id: str | None) -> float | None:
+    if not from_id or not to_id:
+        return None
+    measured = load_rail_distances()
+    return measured.get((from_id, to_id)) or measured.get((to_id, from_id))

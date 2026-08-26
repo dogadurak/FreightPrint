@@ -903,7 +903,7 @@ def test_a_computed_road_distance_claims_no_service_table_source(client):
 def test_the_sea_distance_comparison_reaches_a_caller(client):
     """Sea is 87% of this corridor's emissions and its distance had one cross-check in
     total. Six now exist and every one says the service table reads high."""
-    legs = _multimodal(client)["sea_distances"]
+    legs = [d for d in _multimodal(client)["sea_distances"] if d["mode"] == "sea"]
 
     assert legs, "the comparison built for the biggest lever reaches nobody"
     leg = legs[0]
@@ -918,7 +918,7 @@ def test_the_engine_still_prices_with_the_carriers_figure(client):
     the report it is validated against."""
     alternative = _multimodal(client)
     sea_leg = next(leg for leg in alternative["legs"] if leg["mode"] == "sea")
-    comparison = alternative["sea_distances"][0]
+    comparison = next(d for d in alternative["sea_distances"] if d["mode"] == "sea")
 
     assert sea_leg["distance_km"] == comparison["engine_km"]
     assert sea_leg["distance_km"] != comparison["published_km"]
@@ -928,7 +928,7 @@ def test_the_published_half_of_the_comparison_is_declared(client):
     """Pub 151 lists neither Pendik nor Yalova, so Istanbul stands for them and the hop is
     measured from coordinates. Small here — but a figure that stops saying so stops being
     one, which is how the Pendik offset was assumed at twice its real size."""
-    leg = _multimodal(client)["sea_distances"][0]
+    leg = next(d for d in _multimodal(client)["sea_distances"] if d["mode"] == "sea")
 
     assert leg["published_nm"] > 0
     assert leg["estimated_share"] < 0.10
@@ -941,3 +941,26 @@ def test_an_all_road_option_has_no_sea_distance_to_compare(client):
     road = next(a for a in payload["alternatives"] if a["is_all_road"])
 
     assert road["sea_distances"] == []
+
+
+def test_the_rail_distance_is_measured_too_and_runs_the_other_way(client):
+    """The service table reads *short* on rail, where it reads long on sea, so the two
+    corrections partly cancel: applying both moves the multimodal penalty from +19.4% to
+    +10.4% rather than to the +7.3% the sea correction alone suggests. A finding that
+    survives corrections pulling in opposite directions is a sturdier one."""
+    rail = [d for d in _multimodal(client)["sea_distances"] if d["mode"] == "rail"]
+
+    assert rail, "rail was measured and reaches nobody"
+    assert rail[0]["delta_pct"] < 0, "the rail table no longer reads short"
+    assert "RINF" in rail[0]["source"], "the corroboration is not named"
+
+
+def test_the_engine_prices_rail_with_the_table_too(client):
+    """Same decision as the sea leg: the measurement is reported beside the assumption,
+    never substituted for it."""
+    alternative = _multimodal(client)
+    rail_leg = next(leg for leg in alternative["legs"] if leg["mode"] == "rail")
+    comparison = next(d for d in alternative["sea_distances"] if d["mode"] == "rail")
+
+    assert rail_leg["distance_km"] == comparison["engine_km"]
+    assert rail_leg["distance_km"] != comparison["published_km"]

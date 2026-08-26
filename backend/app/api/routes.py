@@ -24,6 +24,7 @@ from ..core.backhaul import DEFAULT_REPOSITION_RADIUS_KM, find_backhauls
 from ..core.benchmarks import (
     MRV_SCOPE,
     BenchmarkUnavailable,
+    check_rail_distance,
     check_sea_distance,
     compare_sea_factor,
     corridor_empty_running,
@@ -526,12 +527,29 @@ def _sea_distances_out(route) -> list[SeaDistanceOut]:
     """
     out = []
     for leg in route.legs:
+        if leg.mode == "rail":
+            # Measured on OpenStreetMap track and corroborated against ERA RINF where
+            # RINF's own filing is whole. The rail figures run the other way from the sea
+            # ones - the service table reads *short* here - so the two corrections
+            # partly cancel, which is worth seeing side by side rather than one at a time.
+            measured = check_rail_distance(leg.from_id, leg.to_id)
+            if measured is None:
+                continue
+            out.append(SeaDistanceOut(
+                mode="rail", from_terminal=leg.from_id or "", to_terminal=leg.to_id or "",
+                engine_km=round(leg.distance_km, 1), published_km=round(measured, 1),
+                delta_pct=round((leg.distance_km - measured) / measured * 100, 1),
+                source="OpenStreetMap / OpenRailRouting, ERA RINF ile capraz kontrollu",
+            ))
+            continue
         if leg.mode != "sea":
             continue
         check = check_sea_distance(leg.from_id, leg.to_id)
         if check is None:
             continue
         out.append(SeaDistanceOut(
+            mode="sea",
+            source="NGA Pub. 151, Distances Between Ports",
             from_terminal=check.from_terminal, to_terminal=check.to_terminal,
             engine_km=round(leg.distance_km, 1),
             published_km=check.published_km,

@@ -108,6 +108,11 @@ def mentions(field: str) -> list[str]:
         result = subprocess.run(
             ["grep", "-rnw", "--include=*.py", "--include=*.js", field, directory],
             capture_output=True, text=True, cwd=REPO,
+            # The files being searched carry Turkish text and arrows, and on Windows the
+            # default console codepage cannot decode them - grep's output then killed the
+            # reader thread and the whole check with it. Replacing an undecodable byte is
+            # right here: this only ever looks for a field name in the line.
+            encoding="utf-8", errors="replace",
         )
         for line in result.stdout.splitlines():
             parts = line.split(":", 2)

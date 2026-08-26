@@ -214,7 +214,11 @@ class DistanceBasisOut(BaseModel):
 
 
 class SeaDistanceOut(BaseModel):
-    """One sea leg's distance, as the carrier gives it and as NGA Pub. 151 surveys it.
+    """One leg's distance, as the engine has it and as an outside source measures it.
+
+    Covers sea and rail rather than sea alone: the question is the same one — does the
+    figure in the service table match something measured outside this project — and a
+    second card asking it again would be a second card.
 
     Reported beside the engine's figure and never substituted for it, on the same footing
     as the Eurostat empty-running survey and the EU MRV fleet. The two answer different
@@ -222,17 +226,19 @@ class SeaDistanceOut(BaseModel):
     collapsing them would lose the disagreement, which is the part worth reading.
     """
 
+    mode: str
     from_terminal: str
     to_terminal: str
     engine_km: float
     published_km: float
     delta_pct: float
-    # The published figure and the hop added to reach a terminal Pub 151 does not list,
-    # kept apart so a reader can see how much of the comparison is survey.
-    published_nm: float
-    estimated_nm: float
-    estimated_share: float
-    is_representative: bool
+    source: str = ""
+    # Sea only: the published figure and the hop added to reach a terminal Pub 151 does
+    # not list, kept apart so a reader can see how much of the comparison is survey.
+    published_nm: float = 0.0
+    estimated_nm: float = 0.0
+    estimated_share: float = 0.0
+    is_representative: bool = True
     via: str = ""
     source_line: str = ""
 

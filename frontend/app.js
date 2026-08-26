@@ -3176,7 +3176,7 @@ function renderSeaDistance(alternative) {
   if (!legs.length) { card.hidden = true; return; }
 
   $("sea-distance-note").textContent =
-    "NGA Pub. 151, Distances Between Ports — Yunanistan'ın güneyinden";
+    [...new Set(legs.map((l) => l.source))].join(" · ");
 
   slot.replaceChildren(...legs.flatMap((leg) => {
     const pct = leg.delta_pct;
@@ -3187,7 +3187,8 @@ function renderSeaDistance(alternative) {
       ]),
       el("div", { class: "hub-figure" }, [
         el("span", { class: "hub-value" }, `${nf.format(leg.published_km)} km`),
-        el("span", { class: "hub-label" }, "yayının ölçtüğü"),
+        el("span", { class: "hub-label" },
+          leg.mode === "sea" ? "yayının ölçtüğü" : "hat üzerinde ölçülen"),
       ]),
       el("div", { class: "hub-figure" }, [
         el("span", { class: "hub-value warn" }, `%${pct > 0 ? "+" : ""}${pct.toFixed(1)}`),
@@ -3198,11 +3199,16 @@ function renderSeaDistance(alternative) {
     // How much of the published side is survey and how much is our own geometry. Pub 151
     // does not list Pendik or Yalova, so Istanbul stands for them and the hop is measured
     // from coordinates — small here, but a figure that stops saying so stops being one.
-    const share = el("p", { class: "provenance" },
-      `Yayında birebir yazan: ${nf.format(leg.published_nm)} deniz mili. `
-      + `Terminale ulaşmak için eklenen ölçülmüş fark: ${leg.estimated_nm > 0 ? "+" : ""}`
-      + `${leg.estimated_nm.toFixed(1)} deniz mili — cevabın %`
-      + `${(leg.estimated_share * 100).toFixed(1)}'i.`);
+    // Sea only: the published half of the figure, apart from the hop this project added
+    // to reach a terminal the publication does not list. Rail is routed to the terminal
+    // itself, so it has no such split.
+    const share = leg.mode === "sea"
+      ? el("p", { class: "provenance" },
+          `Yayında birebir yazan: ${nf.format(leg.published_nm)} deniz mili. `
+          + `Terminale ulaşmak için eklenen ölçülmüş fark: ${leg.estimated_nm > 0 ? "+" : ""}`
+          + `${leg.estimated_nm.toFixed(1)} deniz mili — cevabın %`
+          + `${(leg.estimated_share * 100).toFixed(1)}'i.`)
+      : null;
 
     const line = leg.source_line
       ? el("p", { class: "provenance" }, [
@@ -3212,12 +3218,13 @@ function renderSeaDistance(alternative) {
       : null;
 
     return [
-      el("h3", { class: "sea-distance-leg" }, `${leg.from_terminal} → ${leg.to_terminal}`),
+      el("h3", { class: "sea-distance-leg" },
+        `${leg.mode === "sea" ? "Deniz" : "Demiryolu"} — ${leg.from_terminal} → ${leg.to_terminal}`),
       figures,
       el("p", { class: "hint" },
         "Motor taşıyıcının rakamıyla fiyatlıyor; bu, yerine geçen değil yanında duran "
         + "bir gözlem. Boş dönüş ve ro-ro faktöründe olduğu gibi."),
-      share,
+      ...(share ? [share] : []),
       ...(line ? [line] : []),
     ];
   }));
