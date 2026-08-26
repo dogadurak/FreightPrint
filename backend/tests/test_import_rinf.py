@@ -77,9 +77,9 @@ def wired(tmp_path, monkeypatch):
     # that does not file to the register.
     mapping = tmp_path / "map.csv"
     mapping.write_text(
-        "terminal_id,uopid,op_name,country,basis,alternatives,note\n"
-        "alfa,opA,Alfa Vbf,IT,freight station,none,chosen for the yard\n"
-        "beta,opB,Beta Gbf,AT,freight station,none,chosen for the yard\n",
+        "terminal_id,uopid,op_name,country,basis,alternatives,osm_search,is_verified,note\n"
+        "alfa,opA,Alfa Vbf,IT,freight station,none,^Alfa Vbf$,yes,chosen for the yard\n"
+        "beta,opB,Beta Gbf,AT,freight station,none,^Beta Gbf$,yes,chosen for the yard\n",
         encoding="utf-8",
     )
 
@@ -169,21 +169,37 @@ def test_the_chosen_operational_point_is_named_in_every_row(wired):
 
 
 def test_an_unverified_endpoint_choice_is_declared(wired):
-    """Two of the real terminals are tied to a city's main station because the freight
-    terminal could not be found by name. That is a weaker claim and must not read as a
-    sourced one."""
+    """A terminal tied to a city's main station because the freight terminal could not be
+    found is a weaker claim, and must not read as a sourced one."""
     mapping = import_rinf.TERMINAL_MAP
     mapping.write_text(
         mapping.read_text(encoding="utf-8").replace(
-            "chosen for the yard,", "chosen for the yard,", 1
-        ).replace("beta,opB,Beta Gbf,AT,freight station,none,chosen for the yard",
-                  "beta,opB,Beta Gbf,AT,central station,none,UNVERIFIED CHOICE placeholder"),
+            "beta,opB,Beta Gbf,AT,freight station,none,^Beta Gbf$,yes,",
+            "beta,opB,Beta Gbf,AT,central station,none,^Beta Gbf$,no,"),
         encoding="utf-8",
     )
 
     import_rinf.derive()
 
     assert rows()[("alfa", "beta")]["is_verified_choice"] == "no"
+
+
+def test_a_note_that_merely_discusses_an_unverified_choice_is_not_one(wired):
+    """The flag used to be a substring search for "UNVERIFIED" over the free-text note.
+    Correcting Koln and Duisburg meant writing notes that *explain* the earlier unverified
+    choice, and those notes tripped the search - a sourced row would have been published
+    as unsourced. The flag has its own column now."""
+    mapping = import_rinf.TERMINAL_MAP
+    mapping.write_text(
+        mapping.read_text(encoding="utf-8").replace(
+            "yes,chosen for the yard",
+            "yes,was an UNVERIFIED CHOICE until the name search was fixed", 1),
+        encoding="utf-8",
+    )
+
+    import_rinf.derive()
+
+    assert rows()[("alfa", "beta")]["is_verified_choice"] == "yes"
 
 
 def test_only_rail_legs_are_derived(wired):

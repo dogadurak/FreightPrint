@@ -36,6 +36,11 @@ import math
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import speak_utf8  # noqa: E402
+
+speak_utf8()
+
 REPO = Path(__file__).resolve().parent.parent
 RAW = REPO / "data" / "external" / "rinf_rail_graph.json"
 OUT = REPO / "data" / "external" / "rail_distances_rinf.csv"
@@ -70,7 +75,7 @@ PAGE = 5000
 # distance: the endpoints are chosen by a person, the kilometres between them come from
 # the register.
 #
-# Rows whose `basis` is UNVERIFIED are exactly that, and say so in the output.
+# Rows carrying `is_verified=no` are exactly that, and say so in the output.
 TERMINAL_MAP = REPO / "data" / "rinf_terminal_map.csv"
 
 
@@ -281,6 +286,36 @@ def _is_plausible(countries: str) -> bool:
     return 0 < len(countries.split()) <= MAX_PLAUSIBLE_COUNTRIES
 
 
+def find_by_name(term: str, limit: int = 40) -> list[tuple[str, str]]:
+    """Every operational point whose label contains `term`, deduplicated by uopid.
+
+    This exists because its absence produced a wrong entry in the terminal map. The
+    first pass searched the *located* points - the ones carrying coordinates - and
+    Germany publishes none, so "Koln Eifeltor" and "Duisburg Hafen" came back empty and
+    were written down as "did not appear by name". They are both in the register. The
+    search was looking at 2,700 of 60,571 points.
+
+    Labels are versioned: the same point appears once per validity period. Only the
+    identifier and the name matter here, so the periods are collapsed.
+    """
+    rows = _query(f"""
+        SELECT DISTINCT ?uopid ?label WHERE {{
+          ?op a <{ERA}OperationalPoint> ;
+              <{ERA}uopid> ?uopid ;
+              <http://www.w3.org/2000/01/rdf-schema#label> ?label .
+          FILTER(CONTAINS(LCASE(STR(?label)), "{term.lower()}"))
+        }} ORDER BY ?label LIMIT {limit * 4}""")
+    seen = {}
+    for row in rows:
+        uopid = row["uopid"]["value"]
+        if uopid in seen:
+            continue
+        # "Koln Eifeltor (from 2026-01-01 until 2026-12-31)" -> "Koln Eifeltor"
+        label = row["label"]["value"].split(" (from ")[0]
+        seen[uopid] = label
+    return sorted(seen.items(), key=lambda pair: pair[1])[:limit]
+
+
 def load_terminal_map() -> dict[str, dict]:
     """Which operational point stands for each terminal, and on what grounds."""
     if not TERMINAL_MAP.exists():
@@ -334,7 +369,9 @@ def derive() -> int:
 
         a, b = mapping[start], mapping[end]
         # A choice the map itself flags as unverified must not be presented as sourced.
-        verified = not any("UNVERIFIED" in m["note"].upper() for m in (a, b))
+        # Read from its own column: this was a substring search over the free-text note,
+        # which a note that merely *discusses* an earlier unverified choice would trip.
+        verified = all(m["is_verified"] == "yes" for m in (a, b))
         row.update({
             "from_opid": a["uopid"], "to_opid": b["uopid"],
             "from_op_name": a["op_name"], "to_op_name": b["op_name"],
@@ -425,8 +462,16 @@ def main() -> int:
     parser.add_argument("--fetch", action="store_true", help="once grafigi indir")
     parser.add_argument("--check", action="store_true",
                         help="islenmis CSV hala ham grafikle ayni mi, hicbir sey yazma")
+    parser.add_argument("--find", metavar="AD",
+                        help="isletme noktalarini ada gore ara (terminal esleme icin)")
     args = parser.parse_args()
 
+    if args.find:
+        matches = find_by_name(args.find)
+        print(f"{len(matches)} isletme noktasi: {args.find!r}")
+        for uopid, label in matches:
+            print(f"  {uopid:8} {label}")
+        return 0
     if args.fetch:
         fetch()
     if args.check:
