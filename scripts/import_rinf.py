@@ -186,19 +186,36 @@ def rail_legs() -> list[tuple[str, str, float]]:
         ]
 
 
-# The graph is not yet complete enough to route across borders, and this is how that
-# shows up.
+# **One country's filing is broken, and it is the one every leg of this corridor crosses.**
 #
-# Every section resolves and every section carries a length, but the network they form
-# has 94 connected components and an average degree of 2.19 — too sparse for a railway.
-# Trieste to Wels comes back as IT-SI-HU-SK-AT over 182 sections: the Tarvisio crossing
-# straight into Austria is not in the graph, so the shortest path available is a lap
-# around the Alps. It is a real path over real sections, and it is not the railway.
+# This is the finding of Faz 10a, and it took three wrong answers to reach. The method is
+# sound: inside a well-filed network the register is accurate to a few per cent — Köln Hbf
+# to Regensburg Hbf comes back as 498.5 km over 137 sections against a real ~500, and
+# Duisburg to Köln as 60.3 km against a real ~65.
 #
-# So a route whose country sequence is longer than this is marked suspect rather than
-# published as a distance. Four countries is generous for a corridor that crosses at most
-# Italy, Austria and one neighbour; a route touching more has almost certainly detoured.
+# What fails is the data. Counting connected components per country over the corridor
+# download:
+#
+#     RO/EL/BG/PL/CZ/SI 100%   HU/DE 99%   SK 96%   HR 93%   IT 89%   **AT 23%**
+#
+# Eleven of twelve countries file a network that is essentially whole. Austria files 1,402
+# operational points joined by only 1,334 sections — fewer edges than nodes — leaving 95
+# islands, the largest holding 23% of the country. Arnoldstein sits in a 32-point island;
+# Wels is in the main one; nothing joins them inside Austria.
+#
+# So Trieste to Wels crosses the border correctly at Tarvisio, arrives at Thörl-Maglern,
+# and finds no Austrian railway to continue on. Dijkstra does what it must and goes back
+# into Italy, round through Slovenia, Hungary and Slovakia, and enters Austria from the
+# far side: 182 sections, all real, adding to a route no train has ever run.
+#
+# A route touching more countries than this has detoured, so it is marked rather than
+# published. Four is generous for a corridor crossing at most Italy, Austria and one
+# neighbour.
 MAX_PLAUSIBLE_COUNTRIES = 4
+
+# Below this share in one component, a country's filing cannot carry a long-distance
+# route and any distance crossing it is an artefact. Austria is at 0.23.
+MIN_NETWORK_INTEGRITY = 0.80
 
 # The 14 EU-prefixed points are border installations rather than a country of their own,
 # so they do not count towards the total.
@@ -213,6 +230,51 @@ def _country_sequence(path: list[str]) -> list[str]:
         if code != BORDER_PREFIX and (not sequence or sequence[-1] != code):
             sequence.append(code)
     return sequence
+
+
+def border_pairs(graph) -> set[frozenset]:
+    """Which country pairs the register actually joins.
+
+    A border crossing in RINF is an `EU`-prefixed operational point with a section
+    reaching it from each side. The corridor download carries 19 such pairs, and the
+    Tarvisio crossing is among them: EU00116 joins IT03015 Tarvisio Boscoverde to AT03665
+    Thörl-Maglern, 0.81 km and 5.46 km either side, exactly as the railway does.
+
+    So the borders are not the problem, and an earlier reading of this that blamed them
+    was wrong. See NETWORK_INTEGRITY for what actually breaks the routing.
+    """
+    pairs = set()
+    for node in graph:
+        if not node.startswith(BORDER_PREFIX):
+            continue
+        touching = {n[:2] for n in graph[node] if not n.startswith(BORDER_PREFIX)}
+        for a in touching:
+            for b in touching:
+                if a != b:
+                    pairs.add(frozenset((a, b)))
+    return pairs
+
+
+def network_integrity(graph) -> dict[str, tuple[float, int, int]]:
+    """How whole each country's filed network is: (largest share, points, components).
+
+    The diagnostic that explains every suspect row, and the one worth reporting on its
+    own. It is measured from the download rather than asserted, so it stays true when
+    a country improves its filing.
+    """
+    import networkx as nx
+
+    report = {}
+    for code in sorted({n[:2] for n in graph} - {BORDER_PREFIX}):
+        sub = graph.subgraph([n for n in graph if n.startswith(code)])
+        if not sub:
+            continue
+        components = sorted(nx.connected_components(sub), key=len, reverse=True)
+        report[code] = (
+            len(components[0]) / sub.number_of_nodes(), sub.number_of_nodes(),
+            len(components),
+        )
+    return report
 
 
 def _is_plausible(countries: str) -> bool:
@@ -318,10 +380,22 @@ def derive() -> int:
               f"elle {row['reference_km']:>6.0f} km | RINF {row['rinf_km']:>7.1f} km "
               f"| fark {row['delta_pct']:+6.1f}%  {row['route_countries']}{mark}")
 
+    integrity = network_integrity(graph)
+    broken = {c: v for c, v in integrity.items() if v[0] < MIN_NETWORK_INTEGRITY}
+    print(f"\n  Ag butunlugu (en buyuk bilesenin ulkedeki payi):")
+    print("    " + "  ".join(
+        f"{c} %{share * 100:.0f}" for c, (share, _, _) in sorted(
+            integrity.items(), key=lambda kv: -kv[1][0])
+    ))
+    for code, (share, points, components) in sorted(broken.items(), key=lambda kv: kv[1][0]):
+        print(f"    {code}: {points} nokta {components} adaya bolunmus, en buyugu "
+              f"%{share * 100:.0f} — bu ulkeden gecen hicbir mesafe guvenilir degil")
+
     if suspect:
         print(f"\n  {len(suspect)} bacak sinir sapmasi gosteriyor: yol gercek "
-              f"kesimlerden olusuyor ama demiryolundan degil. Grafikte eksik sinir "
-              f"baglantisi var; bu mesafeler kullanilmamalidir.")
+              f"kesimlerden olusuyor ama demiryolundan degil. Sinir gecisleri kayitta "
+              f"var ({len(border_pairs(graph))} ulke cifti); kirik olan ulusal aglar.")
+        print("  Bu mesafeler kullanilmamalidir.")
     unverified = [r for r in routed if r["is_verified_choice"] == "no"]
     if unverified:
         print(f"\n  {len(unverified)} bacak, hangi isletme noktasinin terminal oldugu "

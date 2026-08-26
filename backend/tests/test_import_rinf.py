@@ -309,3 +309,72 @@ def test_a_border_detour_is_flagged_rather_than_published():
                 f"{row['from_terminal']}->{row['to_terminal']} claims "
                 f"{row['status']} over {row['route_countries']}"
             )
+
+
+def test_the_method_is_right_where_the_filing_is_complete():
+    """The evidence that makes the negative result credible.
+
+    A derivation that produced only wrong answers could be a broken derivation. Inside
+    Germany's network - 99% of it in one component - the register agrees with reality to
+    a few per cent. So when the same code returns 748 km for a 420 km leg, the code is
+    not what is wrong.
+    """
+    if not import_rinf.RAW.exists():
+        pytest.skip("rinf graph not present locally")
+
+    import networkx as nx
+
+    raw = json.loads(import_rinf.RAW.read_text(encoding="utf-8"))
+    graph = nx.Graph()
+    for edge in raw["edges"]:
+        existing = graph.get_edge_data(edge["start"], edge["end"], {}).get("km")
+        if existing is None or edge["km"] < existing:
+            graph.add_edge(edge["start"], edge["end"], km=edge["km"])
+
+    # Köln Hbf to Regensburg Hbf, which is about 500 km of railway.
+    path = nx.shortest_path(graph, "DE000KK", "DE00NRH", weight="km")
+    km = nx.path_weight(graph, path, weight="km")
+
+    assert 450 < km < 550, f"a domestic German route came back as {km:.0f} km"
+    assert import_rinf._country_sequence(path) == ["DE"], "left the country to cross it"
+
+
+def test_the_broken_filing_is_measured_rather_than_asserted():
+    """Austria files 1,402 operational points joined by 1,334 sections - fewer edges than
+    nodes - so its network is 95 islands and the largest holds under a quarter of it.
+    Every rail leg in this corridor crosses Austria, which is why none of them can be
+    sourced yet.
+
+    Measured from the download, so the day Austria files the missing sections this test
+    fails and the finding gets revisited rather than repeated from memory.
+    """
+    if not import_rinf.RAW.exists():
+        pytest.skip("rinf graph not present locally")
+
+    import networkx as nx
+
+    raw = json.loads(import_rinf.RAW.read_text(encoding="utf-8"))
+    graph = nx.Graph()
+    for edge in raw["edges"]:
+        graph.add_edge(edge["start"], edge["end"], km=edge["km"])
+    integrity = import_rinf.network_integrity(graph)
+
+    assert integrity["AT"][0] < import_rinf.MIN_NETWORK_INTEGRITY
+    whole = [c for c, (share, _, _) in integrity.items()
+             if share >= import_rinf.MIN_NETWORK_INTEGRITY]
+    assert len(whole) >= 10, "the problem is no longer specific to one country"
+
+
+def test_the_tarvisio_border_is_present_and_not_the_problem():
+    """Pinned because this was read wrong once. The Italy-Austria crossing is filed:
+    EU00116 joins Tarvisio Boscoverde to Thörl-Maglern. Blaming the border sent the
+    investigation in the wrong direction for an hour."""
+    if not import_rinf.RAW.exists():
+        pytest.skip("rinf graph not present locally")
+
+    raw = json.loads(import_rinf.RAW.read_text(encoding="utf-8"))
+    edges = {(e["start"], e["end"]) for e in raw["edges"]}
+    edges |= {(b, a) for a, b in edges}
+
+    assert ("EU00116", "IT03015") in edges
+    assert ("EU00116", "AT03665") in edges

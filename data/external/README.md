@@ -221,15 +221,53 @@ mesafeler demiryolunun değil.**
 trieste->wels   elle 420 km | RINF 748,7 km | +78,3%   IT SI HU SK AT
 ```
 
-Yol İtalya'dan Slovenya, Macaristan ve Slovakya üzerinden Avusturya'ya gidiyor —
-Tarvisio'dan doğrudan geçiş grafikte yok. 182 kesimlik bu yolun her parçası gerçek, ama
-bütünü Alpler'in etrafından dolaşıyor. Grafikte **94 ayrı bileşen** ve ortalama **2,19
-derece** var; bir demiryolu ağı için fazla seyrek. Eksik olan sınır bağlantıları.
+Yol İtalya'dan Slovenya, Macaristan ve Slovakya üzerinden Avusturya'ya gidiyor.
+182 kesimin her biri gerçek, bütünü Alpler'in etrafından dolaşıyor.
+
+### Sebebi sınır değil — bir ülkenin bildirimi kırık
+
+Önce sınır geçişlerini suçladım, **yanlıştı.** Tarvisio geçişi kayıtta var ve doğru:
+`EU00116` noktası `IT03015` Tarvisio Boscoverde ile `AT03665` Thörl-Maglern'i 5,46 km ve
+0,81 km ile birleştiriyor — tam demiryolunun yaptığı gibi. Koridor indirmesinde 19 ülke
+çifti sınır noktasıyla bağlı.
+
+Asıl sebep, ülke ülke bileşen sayınca ortaya çıktı:
+
+| RO EL BG PL CZ SI | HU DE | SK | HR | IT | **AT** |
+|---|---|---|---|---|---|
+| %100 | %99 | %96 | %93 | %89 | **%23** |
+
+*(en büyük bileşenin ülkedeki payı)*
+
+On iki ülkenin on biri neredeyse bütün bir ağ bildiriyor. **Avusturya 1.402 işletme
+noktasını yalnızca 1.334 kesimle bağlıyor** — düğümden az kenar — ve ağ 95 adaya
+bölünüyor, en büyüğü ülkenin dörtte birinden azı. Arnoldstein 32 noktalık bir adada,
+Wels ana bileşende, ve Avusturya içinde birbirlerine bağlanmıyorlar.
+
+Yani tren sınırı Tarvisio'da doğru geçiyor, Thörl-Maglern'e varıyor ve devam edecek
+Avusturya demiryolunu bulamıyor. Dijkstra mecburen İtalya'ya dönüp Slovenya, Macaristan
+ve Slovakya üzerinden Avusturya'ya öbür uçtan giriyor.
+
+### Yöntemin doğru olduğunun kanıtı
+
+Bunun bir türetme hatası olmadığını göstermek gerekiyordu. Dolgun bildirilmiş bir ağın
+içinde kayıt birkaç yüzde hatayla doğru:
+
+| Bacak | RINF | Gerçek |
+|---|---|---|
+| Köln Hbf → Regensburg Hbf | **498,5 km** (137 kesim, hep DE) | ~500 km |
+| Duisburg Hbf → Köln Hbf | 60,3 km | ~65 km |
+| Wels Terminal → Lambach | 18,6 km | ~20 km |
+
+Aynı kod 420 km'lik bacağa 748 km diyorsa, kusurlu olan kod değil.
 
 Bu yüzden hiçbir satır `ok` demiyor: geçtiği ülke sayısı makul sınırı aşan her satır
 `supheli: sinir sapmasi` olarak işaretleniyor ve bir test bunu sabitliyor. **Mevcut elle
 yazılmış mesafeler yerinde kalıyor** — türetilenler onlardan daha iyi olduğu
 kanıtlanana kadar değiştirilmeyecek.
+
+Ağ bütünlüğü indirmeden **ölçülüyor**, ezberden yazılmıyor: Avusturya eksik kesimleri
+bildirdiği gün ilgili test kırılır ve bulgu tekrarlanmak yerine yeniden ele alınır.
 
 ### İki ek sınır
 
