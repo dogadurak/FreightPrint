@@ -32,6 +32,12 @@ jobs:
       - name: No sensitive file may be tracked
         run: python scripts/check_tracked_files.py
 
+      # A field parsed and then read by nothing is this project's most repeated defect:
+      # the honesty in data/ reaches nobody, and the file's promise goes unkept. Cheap to
+      # run and it has already caught three.
+      - name: Every field in data/ is used or excused in writing
+        run: python scripts/check_data_fields.py
+
   test:
     name: Tests
     runs-on: ubuntu-latest

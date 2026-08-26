@@ -59,6 +59,15 @@ class ScheduleStep:
     hours: float
     start_h: float
     is_estimated: bool = False
+    # Which published schedule these hours came from, where one exists.
+    #
+    # `service_legs.csv` carries a `schedule_source` column and eight of its thirteen
+    # rows leave it empty. The value was parsed into ServiceSchedule and read by nothing,
+    # so a transit time taken from a carrier's published timetable and one taken from a
+    # row with no source at all arrived at the reader identically. `is_estimated` says
+    # the hours were derived; this says whose timetable they were derived from, or that
+    # nobody's was.
+    source: str = ""
 
     @property
     def end_h(self) -> float:
@@ -165,6 +174,7 @@ def build_timeline(route: RouteAlternative, services: dict | None = None) -> Tim
             kind="transit", mode=leg.mode,
             label=f"{leg.from_name} → {leg.to_name}",
             hours=hours, start_h=cursor, is_estimated=estimated,
+            source=service.source if service else "",
         ))
         cursor += hours
         previous_mode = leg.mode

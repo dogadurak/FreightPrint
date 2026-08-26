@@ -239,11 +239,14 @@ def risk_zones() -> dict:
                     "zone_type": zone.zone_type,
                     "source": zone.source,
                     "valid_from": zone.valid_from,
+                    "valid_to": zone.valid_to,
                     "chokepoints": list(zone.chokepoints),
                 },
                 "geometry": zone.geometry.__geo_interface__,
             }
-            for zone in load_risk_zones()
+            # Lapsed areas are not drawn. A retired war-risk zone on the map is a claim
+            # about today that stopped being true.
+            for zone in load_risk_zones() if zone.is_current()
         ],
     }
 
@@ -295,7 +298,7 @@ def _timeline_out(route) -> TimelineOut:
             ScheduleStepOut(
                 kind=step.kind, mode=step.mode, label=step.label,
                 hours=round(step.hours, 1), start_h=round(step.start_h, 1),
-                is_estimated=step.is_estimated,
+                is_estimated=step.is_estimated, source=step.source,
             )
             for step in timeline.steps
         ],

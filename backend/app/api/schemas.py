@@ -128,6 +128,8 @@ class ScheduleStepOut(BaseModel):
     hours: float
     start_h: float
     is_estimated: bool = False
+    # The published timetable behind these hours, empty where the row names none.
+    source: str = ""
 
 
 class TimelineOut(BaseModel):

@@ -8,6 +8,7 @@ runs inside them, and which chokepoints it transits.
 
 import json
 from dataclasses import dataclass, field
+from datetime import date
 from functools import lru_cache
 from math import cos, hypot, radians
 from pathlib import Path
@@ -34,6 +35,23 @@ class RiskZone:
     valid_to: str | None
     chokepoints: tuple[str, ...]
     geometry: BaseGeometry
+
+    def is_current(self, today: str | None = None) -> bool:
+        """Whether this zone still applies.
+
+        `valid_to` was parsed and then honoured by nothing. No zone carries one today, so
+        nothing was being mis-reported — but the field exists precisely so a war-risk
+        area can be retired, and the first time somebody sets it the engine would have
+        gone on routing around a zone that had lapsed, and gone on telling the user it
+        was exposed. A date nobody checks is worse than no date, because it looks like
+        the question was considered.
+
+        Dates are ISO-8601, so string comparison is date comparison.
+        """
+        today = today or date.today().isoformat()
+        if self.valid_from and today < self.valid_from:
+            return False
+        return not (self.valid_to and today > self.valid_to)
 
 
 @dataclass
@@ -120,7 +138,10 @@ def assess_route(
     a different question this project does not answer. A sea leg with no track is
     reported as unassessed rather than assumed safe.
     """
+    # Lapsed zones are dropped here rather than at load, so a caller passing its own
+    # list gets the same treatment as one relying on the file.
     zones = zones if zones is not None else load_risk_zones()
+    zones = tuple(zone for zone in zones if zone.is_current())
     risk = RouteRisk()
     by_zone: dict[str, float] = {}
     union = unary_union([zone.geometry for zone in zones]) if zones else None
