@@ -1,0 +1,9 @@
+from_terminal,to_terminal,reference_km,via,nautical_miles,pub151_km,terminal_offset_km,adjusted_km,delta_pct,status,source_line
+pendik,trieste,2500.0,south of Greece,1162,2152.0,28.0,2180.0,14.7,ok,"Trieste, Italy (south of Greece), 1,162"
+pendik,trieste,2500.0,via Corinth Canal,1063,1968.7,28.0,1996.7,25.2,ok,"Trieste, Italy (via Corinth Canal), 1,063"
+pendik,bari,1755.0,south of Greece,851,1576.1,28.0,1604.1,9.4,ok,"Bari, Italy (south of Greece), 851"
+pendik,bari,1755.0,via Corinth Canal,755,1398.3,28.0,1426.3,23.0,ok,"Bari, Italy (via Corinth Canal), 755"
+pendik,patras,1450.0,,,,28.0,,,ISTANBUL listesinde Patrai yayimlanmamis,
+yalova,sete,3100.0,,1442,2670.6,47.5,2718.1,14.1,ok,"Sete, France, 1,442"
+mersin,trieste,2750.0,,637,1179.7,0.0,,,"elendi: 637 nm, kus ucusu 1077 nm'den kisa (blok tasmasi ya da kirpilma)","Trieste, Italy, 637"
+trieste,patras,1225.0,,,,0.0,,,TRIESTE listesinde Patrai yayimlanmamis,

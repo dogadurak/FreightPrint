@@ -285,3 +285,70 @@ kayıt veriyor.**
 **İki uç doğrulanmamış.** Köln Eifeltor ve Duisburg'un intermodal terminali ada göre
 bulunamadı; ikisi de şehrin ana garına bağlandı ve satırlarda `is_verified_choice=no`
 yazıyor. O mesafeler "terminale" değil "şehre" okunmalıdır.
+
+---
+
+## pub151.pdf + port_distances_pub151.csv — deniz mesafesine hakem
+
+| | |
+|---|---|
+| **Kaynak** | NGA Pub. 151, *Distances Between Ports*, 11. baskı |
+| **İndirme** | `msi.nga.mil/api/publications/download?key=16694076/SFH00000/Pub151bk.pdf` |
+| **Türetme** | `python scripts/import_pub151.py` (`--fetch` indirir, `--check` doğrular) |
+| **Lisans** | ABD hükümeti yayını, kamu malı |
+
+Deniz, bu koridorun emisyonunun **%87,4'ü**. Mesafesinin bağımsız kontrolü ise tek bir
+searoute karşılaştırmasıydı (n=1) ve projenin kendi bilinen sınırlar listesi Pendik–Bari
+için çözülemeyen %4'lük bir çelişki kaydediyordu. Pub 151 denizcilikte liman arası
+mesafenin standart referansı ve bu boşluğu dolduruyor.
+
+**Üstelik doğru ayrımı yapıyor.** Faz 0'ın bulgusu searoute'un ro-ro gemisinin geçemeyeceği
+Korint Kanalı'ndan rota kurmasıydı. Pub 151 ikisini ayrı yayımlıyor, yani yalnızca ikinci
+bir sayı değil, **doğru olanı** veriyor.
+
+### Ne bulundu
+
+Ro-ro gemisi Korint'ten geçemediğine göre karşılaştırma "Yunanistan'ın güneyinden":
+
+| Bacak | Projede | Pub 151 (+Marmara farkı) | Fark |
+|---|---|---|---|
+| pendik → trieste | 2.500 km | **2.180 km** | proje **+%14,7** |
+| pendik → bari | 1.755 km | **1.604 km** | proje **+%9,4** |
+| yalova → sete | 3.100 km | **2.718 km** | proje **+%14,1** |
+
+Üç bağımsız bacak, hepsi aynı yönde, %9–15 arası. Dağınıklık değil, **sistematik sapma.**
+
+Servis tablosu ile müşteri raporu Trieste'de aynı 2.500'ü kullanıyor, yani rakam keyfi
+değil taşıyıcının bildirdiği. İkisi de liman-limana ölçüyor, karşılaştırma geçerli.
+
+### Yapılmayanlar ve neden
+
+**Bu düzeltme motora uygulanmadı.** Uygulanırsa multimodal cezası **+%19,4'ten +%6,0'a**
+düşüyor — manşet bulgu ayakta kalıyor ama üçte birine iniyor. Önce şunlar çözülmeli:
+
+- **Ara liman uğrağı.** Tarifeli bir servis yol üstünde uğrarsa gerçek seyir direkt
+  mesafeden uzun olur. `service_legs.csv` bunu biliyor (pendik→patras satırı *"Patras
+  way-call"* diyor). Pendik→Trieste'de böyle bir not yok ama yokluğu kanıt değil.
+- **Altı bacağın üçünün hakemi yok.** Pub 151 her çifti yayımlamıyor: `PATRAI` başlığı
+  var ama kendi listesinde ne İstanbul ne Trieste geçiyor.
+
+### Ayrıştırmanın tuzakları — üçü de gerçekten yaşandı
+
+**Sütun kırılması.** İki sütunlu PDF, satırı sayısından ayırıyor:
+`Ancona, Italy (via Corinth Canal),` / `968` → naif okuma 96 deniz mili der.
+
+**Blok taşması.** Sonraki başlık bulunamayınca sabit uzunluğa düşmek, Mersin'in listesini
+komşu limana taşırdı ve `mersin→trieste 637 nm` üretti — %133 fark, en büyük "bulgu"
+gibi görünürdü. Mersin listesinde Trieste hiç yok.
+
+**Aynı adlı limanlar.** `Cartagena, Spain` yerine Kolombiya, `Portland, England` yerine
+Oregon. Yayın ülkeyi veriyor; kullanmamak cevabı atmak demekti.
+
+Üçünü de yakalayan tek şey **aritmetik**: her mesafe, iki limanın koordinatları arasındaki
+büyük daire mesafesiyle karşılaştırılıyor. Deniz yolu kuş uçuşundan kısa olamaz, ve
+kırpılma bir *kat* hata yapar. Makul görünüp görünmediğine bakılmıyor.
+
+**Marmara farkı ölçülüyor, varsayılmıyor.** Pub 151 Pendik'i ve Yalova'yı listelemiyor,
+İstanbul'u listeliyor. Fark terminalin kendi koordinatından hesaplanıyor: Pendik 15,1
+deniz mili (28 km). Önce 30 deniz mili varsaymıştım — gerçeğin iki katı, ve referans
+tabloyu yedi puan haksız yere aklıyordu.
