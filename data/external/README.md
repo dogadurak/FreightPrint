@@ -321,16 +321,50 @@ Ro-ro gemisi Korint'ten geçemediğine göre karşılaştırma "Yunanistan'ın g
 Servis tablosu ile müşteri raporu Trieste'de aynı 2.500'ü kullanıyor, yani rakam keyfi
 değil taşıyıcının bildirdiği. İkisi de liman-limana ölçüyor, karşılaştırma geçerli.
 
+### Ara liman uğrağı — farkın yarısını açıklıyor
+
+İlk okuma "referans %14,7 yüksek" diyordu ve **eksikti**. DFDS'in kendi rota bilgisi
+Pendik–Trieste için şunu yazıyor:
+
+> *"The route has a way-call in Patras two days a week and a way-call in Bari one day a
+> week."* — [dfds.com](https://www.dfds.com/en/freight-shipping/routes-and-schedules/pendik-trieste)
+
+Yani servis her seferde direkt değil; haftada altı seferin ikisi Patras'a, biri Bari'ye
+uğruyor. Pub 151'in verdiği **direkt** mesafeyi uğraklı bir servisin rakamıyla
+karşılaştırmak, iki farklı yolculuğu kıyaslamaktı.
+
+| Rota | Mesafe | Kaynak |
+|---|---|---|
+| Direkt | 2.180 km | Pub 151 |
+| Bari uğrağıyla | 2.199 km (**+%0,8**) | Pub 151 (Bari→Trieste 321 nm) |
+| Patras uğrağıyla | ~2.675 km | projenin kendi rakamları, **doğrulanmamış** |
+| **Servis karışımıyla ağırlıklı** | **~2.348 km** | 2 Patras + 1 Bari + 3 direkt |
+
+Bari uğrağı neredeyse hiçbir şey eklemiyor — Bari zaten Adriyatik'te yol üstünde. Patras
+eklemesi büyük, ama Pub 151 o iki bacağı yayımlamıyor, yani boyutu doğrulanamıyor.
+
+**Açıklanamayan fark %14,7'den %6,5'e iniyor.** Bulgu duruyor ama yarısı uğrakmış.
+
 ### Yapılmayanlar ve neden
 
-**Bu düzeltme motora uygulanmadı.** Uygulanırsa multimodal cezası **+%19,4'ten +%6,0'a**
-düşüyor — manşet bulgu ayakta kalıyor ama üçte birine iniyor. Önce şunlar çözülmeli:
+**Bu düzeltme motora uygulanmadı.** Uğrak hesaba katıldığında multimodal cezası
+**+%19,4'ten +%13,0'a** düşüyor (uğrak yok sayılsaydı yanlışlıkla +%6,0 denirdi). Kalan
+belirsizlikler:
 
-- **Ara liman uğrağı.** Tarifeli bir servis yol üstünde uğrarsa gerçek seyir direkt
-  mesafeden uzun olur. `service_legs.csv` bunu biliyor (pendik→patras satırı *"Patras
-  way-call"* diyor). Pendik→Trieste'de böyle bir not yok ama yokluğu kanıt değil.
+- **Patras bacaklarının hakemi yok.** Ağırlıklı ortalamanın en büyük bileşeni projenin
+  kendi doğrulanmamış rakamına dayanıyor — yani düzeltmenin kendisi kısmen düzeltilmek
+  istenen sayıdan besleniyor.
+- **Hangi sevkiyatın hangi seferde gittiği bilinmiyor.** Müşteri raporu 12 sevkiyatın
+  hepsi için tek bir 2.500 kullanmış.
 - **Altı bacağın üçünün hakemi yok.** Pub 151 her çifti yayımlamıyor: `PATRAI` başlığı
   var ama kendi listesinde ne İstanbul ne Trieste geçiyor.
+
+### Referans rakamlar ölçüm değil, planlama sayısı
+
+Altı deniz mesafesinin **hepsi 5'e, beşi 25'e tam bölünüyor** (2.500 / 1.755 / 1.450 /
+3.100 / 2.750 / 1.225). Pub 151'in çevrilmiş değerleri hiç yuvarlak değil. Bu, rakamların
+ne olduğunu söylüyor — yuvarlanmış planlama mesafeleri — ama farkın sebebini açıklamıyor:
+25 km'ye yuvarlama 300 km'lik bir farkı doğurmaz.
 
 ### Ayrıştırmanın tuzakları — üçü de gerçekten yaşandı
 

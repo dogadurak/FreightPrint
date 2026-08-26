@@ -100,10 +100,21 @@ def test_the_marmara_offset_is_measured_rather_than_assumed():
 
 @needs_publication
 def test_the_reference_table_reads_high_on_every_leg_that_has_an_arbiter():
-    """The finding, such as it is. Three independent legs, all one way, between 9% and
-    15% — a consistent bias rather than scatter. It is reported here and deliberately not
-    yet applied to the engine: see the project README for what still has to be settled
-    before the corridor's own distances change."""
+    """Three independent legs, all one way, between 9% and 15% against the published
+    **direct** distance.
+
+    That framing matters and the first reading of it was wrong. DFDS's own route
+    information says Pendik-Trieste has a way-call in Patras two days a week and in Bari
+    one day a week, so the direct figure is not what the carrier's number describes.
+    Weighting the published routes by that service mix accounts for about half the gap:
+    14.7% becomes 6.5%. A Bari call adds 0.8% because Bari is already on the way up the
+    Adriatic; a Patras call adds a great deal, and Pub 151 publishes neither Patras leg,
+    so the larger half of the correction rests on the project's own unverified numbers.
+
+    What this test pins is the raw comparison, which is a fact about the two tables. What
+    it deliberately does not pin is the conclusion, which is still open — see
+    `data/external/README.md`.
+    """
     import_pub151.derive()
     priced = [r for r in rows() if r["status"] == "ok" and r["via"] != "via Corinth Canal"]
 
