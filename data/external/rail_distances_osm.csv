@@ -1,7 +1,7 @@
 kind,leg,osm_km,compare_km,delta_pct,agrees,note
-cross_check,Koln Hbf -> Regensburg Hbf,501.8,498.5,0.7,yes,RINF ile karsilastirma
-cross_check,Duisburg Hbf -> Koln Hbf,63.6,60.3,5.5,yes,"RINF ile karsilastirma (kisa bacak, uc nokta secimi baskin)"
-cross_check,Wels Vbf -> Lambach,17.0,18.6,-8.4,yes,"RINF ile karsilastirma (kisa bacak, uc nokta secimi baskin)"
+cross_check,koln -> regensburg,507.9,503.0,1.0,yes,RINF ile karsilastirma
+cross_check,duisburg -> koln,75.4,71.1,6.1,yes,"RINF ile karsilastirma (kisa bacak, uc nokta secimi baskin)"
+cross_check,wels -> lambach,17.2,18.6,-7.5,yes,"RINF ile karsilastirma (kisa bacak, uc nokta secimi baskin)"
 corridor,trieste->wels,471.9,420.0,-11.0,,elle yazilan mesafeye karsi
 corridor,trieste->lambach,462.0,380.0,-17.7,,elle yazilan mesafeye karsi
 corridor,trieste->koln,1219.5,950.0,-22.1,,elle yazilan mesafeye karsi

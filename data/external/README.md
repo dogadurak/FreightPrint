@@ -192,11 +192,63 @@ sabitlenmesi gerekiyor. **Faz 9.1'in ilk işi bu.**
 ama hangi katmanın indirilebilir olduğu henüz bilinmiyor. RINF zaten `TENTCorridor`
 taşıdığı için bu, muhtemelen ayrı bir kaynağa gerek bırakmayacak.
 
-## OpenStreetMap / Overpass — yedek plana düştü ⏳
+## OpenStreetMap / Overpass — yedek değil, iki yerde asıl kaynak ✅
 
-Çağrı biçimim yüzünden 406 döndü, kapalı olduğu anlamına gelmiyor. Ama RINF açık çıktığı
-için OSM artık **10b yedeği**: resmî kayıt varken kalabalık kaynaklı veriyi esas almanın
-gerekçesi yok. Türkiye ayağı için tekrar gündeme gelebilir — RINF'in görmediği tek yer orası.
+İlk denemede **406** döndü ve "yedek plan" diye kaydedilmişti. Sebep kapalı olması değil,
+`User-Agent` göndermememdi. Düzeltilince açık: ve RINF'in yapamadığı iki işi yapıyor.
+
+**1. Demiryolu mesafeleri** (`rail_distances_osm.csv`) — RINF, Avusturya'nın bildirimi
+%23 bütünlükte olduğu için koridoru rotalayamıyor. OSM rotalıyor, ve RINF'in bütün olduğu
+yerlerde ikisi uyuşuyor: 500 km'lik bacakta **%1,0**.
+
+**2. Terminal konumları** (`rail_terminal_positions_osm.csv`) — RINF 60.571 işletme
+noktasının yalnızca ~2.700'ü için konum yayımlıyor, ve **Almanya, İtalya, Çekya, Romanya
+hiç yayımlamıyor**. Yani demiryolu terminallerinin koordinatını hiçbir şey denetlemiyordu.
+Overpass sekizini de buluyor.
+
+### Ölçülen: koordinatlar terminal düzeyinde değil, şehir düzeyinde
+
+| terminal | OSM'deki karşılığı | fark |
+|---|---|---|
+| trieste | Trieste Campo Marzio | 0,78 km |
+| chitila | Chitila | 0,96 km |
+| lambach | Lambach | 1,25 km |
+| wels | Wels Vbf-Terminal | 3,53 km |
+| regensburg | Regensburg **Bayernhafen** | 3,71 km |
+| duisburg | Duisburg Hafen | 3,83 km |
+| koln | Köln **Eifeltor** | 3,85 km |
+| ostrava | Ostrava-Kunčice | 3,95 km |
+
+Limanlar 1 km'nin altında, yük terminalleri 3,5–4,0 km. Ayrım tesadüf değil: liman
+koordinatları Pub 151'den, demiryolu koordinatları elden geldi.
+
+**Bu sapma düzeltilmiyor, ölçülüp kaydediliyor.** Bir demiryolu bacağının %0,3–0,9'u
+kadar, oysa aynı bacaklarda zaten raporlanan mesafe farkı %11–33 — yirmi ilâ yüz kat
+büyük. Üstelik koordinatı OSM'e yapıştırmak, kontrolü kendi kendini doğrulayan boş bir
+kontrole çevirirdi: karşılaştırmanın anlamı, koordinatın OSM'den bağımsız olmasından
+geliyor.
+
+**Eşiğin ne yapamadığı yazılı.** 5 km, "terminalde" ile "şehirde"yi bu şehirlerde
+ayıramaz — Köln'de yük istasyonu ile ana gar zaten 3,9 km arayla. Eşik kaba hatayı
+yakalar (yanlış şehir, ters çevrilmiş lat/lon), bunu değil.
+
+### Arama terimi bir yargıdır, yazılı durur
+
+OSM ile RINF aynı yeri aynı şekilde yazmıyor ve fark sistematik değil: RINF `Ostrava-Kuncice`
+diyor, OSM `Ostrava-Kunčice`; RINF `Regensburg Hafen` diyor, OSM **`Regensburg Bayernhafen`**.
+Bulanık eşleştirme bunu örter ve sessizce yanlış istasyonu seçer, o yüzden terim
+`data/rinf_terminal_map.csv` içinde `osm_search` sütununda, uopid'in yanında duruyor.
+
+Terim düzenli ifade ve bazıları bilerek çıpalı: yalın `Lambach`, Lambach Markt'ı ve
+Neukirchen bei Lambach'ı da yakalar — başka yerler. Regensburg tam olarak bu yüzden ilk
+turda "bulunamadı" döndü; `searched_for` sütunu bu ayrımı okuyana veriyor.
+
+### Servis tarafı
+
+Ana örnek (`overpass-api.de`) bu sorgulara ~40 saniyede cevap veriyor; ayna
+(`overpass.kumi.systems`) bu iş yazılırken bağlantıyı hiç kabul etmedi. Bölgesel örnekler
+listeye alınmadı: `overpass.osm.ch` bir saniyede cevap veriyor ama yalnızca kendi ülkesini
+tutuyor, yani "bu terminal OSM'de yok" ile birebir aynı görünen boş bir sonuç dönerdi.
 
 ## Deniz mesafesine hakem — henüz aranmadı ⏳
 
@@ -253,11 +305,14 @@ ve Slovakya üzerinden Avusturya'ya öbür uçtan giriyor.
 Bunun bir türetme hatası olmadığını göstermek gerekiyordu. Dolgun bildirilmiş bir ağın
 içinde kayıt birkaç yüzde hatayla doğru:
 
-| Bacak | RINF | Gerçek |
+| Bacak | RINF | OSM ölçümü |
 |---|---|---|
-| Köln Hbf → Regensburg Hbf | **498,5 km** (137 kesim, hep DE) | ~500 km |
-| Duisburg Hbf → Köln Hbf | 60,3 km | ~65 km |
-| Wels Terminal → Lambach | 18,6 km | ~20 km |
+| Köln Eifeltor → Regensburg Bayernhafen | **503,0 km** (hep DE) | 507,9 km (+%1,0) |
+| Duisburg Hafen → Köln Eifeltor | 71,1 km | 75,4 km (+%6,1) |
+| Wels Vbf-Terminal → Lambach | 18,6 km | 17,2 km (−%7,5) |
+
+Karşılaştırmanın iki ucu da artık elle yazılmıyor: konumlar
+`rail_terminal_positions_osm.csv`'den, mesafeler saklanan RINF grafiğinden türetiliyor.
 
 Aynı kod 420 km'lik bacağa 748 km diyorsa, kusurlu olan kod değil.
 
@@ -282,9 +337,37 @@ Bu bir karar, ve karar gerekçesiyle, reddedilen alternatifleriyle birlikte dosy
 duruyor. Elle yazılmış mesafeden farkı şu: uçları insan seçiyor, **aradaki kilometreleri
 kayıt veriyor.**
 
-**İki uç doğrulanmamış.** Köln Eifeltor ve Duisburg'un intermodal terminali ada göre
-bulunamadı; ikisi de şehrin ana garına bağlandı ve satırlarda `is_verified_choice=no`
-yazıyor. O mesafeler "terminale" değil "şehre" okunmalıdır.
+**"İki uç ada göre bulunamadı" — bu yanlıştı, ve nasıl yanlış olduğu öğreticidir.**
+
+Köln Eifeltor ile Duisburg'un liman istasyonu "isim aramasında çıkmadı" diye şehrin ana
+garına bağlanmış ve `is_verified_choice=no` ile işaretlenmişti. İkisi de kayıtta duruyor:
+
+```
+DE00KKE  Köln Eifeltor
+DE0EDHA  Duisburg Hafen
+```
+
+Arama, RINF'in **konum taşıyan** noktaları arasında yapılıyordu — 60.571'in ~2.700'ü — ve
+Almanya hiç konum yayımlamıyor. Yani sorgu tek bir Alman noktası bile göremiyordu.
+"Aradım, yok" ile "yanlış yerde aradım" aynı çıktıyı veriyor, ve ikincisi yazıya
+birincisi olarak geçmişti.
+
+Arama artık betiğin kalıcı bir parçası, ki iddia tekrar edilebilir olsun:
+
+```
+python scripts/import_rinf.py --find Eifeltor
+```
+
+**Düzeltmenin ölçülen bedeli.** Eifeltor, Köln Hbf'ye 6,9 demiryolu km uzakta ve
+Regensburg bacağını yalnızca 1,8 km oynatıyor. Duisburg'da fark büyük: Hafen, Hbf'ye 3,9
+km uzakta ama yük rotası yolcu garının etrafından dolaşıyor, ve **Duisburg–Köln 60,3 km
+yerine 71,1 km** çıkıyor — %18. Yer tutucu, kısa bacakta ucuz değildi.
+
+**İkinci hata, düzeltmenin kendisinden çıktı.** `is_verified` bayrağı serbest metin notta
+"UNVERIFIED" kelimesini arıyordu. Düzeltmeyi *anlatan* not bu aramayı tetikliyor, yani
+kaynaklı bir satır kaynaksız olarak yayımlanacaktı. Bayrak artık kendi sütunu, ve bir
+regresyon testi bunu sabitliyor. Serbest metinde anahtar kelime aramak, metnin konusu o
+kelime olduğu anda bozulur.
 
 ---
 

@@ -1,0 +1,9 @@
+terminal_id,uopid,searched_for,osm_type,osm_id,osm_name,railway,lon,lat,gap_km,candidates,note
+trieste,IT03471,^Trieste Campo Marzio$,node,11716507947,Trieste Campo Marzio,stop,13.755088,45.64613,0.78,4,
+wels,AT01968,^Wels Vbf-Terminal$,node,5113022435,Wels Vbf-Terminal,yard,14.070195,48.186772,3.53,1,
+lambach,AT01086,^Lambach$,node,4315647702,Lambach,station,13.888352,48.094004,1.25,1,
+koln,DE00KKE,Eifeltor,node,4571637509,Köln Eifeltor,yard,6.93149,50.908042,3.85,2,
+duisburg,DE0EDHA,^Duisburg Hafen$,node,4584770091,Duisburg Hafen,yard,6.784271,51.443306,3.83,1,
+ostrava,CZ34414,Ostrava-Kun.ice,node,2321301070,Ostrava-Kunčice,stop,18.291155,49.790575,3.95,6,
+regensburg,DE0NRHA,Regensburg (Hafen|Bayernhafen),node,9945119841,Regensburg Bayernhafen,yard,12.148017,49.016339,3.71,1,
+chitila,RO30110,^Chitila$,node,122236985,Chitila,station,25.984589,44.501989,0.96,1,

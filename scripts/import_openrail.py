@@ -14,14 +14,22 @@ So the routing comes from OpenStreetMap, through the OpenRailRouting service, an
 question becomes whether crowd-sourced track can be trusted for this. **RINF answers it.**
 Where RINF's filing is whole, the two agree:
 
-    Köln Hbf → Regensburg Hbf   501.8 km OSM   498.5 km RINF   +0.7%
-    Duisburg Hbf → Köln Hbf      63.6 km        60.3 km        +5.5%
-    Wels Vbf → Lambach           17.0 km        18.6 km        -8.4%
+    Köln Eifeltor → Regensburg Bayernhafen   507.9 km OSM   503.0 km RINF   +1.0%
+    Duisburg Hafen → Köln Eifeltor            75.4 km        71.1 km        +6.1%
+    Wels Vbf-Terminal → Lambach               17.2 km        18.6 km        -7.5%
 
 The agreement is closest on the longest leg, which is the one that matters: at 500 km
-they differ by 0.7%, while a 20 km leg turns on which yard inside a station was picked.
+they differ by 1.0%, while a 20 km leg turns on which yard inside a station was picked.
 That cross-check is written into the output rather than described here, so it is re-run
 every time the distances are.
+
+**Neither end of that comparison is typed by hand any more.** It used to carry lat/lon
+for three passenger stations and a copied RINF distance beside each — six numbers a
+reader had to trust, inside the check that licenses every other rail number here. The
+positions now come from `rail_terminal_positions_osm.csv` and the distances from the
+stored RINF graph, so the check runs between the same operational points the corridor
+legs mean. Moving it off the passenger stations is also what caught the Duisburg leg
+being 71 km rather than 60: the freight route to the port rounds the passenger station.
 
     python scripts/import_openrail.py            # route the legs and the cross-checks
     python scripts/import_openrail.py --check    # is the committed CSV still what it produces?
@@ -38,6 +46,11 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import speak_utf8  # noqa: E402
+
+speak_utf8()
+
 REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "data" / "external" / "rail_distances_osm.csv"
 TERMINALS = REPO / "data" / "terminals.geojson"
@@ -51,15 +64,23 @@ SERVICE = "https://routing.openrailrouting.org/route"
 PROFILE = "all_tracks_1435"
 
 # Legs RINF can route on its own, used to check the crowd-sourced network against the
-# official register. Each is inside one country whose filing is essentially whole, with
-# the RINF figure this project already derived.
+# official register. Each is inside one country whose filing is essentially whole.
 #
-# (label, from lat,lon, to lat,lon, RINF km)
+# These name terminals rather than coordinates. They used to carry hand-typed lat/lon for
+# the three cities' passenger stations and a hand-copied RINF distance beside each - six
+# numbers a reader had to take on trust, inside the check that licenses every other rail
+# number in the project. Both ends are now derived: the position comes from
+# `rail_terminal_positions_osm.csv` and the distance from the stored RINF graph, so the
+# check runs between the same endpoints the corridor legs do.
 CROSS_CHECKS = [
-    ("Koln Hbf -> Regensburg Hbf", "50.9430,6.9590", "49.0110,12.0990", 498.5),
-    ("Duisburg Hbf -> Koln Hbf", "51.4300,6.7750", "50.9430,6.9590", 60.3),
-    ("Wels Vbf -> Lambach", "48.1829,14.0603", "48.0900,13.8800", 18.6),
+    ("koln", "regensburg"),
+    ("duisburg", "koln"),
+    ("wels", "lambach"),
 ]
+
+OSM_POSITIONS = REPO / "data" / "external" / "rail_terminal_positions_osm.csv"
+RINF_GRAPH = REPO / "data" / "external" / "rinf_rail_graph.json"
+RINF_MAP = REPO / "data" / "rinf_terminal_map.csv"
 
 # How far the two may differ before the crowd-sourced network stops corroborating the
 # register. Generous on short legs because the endpoint dominates them — which platform
@@ -86,6 +107,48 @@ def _route(origin: str, destination: str, timeout: int = 180) -> float | None:
     return paths[0]["distance"] / 1000
 
 
+def osm_points() -> dict[str, str]:
+    """Where OSM puts each rail terminal, as GraphHopper wants it: "lat,lon"."""
+    if not OSM_POSITIONS.exists():
+        return {}
+    with OSM_POSITIONS.open(encoding="utf-8") as f:
+        return {row["terminal_id"]: f"{row['lat']},{row['lon']}"
+                for row in csv.DictReader(f) if row["lat"]}
+
+
+def rinf_distances(pairs: list[tuple[str, str]]) -> dict[tuple[str, str], float]:
+    """Track kilometres the register gives for each pair, or absent if it cannot answer.
+
+    Computed from the stored graph rather than copied, so a change in the register or in
+    which operational point a terminal means moves this and the comparison together.
+    """
+    if not RINF_GRAPH.exists() or not RINF_MAP.exists():
+        return {}
+
+    import networkx as nx
+
+    with RINF_MAP.open(encoding="utf-8") as f:
+        opid = {row["terminal_id"]: row["uopid"] for row in csv.DictReader(f)}
+
+    raw = json.loads(RINF_GRAPH.read_text(encoding="utf-8"))
+    graph = nx.Graph()
+    for edge in raw["edges"]:
+        existing = graph.get_edge_data(edge["start"], edge["end"], {}).get("km")
+        if existing is None or edge["km"] < existing:
+            graph.add_edge(edge["start"], edge["end"], km=edge["km"])
+
+    found = {}
+    for start, end in pairs:
+        if start not in opid or end not in opid:
+            continue
+        try:
+            found[(start, end)] = round(
+                nx.shortest_path_length(graph, opid[start], opid[end], weight="km"), 1)
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            continue
+    return found
+
+
 def terminal_points() -> dict[str, str]:
     data = json.loads(TERMINALS.read_text(encoding="utf-8"))
     return {
@@ -108,8 +171,20 @@ def derive() -> int:
 
     # The cross-checks first, because everything below depends on them holding. A leg
     # measured by a network nothing has corroborated is not evidence.
-    for label, origin, destination, rinf_km in CROSS_CHECKS:
-        osm_km = _route(origin, destination)
+    at_osm = osm_points()
+    from_rinf = rinf_distances(CROSS_CHECKS)
+    for start, end in CROSS_CHECKS:
+        label = f"{start} -> {end}"
+        rinf_km = from_rinf.get((start, end))
+        if rinf_km is None or start not in at_osm or end not in at_osm:
+            # Named, not skipped: a cross-check that silently disappears turns the
+            # remaining ones into a weaker claim while looking like the same one.
+            rows.append({"kind": "cross_check", "leg": label, "osm_km": "",
+                         "compare_km": "", "delta_pct": "", "agrees": "no",
+                         "note": "capraz kontrol kurulamadi: RINF mesafesi veya "
+                                 "OSM konumu yok"})
+            continue
+        osm_km = _route(at_osm[start], at_osm[end])
         if osm_km is None:
             rows.append({"kind": "cross_check", "leg": label, "osm_km": "",
                          "compare_km": rinf_km, "delta_pct": "", "agrees": "no",
@@ -170,6 +245,12 @@ def derive() -> int:
 
     print(f"\n  RINF capraz kontrolu ({len(checks) - len(failed)}/{len(checks)} uyumlu):")
     for row in checks:
+        # A failed check leaves its numbers blank, and a blank cannot take a numeric
+        # format - "+6" on an empty string raises rather than printing. The row that
+        # most needs to be read was the one that crashed the summary.
+        if row["osm_km"] == "":
+            print(f"    {row['leg']:28} {row['note']}")
+            continue
         print(f"    {row['leg']:28} OSM {row['osm_km']:>7} | RINF {row['compare_km']:>6} "
               f"| {row['delta_pct']:+6}%  {row['agrees']}")
     if failed:

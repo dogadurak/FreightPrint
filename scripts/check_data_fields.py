@@ -48,6 +48,9 @@ ALLOWED = {
     "alternatives": "rinf_terminal_map: reddedilen adaylar, secimi denetlemek icin",
     "geo_name": "Eurostat'in ulke adi; kod ISO kodunu kullanir",
     "op_name": "isletme noktasinin adi; eslesme uopid uzerinden yapilir",
+    "searched_for": ("OSM'de hangi terimin arandigi; 'bulunamadi' satirinin yanlis terim "
+                     "mi yoksa gercek bir eksik mi oldugunu okuyan ayirt edebilsin diye. "
+                     "Regensburg tam olarak bu yuzden bulunamamisti: OSM ona Bayernhafen diyor"),
 
     # Provenance: lets a reader audit a derivation without rerunning it.
     "intl_total_mio_vkm": "intl_empty_share'in payda tarafi; bolmeyi denetlenebilir kilar",

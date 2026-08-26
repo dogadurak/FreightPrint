@@ -38,6 +38,14 @@ jobs:
       - name: Every field in data/ is used or excused in writing
         run: python scripts/check_data_fields.py
 
+      # Every terminal coordinate, against the outside record that names the same place:
+      # ports against NGA Pub. 151, rail terminals against OpenStreetMap. Offline - both
+      # sources are committed - and it exits non-zero when a point drifts away from the
+      # thing its source_id claims it is. Köln sat at the passenger station while
+      # claiming the freight terminal, and nothing in the project could say so.
+      - name: Terminal coordinates still match their source
+        run: python scripts/source_terminals.py
+
   test:
     name: Tests
     runs-on: ubuntu-latest

@@ -42,6 +42,11 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _console import speak_utf8  # noqa: E402
+
+speak_utf8()
+
 REPO = Path(__file__).resolve().parent.parent
 RAW = REPO / "data" / "external" / "pub151.pdf"
 TEXT = REPO / "data" / "external" / "pub151.txt"

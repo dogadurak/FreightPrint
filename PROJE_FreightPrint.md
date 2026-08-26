@@ -394,6 +394,7 @@ soruyu sınıyor: **motora verilen sayılar bu koridoru tarif ediyor mu?** Hepsi
 | **NGA Pub. 151** | Deniz **mesafeleri** | 6/6 bacakta tablo %9–26 yüksek |
 | **ERA RINF** | Demiryolu ağı ve mesafeleri | Ülke içinde doğru (%0,7 hata), ama Avusturya'nın bildirimi %23 bütünlükte — koridor rotalanamıyor |
 | **OpenStreetMap / OpenRailRouting** | Demiryolu mesafeleri | 7/7 bacakta tablo %4–33 düşük. RINF ile çapraz kontrollü |
+| **OpenStreetMap / Overpass** | Demiryolu terminal **konumları** | 8/8 bulundu. Limanlar <1 km, yük terminalleri 3,5–4,0 km sapıyor — koordinatlar terminal değil şehir düzeyinde |
 
 **Değişmeyen kural: gözlem varsayımın yerine geçmez, yanına konur.** Motor GLEC'in %30'uyla,
 taşıyıcının km'siyle ve servis tablosuyla fiyatlamaya devam eder; pano her birinin neye
@@ -404,6 +405,19 @@ dayandığını gösterir. Sessizce değiştirmek, motoru doğrulandığı rapor
 dönüyor; topluluk aynaları birbiriyle tutmuyor (2,0 MB / 7,3 MB). Terminaller bunun
 yerine Pub. 151 ve RINF'e bağlandı — 16'nın 12'si. Kalan dördü (Pendik, Yalova, Ambarlı,
 Halkalı) **hepsi Türk**, ve bu boşluk Eurostat'ta ve RINF'te de aynen çıkıyor.
+
+**Kimlik hatası ile hassasiyet sınırı ayrı şeylerdir (27 Ağustos 2026).** Demiryolu
+terminallerinin ikisi — Köln ve Duisburg — yolcu garlarına bağlanmıştı, çünkü RINF'te
+isimle arama yapan kod yalnızca *koordinat taşıyan* noktalara bakıyordu ve Almanya hiç
+koordinat yayımlamıyor. İkisi de kayıtta mevcut: `DE00KKE` Köln Eifeltor ve `DE0EDHA`
+Duisburg Hafen. Bu bir **kimlik hatasıydı** ve düzeltildi; Duisburg–Köln bacağını 60,3
+km'den 71,1 km'ye taşıyor.
+
+Düzeltme ikinci bir şeyi açığa çıkardı ama o bir hata değil: koordinatların hepsi, adını
+verdikleri yük terminalinden 3,5–4,0 km uzakta. Bu sapma bir demiryolu bacağının
+**%0,3–0,9'u** kadar, oysa projenin zaten ölçüp raporladığı mesafe farkı **%11–33**.
+Yirmi ilâ yüz kat küçük olan bu belirsizlik ölçülüp kaydediliyor, kovalanmıyor; koordinat
+projenin kendi verisi olarak kalıyor ve OSM yanında duruyor.
 
 ---
 
