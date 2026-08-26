@@ -1,14 +1,14 @@
-from_terminal,to_terminal,mode,ref_distance_km,transit_hours,frequency_per_week,schedule_source
-pendik,trieste,sea,2500,64,6,DFDS published schedule
-pendik,bari,sea,1755,,,
-pendik,patras,sea,1450,34,,DFDS published schedule (Patras way-call)
-yalova,sete,sea,3100,80,5,DFDS published schedule
-mersin,trieste,sea,2750,,3,DFDS published schedule (frequency only)
-trieste,patras,sea,1225,,,
-trieste,wels,rail,420,,,
-trieste,lambach,rail,380,,,
-trieste,koln,rail,950,,8,DFDS intermodal (departures only)
-trieste,duisburg,rail,1020,,,
-trieste,ostrava,rail,670,,,
-trieste,regensburg,rail,540,,,
-halkali,chitila,rail,515,,,
+from_terminal,to_terminal,mode,ref_distance_km,distance_source,distance_is_verified,transit_hours,frequency_per_week,schedule_source
+pendik,trieste,sea,2500,carrier (DFDS/service table),no,64,6,DFDS published schedule
+pendik,bari,sea,1755,carrier (DFDS/service table),no,,,
+pendik,patras,sea,1450,carrier (DFDS/service table),no,34,,DFDS published schedule (Patras way-call)
+yalova,sete,sea,3100,carrier (DFDS/service table),no,80,5,DFDS published schedule
+mersin,trieste,sea,2750,carrier (DFDS/service table),no,,3,DFDS published schedule (frequency only)
+trieste,patras,sea,1225,carrier (DFDS/service table),no,,,
+trieste,wels,rail,420,carrier (DFDS/service table),no,,,
+trieste,lambach,rail,380,carrier (DFDS/service table),no,,,
+trieste,koln,rail,950,carrier (DFDS/service table),no,,8,DFDS intermodal (departures only)
+trieste,duisburg,rail,1020,carrier (DFDS/service table),no,,,
+trieste,ostrava,rail,670,carrier (DFDS/service table),no,,,
+trieste,regensburg,rail,540,carrier (DFDS/service table),no,,,
+halkali,chitila,rail,515,carrier (DFDS/service table),no,,,

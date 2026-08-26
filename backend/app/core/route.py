@@ -22,6 +22,11 @@ class Leg:
     to_id: str | None = None
     duration_h: float | None = None
     ref_distance_km: float | None = None
+    # Provenance of the distance, not of the emission factor. A sea leg priced from a
+    # carrier's own figure and one checked against a published table are different
+    # claims, and the reader cannot tell them apart from the kilometres alone.
+    distance_source: str = ""
+    distance_is_verified: bool = False
     computed_distance_km: float | None = None
     ferry_km: float = 0.0
     geometry: tuple[tuple[float, float], ...] = ()
@@ -147,6 +152,8 @@ def _leg_from_edge(
         to_id=to_node,
         duration_h=edge.get("duration_h"),
         ref_distance_km=edge.get("ref_distance_km"),
+        distance_source=edge.get("distance_source", ""),
+        distance_is_verified=edge.get("distance_is_verified", False),
         computed_distance_km=edge["distance_km"] if edge["mode"] == "road" else None,
         ferry_km=edge.get("ferry_km", 0.0),
         geometry=geometry,

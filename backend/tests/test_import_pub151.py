@@ -38,20 +38,36 @@ def test_the_committed_table_is_what_the_publication_produces():
 
 
 @needs_publication
-def test_a_distance_shorter_than_the_straight_line_is_refused():
-    """The guard that matters most, and the one that was left out of this path once.
+def test_the_mersin_leg_is_read_from_mersins_own_entry():
+    """The number 637 arrived twice, from two different block-boundary faults, and both
+    times looked like the largest finding on the page.
 
-    Mersin's entry does not list Trieste at all. A block boundary overrunning into the
-    next port produced "637 nautical miles" — 133% away from the reference and shorter
-    than the straight line between the two, which is to say a voyage no ship could make.
-    Reported as a disagreement it would have been the largest finding on the page.
+    Mersin's entry does not list Trieste. The first fault fell back to a fixed span when
+    no next heading was found; the second was subtler - the heading pattern did not allow
+    a comma inside the country, so "MESSINA,  SICILY, ITALY" was not recognised as a
+    heading at all and Mersin's block ran through Messina, whose list does contain
+    "Trieste, Italy, 637". A correct distance from the wrong port.
+
+    The great-circle guard caught it both times, which is why the leg is now chained
+    through Pula rather than silently wrong.
     """
     import_pub151.derive()
-    row = next(r for r in rows()
-               if (r["from_terminal"], r["to_terminal"]) == ("mersin", "trieste"))
+    row = {(r["from_terminal"], r["to_terminal"]): r for r in rows()}[("mersin", "trieste")]
 
-    assert row["adjusted_km"] == "", "an impossible distance was published as a finding"
-    assert "kus ucusu" in row["status"]
+    assert "Pula" in row["status"], "no longer chained through the Adriatic stand-in"
+    assert float(row["nautical_miles"]) > 1077, "shorter than the straight line"
+    assert 2300 < float(row["adjusted_km"]) < 2500
+
+
+@needs_publication
+def test_the_arithmetic_guard_still_rejects_an_impossible_distance():
+    """No real leg trips it any more, so it is exercised directly. A guard that has
+    stopped firing is indistinguishable from one that has stopped working."""
+    mersin, trieste = (34.63, 36.79), (13.76, 45.64)
+    straight = import_pub151.great_circle_nm(mersin, trieste)
+
+    assert 637 < straight * import_pub151.MIN_OF_GREAT_CIRCLE
+    assert 1306 > straight * import_pub151.MIN_OF_GREAT_CIRCLE
 
 
 @needs_publication
@@ -160,7 +176,7 @@ def test_the_neighbour_stands_in_for_the_right_terminal():
 
 @needs_publication
 def test_every_leg_with_an_arbiter_says_the_reference_is_high():
-    """Five of six legs, one direction, 9% to 26%.
+    """All six legs, one direction, 9% to 26%.
 
     The way-call explains far less than it first appeared. Weighting the published routes
     by the service mix - two Patras calls, one Bari, three direct - gives about 2,211 km
@@ -173,7 +189,7 @@ def test_every_leg_with_an_arbiter_says_the_reference_is_high():
     priced = [r for r in rows()
               if r["adjusted_km"] and r["via"] != "via Corinth Canal"]
 
-    assert len(priced) == 5
+    assert len(priced) == 6, "every leg now has an arbiter; one has gone missing"
     deltas = [float(r["delta_pct"]) for r in priced]
     assert all(delta > 0 for delta in deltas), "the bias is no longer one-directional"
     assert 9 < min(deltas) and max(deltas) < 27

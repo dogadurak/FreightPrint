@@ -154,6 +154,12 @@ class LegOut(BaseModel):
     duration_h: float | None = None
     factor_value: float
     factor_source: str
+    # Where the *distance* came from, which is a separate question from where the factor
+    # did. On this corridor every sea leg's kilometres are the carrier's own figure and
+    # none had a second opinion until NGA Pub. 151 was imported; the reader could not see
+    # that from the number.
+    distance_source: str = ""
+    distance_is_verified: bool = False
     # Empty where no track was computed; the map draws those as straight schematic
     # lines. A track that is drawable but not sailable is flagged instead of hidden.
     geometry: list[list[float]] = []

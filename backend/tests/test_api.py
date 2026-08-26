@@ -870,3 +870,29 @@ def test_the_validation_datasets_own_sea_factor_is_below_every_verified_ship(cli
     assert sea["verdict"] == "below"
     assert sea["share_below"] == 0.0, "some ship is now that clean; rewrite this finding"
     assert sea["ratio"] < 0.3
+
+
+# ── where a distance came from, not just where the factor did ─────────────────
+
+def test_a_leg_says_where_its_distance_came_from(client):
+    """A sea leg priced from the carrier's own figure and one checked against a published
+    table are different claims, and the kilometres look identical either way.
+
+    NGA Pub. 151 puts every sea leg on this corridor 9-26% above the carrier's number, so
+    "nobody has checked this" is not a formality here.
+    """
+    sea = next(leg for leg in _multimodal(client)["legs"] if leg["mode"] == "sea")
+
+    assert sea["distance_source"], "the sea distance arrives with no provenance"
+    assert sea["distance_is_verified"] is False, (
+        "a sea distance is marked verified while the service table still says otherwise"
+    )
+
+
+def test_a_computed_road_distance_claims_no_service_table_source(client):
+    """Road distance is routed here by OSRM rather than read from `service_legs.csv`, so
+    borrowing that file's provenance would credit it to a source it never came from."""
+    payload = _post(client).json()
+    road = next(a for a in payload["alternatives"] if a["is_all_road"])["legs"][0]
+
+    assert road["distance_source"] == ""

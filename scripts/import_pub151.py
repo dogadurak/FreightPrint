@@ -67,7 +67,13 @@ MIN_OF_GREAT_CIRCLE = 0.95
 
 # A port's own entry: its name and country in capitals on one line, its position on the
 # next. The position is what makes the arithmetic check possible.
-HEADER = re.compile(r"^([A-Z][A-Z'’ .-]{2,}),\s+([A-Z][A-Z'’ .()-]+)\s*$", re.M)
+# The country half may itself contain a comma - "MESSINA,  SICILY, ITALY" - and leaving
+# it out of the character class meant that heading did not match, so Mersin's block ran
+# straight through Messina and read "Trieste, Italy, 637" out of *its* list. A correct
+# distance from the wrong port, and the second time a block boundary produced exactly
+# that number. Destination lines cannot be caught by widening this: they are Title Case
+# and every class here demands capitals.
+HEADER = re.compile(r"^([A-Z][A-Z'’ .-]{2,}),\s+([A-Z][A-Z'’ .,()-]+)\s*$", re.M)
 POSITION = re.compile(
     r"\((\d+)[°˚](\d+)'(?:(\d+)\")?\s*([NS])\.,\s*(\d+)[°˚](\d+)'(?:(\d+)\")?\s*([EW])\.\)"
 )
@@ -272,6 +278,10 @@ VIA_NEIGHBOUR = {
     ("pendik", "patras"): ("PATRAI", "Derince", "south of Greece",
                            (29.825, 40.743056), "pendik", -1),
     ("trieste", "patras"): ("PATRAI", "Pula", "",
+                            (13.835278, 44.868889), "trieste", +1),
+    # Mersin's own entry names Pula and not Trieste, so the same Adriatic stand-in works
+    # from the other end. The south-of-Greece route, because a ro-ro cannot use Corinth.
+    ("mersin", "trieste"): ("MERSIN", "Pula", "south of Greece",
                             (13.835278, 44.868889), "trieste", +1),
 }
 

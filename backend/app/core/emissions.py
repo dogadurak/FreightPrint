@@ -65,6 +65,12 @@ class ResolvedLeg:
     # the same expansion that produced them instead of replaying the ferry rule itself.
     from_id: str | None = None
     to_id: str | None = None
+    # Where the distance came from, carried through the split so a priced leg can still
+    # say it. A ferry portion is deliberately left blank: it comes from OSRM's road
+    # geometry, not from the service table, and inheriting the sea leg's provenance would
+    # be the same class of mistake as inheriting its duration.
+    distance_source: str = ""
+    distance_is_verified: bool = False
 
 
 @dataclass
@@ -79,6 +85,8 @@ class LegEmission:
     duration_h: float | None = None
     geometry: tuple[tuple[float, float], ...] = ()
     track_is_indicative: bool = False
+    distance_source: str = ""
+    distance_is_verified: bool = False
 
 
 @dataclass
@@ -228,6 +236,8 @@ def expand_route_legs(route: RouteAlternative) -> list[ResolvedLeg]:
                     track_is_indicative=leg.track_is_indicative,
                     from_id=leg.from_id,
                     to_id=leg.to_id,
+                    distance_source=leg.distance_source,
+                    distance_is_verified=leg.distance_is_verified,
                 )
             )
     return resolved
@@ -348,6 +358,8 @@ def calculate_route_emission(
                 duration_h=resolved.duration_h,
                 geometry=resolved.geometry,
                 track_is_indicative=resolved.track_is_indicative,
+                distance_source=resolved.distance_source,
+                distance_is_verified=resolved.distance_is_verified,
             )
         )
 

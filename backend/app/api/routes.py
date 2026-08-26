@@ -264,6 +264,8 @@ def _leg_out(leg) -> LegOut:
         duration_h=round(leg.duration_h, 2) if leg.duration_h else None,
         factor_value=leg.factor.value,
         factor_source=leg.factor.source,
+        distance_source=getattr(leg, "distance_source", ""),
+        distance_is_verified=getattr(leg, "distance_is_verified", False),
         geometry=[list(point) for point in leg.geometry],
         track_is_indicative=leg.track_is_indicative,
     )

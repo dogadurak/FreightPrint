@@ -70,6 +70,12 @@ def load_service_legs(path: Path | None = None) -> list[dict]:
                 "to_terminal": row["to_terminal"],
                 "mode": row["mode"],
                 "ref_distance_km": float(row["ref_distance_km"]),
+                # Where the distance came from and whether anything outside this project
+                # has checked it. Every row currently says "carrier" and "no", which is
+                # the honest state and the reason the column exists: a distance with no
+                # second opinion should not look like one that has been verified.
+                "distance_source": row.get("distance_source", ""),
+                "distance_is_verified": row.get("distance_is_verified", "").strip().lower() == "yes",
             }
             for row in csv.DictReader(f)
         ]
@@ -154,6 +160,8 @@ def build_network(
             destination,
             mode=leg["mode"],
             ref_distance_km=leg["ref_distance_km"],
+            distance_source=leg.get("distance_source", ""),
+            distance_is_verified=leg.get("distance_is_verified", False),
             computed_distance_km=None,
         )
     return graph
