@@ -5,6 +5,11 @@ Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.
 
 **Durum:** Planın tüm fazları (0–8) tamamlandı. 649 test geçiyor.
 
+![Rota haritası ve mod karşılaştırması](docs/img/07-harita.png)
+
+*Pendik → Trieste → Köln: deniz + demiryolu, tam karayoluna karşı. Sağdaki çubuklar
+her alternatifin karbonunu moda göre ayırıyor.*
+
 Motorun hesabı iki ayrı şeye karşı sınanıyor: gerçek bir müşteri karbon raporunu yeniden
 üretmesine, ve kendi varsayımlarının **dışarıdan indirilmiş gözlemlerle** karşılaştırılmasına
 (Eurostat boş dönüş anketi, EU MRV doğrulanmış gemi emisyonları, NGA Pub. 151 liman arası
@@ -52,6 +57,53 @@ python -m uvicorn app.main:app --reload
 ```
 
 Tarayıcıda `http://127.0.0.1:8000`. API dokümantasyonu `/docs` altında.
+
+### Pano
+
+Aşağıdaki görüntülerin hepsi tek bir sevkiyattan alınmıştır: Gebze → Düsseldorf, 24 ton.
+
+**Özet ve göstergeler** — motorun vardığı sonuç, ve tam karayoluna göre farkı.
+
+![Yönetici özeti](docs/img/01-ozet.png)
+![Göstergeler](docs/img/02-gostergeler.png)
+
+**Dış gözlem kartları** — projenin kendi varsayımının yanında, dışarıdan indirilmiş bir
+ölçüm. Hiçbiri hesabın girdisi değildir; hepsi hesabın *yanında* durur.
+
+![Boş dönüş — Eurostat](docs/img/04-bos-donus.png)
+
+Eurostat'ın anketi bu koridorda GLEC'in varsaydığı %30 boş dönüşü doğrulamıyor: gözlenen
+oran %20,2. Kartın kendisi kapsamı da söylüyor — Türkiye ve Sırbistan bu ankete bildirim
+yapmıyor.
+
+![Deniz faktörü — EU MRV](docs/img/05-deniz-faktoru.png)
+
+GLEC'in ro-ro faktörü, 234 doğrulanmış geminin orta yarısının içinde. Ama o orta yarı
+2,7 kat aralığa yayılıyor: aynı seferi taşıyan iki gemi arasındaki fark bu kadar. Kart
+bunu bir başarı olarak değil, yöntemin sınırı olarak yazıyor.
+
+![Mesafe — Pub 151 ve OpenStreetMap](docs/img/06-mesafe.png)
+
+Taşıyıcının verdiği mesafeye karşı iki bağımsız ölçüm. Deniz tarafı %14,7 **yüksek**,
+demiryolu tarafı %22,1 **düşük** okuyor — düzeltmeler ters yönde. Motor ikisini de
+uygulamıyor; ikisini de gösteriyor.
+
+**ISO 14083 öz değerlendirmesi** — bu rakamın neyi karşılayıp neyi karşılamadığı.
+
+![ISO 14083 öz değerlendirmesi](docs/img/03-iso14083.png)
+
+**Risk, maliyet ve süre**
+
+![Risk ve maliyet](docs/img/09-risk.png)
+![Kapıdan kapıya süre](docs/img/08-sure.png)
+
+**Duyarlılık ve bacak dökümü** — sonucun hangi seçime ne kadar bağlı olduğu, ve
+kilometrelerin nereden geldiği.
+
+![Faktör esası duyarlılığı](docs/img/10-duyarlilik.png)
+![Bacak dökümü](docs/img/11-bacaklar.png)
+
+---
 
 Pano bir sevkiyat girdisi ve onun üzerine açılan kartlardan oluşur; her kart bir soruya
 cevap verir. Cevabı bir dosya yüklemeye ya da dışarıdan bir gözleme bağlı olan yedi kart
