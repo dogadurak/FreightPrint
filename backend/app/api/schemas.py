@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from ..core.emissions import DEFAULT_FACTOR_SET
+
 
 class Point(BaseModel):
     lon: float = Field(ge=-180, le=180)
@@ -62,7 +64,14 @@ class RouteRequest(BaseModel):
     destination_name: str = "destination"
     tonnage: float = Field(default=24.0, gt=0, le=100_000)
     scope: str = Field(default="TTW", pattern="^(TTW|WTW)$")
-    factor_set: str = "reference"
+    # Read from the engine rather than repeated here. This said "reference", which is
+    # the customer's own reported factors - the set that exists so Faz 3 can reproduce
+    # their report, not the one this project defends. An API caller who named no set got
+    # road at 0.121 and sea at 0.012 kg CO2/ton-km, and with them the answer that this
+    # corridor's multimodal route saves 83% against all-road. Under GLEC the same route
+    # costs 19% more. The default decided the sign of the finding, and the dashboard
+    # never saw it because the frontend names its set explicitly.
+    factor_set: str = DEFAULT_FACTOR_SET
     road_fuel_type: str | None = None
     # Left unset, each factor keeps the utilisation its publisher assumed.
     load_factor: float | None = Field(default=None, gt=0, le=1)
@@ -415,7 +424,7 @@ class CompareRequest(BaseModel):
     destination_country: str | None = None
     tonnage: float = Field(default=24.0, gt=0, le=100_000)
     scope: str = Field(default="TTW", pattern="^(TTW|WTW)$")
-    factor_set: str = "glec"
+    factor_set: str = DEFAULT_FACTOR_SET
     avoid: list[str] = Field(default_factory=lambda: ["suez", "babalmandab"], max_length=6)
     carbon_price_eur: float = Field(default=80.0, ge=0, le=10_000)
     ets_year: int = Field(default=2026, ge=2024, le=2100)

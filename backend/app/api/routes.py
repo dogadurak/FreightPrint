@@ -3,6 +3,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse, Response
 
 from ..core.emissions import (
+    DEFAULT_FACTOR_SET,
     FactorNotFoundError,
     calculate_route_emission,
     calculate_shipment,
@@ -920,7 +921,7 @@ MAX_UPLOAD_BYTES = 2_000_000
 def bulk_report(
     file: UploadFile = File(..., description="Shipments as CSV or .xlsx"),
     scope: str = Form("TTW"),
-    factor_set: str = Form("reference"),
+    factor_set: str = Form(DEFAULT_FACTOR_SET),
     road_fuel_type: str | None = Form(None),
     load_factor: float | None = Form(None),
     empty_return_share: float | None = Form(None),
@@ -1130,7 +1131,7 @@ def _job_out(job) -> JobOut:
 def start_report_job(
     file: UploadFile = File(..., description="Shipments as CSV or .xlsx"),
     scope: str = Form("TTW"),
-    factor_set: str = Form("reference"),
+    factor_set: str = Form(DEFAULT_FACTOR_SET),
     road_fuel_type: str | None = Form(None),
     load_factor: float | None = Form(None),
     empty_return_share: float | None = Form(None),
@@ -1300,7 +1301,7 @@ def terminal_catchment(
 def lane_portfolio(
     file: UploadFile = File(..., description="Shipments as CSV or .xlsx"),
     scope: str = Form("WTW"),
-    factor_set: str = Form("glec"),
+    factor_set: str = Form(DEFAULT_FACTOR_SET),
 ) -> PortfolioOut:
     """Read a shipment file as a portfolio of lanes and rank where acting on it pays.
 
@@ -1384,7 +1385,7 @@ def lane_portfolio(
 
 @router.get("/conformance", response_model=ConformanceOut)
 def conformance(
-    factor_set: str = "glec",
+    factor_set: str = DEFAULT_FACTOR_SET,
     scope: str = "WTW",
     road_fuel_type: str | None = None,
 ) -> ConformanceOut:
@@ -1427,7 +1428,7 @@ MAX_VULNERABILITY_SHIPMENTS = 60
 def network_vulnerability(
     file: UploadFile = File(..., description="Shipments as CSV or .xlsx"),
     scope: str = Form("WTW"),
-    factor_set: str = Form("glec"),
+    factor_set: str = Form(DEFAULT_FACTOR_SET),
 ) -> VulnerabilityOut:
     """Rank the network's pieces by what losing each one would cost this demand.
 
@@ -1593,7 +1594,7 @@ def consolidation_hub_plan(
     max_hubs: int = Form(1),
     capacity_tonnes: float = Form(VEHICLE_CAPACITY_TONNES),
     scope: str = Form("WTW"),
-    factor_set: str = Form("glec"),
+    factor_set: str = Form(DEFAULT_FACTOR_SET),
 ) -> HubPlanOut:
     """Where opening a consolidation hub would pay, and by how much.
 

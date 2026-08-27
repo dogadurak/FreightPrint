@@ -26,6 +26,7 @@ from typing import Callable
 
 from .cost import CostInputError, calculate_ets
 from .emissions import (
+    DEFAULT_FACTOR_SET,
     DEFAULT_SCOPE,
     FactorNotFoundError,
     calculate_shipment,
@@ -224,7 +225,7 @@ def _options(routes, shipment, scope, factor_set) -> list[LaneOption]:
 def build_portfolio(
     shipments: list[ShipmentRow],
     scope: str = DEFAULT_SCOPE,
-    factor_set: str = "glec",
+    factor_set: str = DEFAULT_FACTOR_SET,
     factor_sets: tuple[str, ...] = CANDIDATE_FACTOR_SETS,
     on_progress: Callable[[int], None] | None = None,
 ) -> Portfolio:

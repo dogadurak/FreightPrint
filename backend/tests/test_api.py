@@ -864,9 +864,13 @@ def test_the_validation_datasets_own_sea_factor_is_below_every_verified_ship(cli
     not one of the verified ro-ro ships in the reporting period is that clean, so a
     report priced on this basis understates its sea leg by roughly a factor of four.
     """
-    sea = _multimodal(client)["sea_factor"]
+    # Asked for by name. This used to rely on `reference` being the API's default, which
+    # is how a customer's own unverified factors came to price every unqualified request
+    # - see test_factor_set_default.py. The finding is about that set, not about which
+    # set happens to be the default, so it now names the one it is talking about.
+    sea = _multimodal(client, factor_set="reference")["sea_factor"]
 
-    assert sea["compared_row"].startswith("reference"), "the default basis changed"
+    assert sea["compared_row"].startswith("reference")
     assert sea["verdict"] == "below"
     assert sea["share_below"] == 0.0, "some ship is now that clean; rewrite this finding"
     assert sea["ratio"] < 0.3
