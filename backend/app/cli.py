@@ -147,7 +147,7 @@ def main() -> None:
         _print_fuels(args.factor_set)
         return
     if args.origin is None or args.destination is None:
-        sys.exit("--origin ve --destination gerekli (yalniz --list-fuels icin degil)")
+        sys.exit("--origin ve --destination gerekli (yalnız --list-fuels için değil)")
 
     try:
         routes = find_route_alternatives(

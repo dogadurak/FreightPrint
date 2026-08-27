@@ -41,7 +41,7 @@
       "type": "Feature",
       "properties": {
         "id": "ambarli",
-        "name": "Ambarli",
+        "name": "Ambarlı",
         "country": "TR",
         "type": "port",
         "source": "",
@@ -77,7 +77,7 @@
       "type": "Feature",
       "properties": {
         "id": "halkali",
-        "name": "Halkali",
+        "name": "Halkalı",
         "country": "TR",
         "type": "rail_terminal",
         "source": "",
@@ -149,7 +149,7 @@
       "type": "Feature",
       "properties": {
         "id": "sete",
-        "name": "Sete",
+        "name": "Sète",
         "country": "FR",
         "type": "roro_port",
         "source": "NGA Pub. 151",
@@ -185,7 +185,7 @@
       "type": "Feature",
       "properties": {
         "id": "koln",
-        "name": "Koln",
+        "name": "Köln",
         "country": "DE",
         "type": "rail_terminal",
         "source": "ERA RINF",

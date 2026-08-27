@@ -30,10 +30,10 @@ from .network import DATA_DIR
 # Schemes that differentiate by emission class without publishing a carbon price. Named
 # so a route through them says "not priced, and here is why" rather than "€0".
 CLASS_BASED = {
-    "AT": "Avusturya, Ocak 2024'ten beri CO2 sinifina gore ucretlendiriyor ama ton basi "
-          "karbon fiyati yayinlamiyor; sinif basina km ucreti belirliyor.",
-    "CZ": "Cekya, Mart 2024'ten beri CO2 sinifina gore ucretlendiriyor; ayni sekilde "
-          "yayinlanmis bir ton basi fiyati yok.",
+    "AT": "Avusturya, Ocak 2024'ten beri CO2 sınıfına göre ücretlendiriyor ama ton başı "
+          "karbon fiyatı yayımlamıyor; sınıf başına km ücreti belirliyor.",
+    "CZ": "Çekya, Mart 2024'ten beri CO2 sınıfına göre ücretlendiriyor; aynı şekilde "
+          "yayımlanmış bir ton başı fiyatı yok.",
 }
 
 
@@ -106,7 +106,7 @@ def estimate_tolls(route, road_co2_kg: float, on_date: date | None = None) -> To
     if total_km <= 0:
         return TollEstimate(countries=[], total_eur=0.0, priced_co2_kg=0.0,
                             unpriced_co2_kg=road_co2_kg,
-                            notes=["Rota karayolu bacagi tasimiyor."])
+                            notes=["Rota karayolu bacağı taşımıyor."])
 
     countries: list[CountryToll] = []
     for part in parts:
@@ -134,10 +134,10 @@ def estimate_tolls(route, road_co2_kg: float, on_date: date | None = None) -> To
 
     priced = [c for c in countries if c.priced]
     notes = [
-        "Yalnizca gecis ucretinin **CO2 bileseni**. Altyapi, gurultu ve hava kirliligi "
-        "bilesenleri faturanin cok daha buyuk kismidir ve karbonla degismez.",
-        "Karbon, ulkelere karayolu mesafesi payina gore dagitilir; tek bir faktor zaten "
-        "her kilometrenin ayni salimi yaptigini varsayiyor.",
+        "Yalnızca geçiş ücretinin **CO2 bileşeni**. Altyapı, gürültü ve hava kirliliği "
+        "bileşenleri faturanın çok daha büyük kısmıdır ve karbonla değişmez.",
+        "Karbon, ülkelere karayolu mesafesi payına göre dağıtılır; tek bir faktör zaten "
+        "her kilometrenin aynı salımı yaptığını varsayıyor.",
     ]
     for scheme in schemes.values():
         if any(c.iso == scheme.iso and c.priced for c in countries):
@@ -148,8 +148,8 @@ def estimate_tolls(route, road_co2_kg: float, on_date: date | None = None) -> To
             )
     if any(c.iso in CLASS_BASED for c in countries):
         notes.append(
-            "Bazi ulkeler CO2 sinifina gore ucretlendiriyor ama ton basi karbon fiyati "
-            "yayinlamiyor; onlar ucretlendirilmedi, sifir sayilmadi."
+            "Bazı ülkeler CO2 sınıfına göre ücretlendiriyor ama ton başı karbon fiyatı "
+            "yayımlamıyor; onlar ücretlendirilmedi, sıfır sayılmadı."
         )
 
     return TollEstimate(

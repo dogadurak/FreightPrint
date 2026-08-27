@@ -46,6 +46,13 @@ jobs:
       - name: Terminal coordinates still match their source
         run: python scripts/source_terminals.py
 
+      # The dashboard is in Turkish and several of its strings were typed without
+      # diacritics, so a note read "yakit uretimini olcmez" directly under a heading
+      # spelled properly. It looks like a broken font, and it cost nothing to introduce
+      # because nothing read the page until it was photographed.
+      - name: Turkish text reaches the reader spelled correctly
+        run: python scripts/check_turkish_text.py
+
   test:
     name: Tests
     runs-on: ubuntu-latest

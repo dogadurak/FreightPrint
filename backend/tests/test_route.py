@@ -60,7 +60,7 @@ def test_terminals_without_a_service_are_named_rather_than_silently_ignored():
     graph = build_network(terminals)
     unconnected = {terminals[node].name for node in graph.nodes if graph.degree(node) == 0}
 
-    assert unconnected == {"Ambarli"}
+    assert unconnected == {"Ambarlı"}
 
 
 def test_a_destination_off_the_network_still_gets_the_all_road_baseline(offline_road):

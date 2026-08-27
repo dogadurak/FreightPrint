@@ -95,7 +95,7 @@ def test_only_germany_is_priced(corridor):
     assert priced == {"DE"}
     austria = next(c for c in estimate.countries if c.iso == "AT")
     assert not austria.priced and austria.cost_eur == 0
-    assert "sinifina gore" in austria.reason
+    assert "sınıfına göre" in austria.reason
 
 
 def test_the_german_rate_is_the_published_one(corridor):
@@ -145,8 +145,8 @@ def test_the_estimate_says_it_is_only_the_carbon_component(corridor):
 
     notes = " ".join(estimate_tolls(route, emission.co2_by_mode.get("road", 0.0)).notes)
 
-    assert "CO2 bileseni" in notes
-    assert "Altyapi" in notes
+    assert "CO2 bileşeni" in notes
+    assert "Altyapı" in notes
 
 
 def test_a_route_with_no_road_leg_prices_nothing():

@@ -106,14 +106,14 @@ def observed(geo: str = DEFAULT_REFERENCE_GEO, year: int | None = None) -> Empty
     if not rows:
         available = sorted({row.geo for row in load_empty_running()})
         raise BenchmarkUnavailable(
-            f"{geo} icin bos donus gozlemi yok. Eurostat yalnizca bildiren ulkeleri "
-            f"yayimlar; mevcut olanlar: {', '.join(available)}"
+            f"{geo} için boş dönüş gözlemi yok. Eurostat yalnızca bildiren ülkeleri "
+            f"yayımlar; mevcut olanlar: {', '.join(available)}"
         )
     if year is not None:
         matching = [row for row in rows if row.year == year]
         if not matching:
             years = sorted(row.year for row in rows)
-            raise BenchmarkUnavailable(f"{geo} icin {year} yok; mevcut yillar: {years}")
+            raise BenchmarkUnavailable(f"{geo} için {year} yok; mevcut yıllar: {years}")
         return matching[0]
     return max(rows, key=lambda row: row.year)
 
@@ -436,21 +436,24 @@ def compare_sea_factor(
         types[ship.ship_type] = types.get(ship.ship_type, 0) + 1
 
     accompanied = vehicle_type in ACCOMPANIED_BASES
+    # These reach a Turkish reader on the dashboard, so they are written in Turkish.
+    # They used to be typed without diacritics and rendered under a heading that has
+    # them, which read as a rendering fault rather than a choice.
     notes = [
-        f"Karsilastirma {MRV_SCOPE} esasindadir. MRV geminin yaktigi yakittan cikan "
-        "CO2'yi bildirir; yakit uretimini olcmez, bu yuzden WTW bir faktorle "
-        "karsilastirilmaz.",
-        "Medyan kullanilir, ortalama degil: birkac gemi tasima isi bildirmedigi icin "
-        "asiri deger uretiyor ve ortalamayi tek basina tasiyabiliyor.",
-        "Gozlem saf ro-ro yuk gemilerinden olusuyor. Ro-pax gemileri tasima islerini "
-        "yolcu uzerinden bildirdigi icin ton-mil sutunu tum sinif icin bos donuyor; "
-        "yayinin kendisinde yoklar, burada elenmediler.",
+        f"Karşılaştırma {MRV_SCOPE} esasındadır. MRV geminin yaktığı yakıttan çıkan "
+        "CO2'yi bildirir; yakıt üretimini ölçmez, bu yüzden WTW bir faktörle "
+        "karşılaştırılmaz.",
+        "Medyan kullanılır, ortalama değil: birkaç gemi taşıma işi bildirmediği için "
+        "aşırı değer üretiyor ve ortalamayı tek başına taşıyabiliyor.",
+        "Gözlem saf ro-ro yük gemilerinden oluşuyor. Ro-pax gemileri taşıma işlerini "
+        "yolcu üzerinden bildirdiği için ton-mil sütunu tüm sınıf için boş dönüyor; "
+        "yayının kendisinde yoklar, burada elenmediler.",
     ]
     if accompanied:
         notes.append(
-            "DIKKAT: karsilastirilan faktor refakatli (cekici ve surucu yukle birlikte) "
-            "tasimayi tanimliyor; bu trafik agirlikla ro-pax gemilerinde seyrediyor ve "
-            "bu gozlemde ro-pax yok. Rakam yine de en yakin gozlem, ama bir sinama degil."
+            "DİKKAT: karşılaştırılan faktör refakatli (çekici ve sürücü yükle birlikte) "
+            "taşımayı tanımlıyor; bu trafik ağırlıkla ro-pax gemilerinde seyrediyor ve "
+            "bu gözlemde ro-pax yok. Rakam yine de en yakın gözlem, ama bir sınama değil."
         )
 
     return FleetComparison(
@@ -462,7 +465,7 @@ def compare_sea_factor(
         q1=quartiles[0],
         q3=quartiles[2],
         share_below=sum(1 for v in values if v <= factor) / len(values),
-        observed_source=f"EU MRV (THETIS-MRV), {year}, {len(fleet)} dogrulanmis ro-ro gemisi",
+        observed_source=f"EU MRV (THETIS-MRV), {year}, {len(fleet)} doğrulanmış ro-ro gemisi",
         ship_types=types,
         is_comparable=not accompanied,
         notes=notes,

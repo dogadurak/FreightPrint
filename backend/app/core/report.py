@@ -338,9 +338,9 @@ def read_shipments(content: str) -> ParsedUpload:
         )
     if upload.bad_share > MAX_BAD_ROW_SHARE:
         raise ReportInputError(
-            f"{len(upload.skipped)}/{upload.total_rows} satir okunamadi. Bu oranda hata, "
-            f"tek tek yazim hatasi degil dosyanin yanlis okundugu anlamina gelir - "
-            f"ayrac veya sutun basliklarini kontrol edin. Ilk hata: {upload.skipped[0]}"
+            f"{len(upload.skipped)}/{upload.total_rows} satır okunamadı. Bu oranda hata, "
+            f"tek tek yazım hatası değil dosyanın yanlış okunduğu anlamına gelir — "
+            f"ayraç veya sütun başlıklarını kontrol edin. İlk hata: {upload.skipped[0]}"
         )
     return upload
 

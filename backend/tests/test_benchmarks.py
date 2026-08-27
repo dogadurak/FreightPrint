@@ -283,7 +283,7 @@ def test_the_comparison_is_made_on_one_scope_and_says_which():
 
     assert MRV_SCOPE == "TTW"
     notes = " ".join(compare_sea_factor(0.063).notes)
-    assert "WTW" in notes and "yakit uretimini olcmez" in notes
+    assert "WTW" in notes and "yakıt üretimini ölçmez" in notes
 
 
 def test_the_median_is_used_because_a_few_ships_break_the_mean():
@@ -334,7 +334,7 @@ def test_the_accompanied_factor_is_compared_but_not_called_a_test():
 
     assert accompanied.is_comparable is False
     assert trailer.is_comparable is True
-    assert any("DIKKAT" in note for note in accompanied.notes)
+    assert any("DİKKAT" in note for note in accompanied.notes)
     assert accompanied.ships == trailer.ships, "the flag must not change the fleet"
 
 

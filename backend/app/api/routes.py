@@ -593,9 +593,9 @@ def _sea_factor_out(route, request: RouteRequest) -> SeaFactorOut | None:
     if request.scope != MRV_SCOPE:
         notes.insert(
             0,
-            f"Bu sevkiyat {request.scope} esasiyla fiyatlandi; karsilastirma ise ayni "
-            f"setin {MRV_SCOPE} satiri ({factor.value} kg CO2/ton-km) uzerinden yapildi. "
-            f"MRV yalnizca yakilan yakiti olcer, uretimini olcmez.",
+            f"Bu sevkiyat {request.scope} esasıyla fiyatlandı; karşılaştırma ise aynı "
+            f"setin {MRV_SCOPE} satırı ({factor.value} kg CO2/ton-km) üzerinden yapıldı. "
+            f"MRV yalnızca yakılan yakıtı ölçer, üretimini ölçmez.",
         )
 
     return SeaFactorOut(

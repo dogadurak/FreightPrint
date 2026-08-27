@@ -298,7 +298,7 @@ def test_a_file_that_is_mostly_unreadable_is_refused_rather_than_summarised():
     """Past a certain share the honest reading is not "some typos" but "this file is
     being parsed wrongly" — a wrong delimiter looks exactly like this — and answering
     over the survivors would be confidently wrong rather than usefully partial."""
-    with pytest.raises(ReportInputError, match="yanlis okundugu"):
+    with pytest.raises(ReportInputError, match="yanlış okunduğu"):
         read_shipments(NAMED_HEADER + GOOD + BAD + BAD + BAD)
 
 

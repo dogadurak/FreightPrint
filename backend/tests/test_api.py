@@ -44,7 +44,7 @@ def test_terminals_flag_the_ones_no_service_reaches(client):
     terminals = client.get("/api/terminals").json()
 
     assert len(terminals) == 16
-    assert [t["name"] for t in terminals if not t["is_connected"]] == ["Ambarli"]
+    assert [t["name"] for t in terminals if not t["is_connected"]] == ["Ambarlı"]
 
 
 def test_factor_sets_expose_the_sea_basis_behind_each_choice(client):

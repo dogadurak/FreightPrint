@@ -73,6 +73,14 @@ const nf3 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
 const nf1 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
 const signed = (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${nf.format(Math.abs(v))}`;
 
+// Fixed decimals, in the separator this page's language uses. `toFixed` always writes a
+// dot, and on a page where thousands are already separated by dots "1.24×" reads as one
+// thousand two hundred. Every visible number goes through here; CSS lengths and form
+// values do not, since those must stay machine-readable.
+const dec = (v, digits = 1) => v.toLocaleString("tr-TR", {
+  minimumFractionDigits: digits, maximumFractionDigits: digits,
+});
+
 let factorSets = [];
 let payload = null;          // last /api/routes response
 let scenarioKey = null;      // "factor_set|scope"
@@ -173,20 +181,12 @@ function initMap() {
   }
   map = new maplibregl.Map({
     container: "map",
-    style: {
-      version: 8,
-      // Symbol layers need a glyph source; the server below serves Noto, not Open Sans.
-      glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-      sources: {
-        osm: {
-          type: "raster",
-          tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
-          tileSize: 256,
-          attribution: "© OpenStreetMap, © CARTO",
-        },
-      },
-      layers: [{ id: "osm", type: "raster", source: "osm" }],
-    },
+    // CARTO's *raster* endpoint began requiring an API key and now stamps
+    // "API KEY REQUIRED" diagonally across every tile - inside a 200 response, so
+    // nothing failed and no error was logged. The basemap was unreadable for a while
+    // before anyone opened the page to look. The vector endpoint is still keyless, and
+    // its glyph server carries the Noto face the terminal labels ask for.
+    style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     center: [18, 45],
     zoom: 3.4,
   });
@@ -783,7 +783,7 @@ function attachLegHover() {
       popup.setLngLat(event.lngLat).setHTML(
         `<strong>${p.label}</strong>${p.mode} · ${p.km} km · ${p.co2} kg CO2<br>`
         + (p.gain > 0 ? `⛰️ Tırmanış: +${Math.round(p.gain)}m · İniş: -${Math.round(p.loss)}m<br>` : '')
-        + `<span style="color:#6e7783">faktör ${p.factor}${p.terrain_factor && p.terrain_factor !== 1 ? ` (Topografya x${p.terrain_factor.toFixed(2)})` : ''}${p.schematic ? " · şematik" : ""}</span>`,
+        + `<span style="color:#6e7783">faktör ${p.factor}${p.terrain_factor && p.terrain_factor !== 1 ? ` (Topografya x${dec(p.terrain_factor, 2)})` : ''}${p.schematic ? " · şematik" : ""}</span>`,
       ).addTo(map);
     });
     map.on("mouseleave", hit, () => {
@@ -3191,7 +3191,7 @@ function renderSeaDistance(alternative) {
           leg.mode === "sea" ? "yayının ölçtüğü" : "hat üzerinde ölçülen"),
       ]),
       el("div", { class: "hub-figure" }, [
-        el("span", { class: "hub-value warn" }, `%${pct > 0 ? "+" : ""}${pct.toFixed(1)}`),
+        el("span", { class: "hub-value warn" }, `%${pct > 0 ? "+" : ""}${dec(pct)}`),
         el("span", { class: "hub-label" }, "fark"),
       ]),
     ]);
@@ -3206,8 +3206,8 @@ function renderSeaDistance(alternative) {
       ? el("p", { class: "provenance" },
           `Yayında birebir yazan: ${nf.format(leg.published_nm)} deniz mili. `
           + `Terminale ulaşmak için eklenen ölçülmüş fark: ${leg.estimated_nm > 0 ? "+" : ""}`
-          + `${leg.estimated_nm.toFixed(1)} deniz mili — cevabın %`
-          + `${(leg.estimated_share * 100).toFixed(1)}'i.`)
+          + `${dec(leg.estimated_nm)} deniz mili — cevabın %`
+          + `${dec(leg.estimated_share * 100)}'i.`)
       : null;
 
     const line = leg.source_line
@@ -3219,7 +3219,12 @@ function renderSeaDistance(alternative) {
 
     return [
       el("h3", { class: "sea-distance-leg" },
-        `${leg.mode === "sea" ? "Deniz" : "Demiryolu"} — ${leg.from_terminal} → ${leg.to_terminal}`),
+        // Through the name map the rest of the page already uses. Printing the raw ids
+        // here spelled the terminals "trieste → koln" while the map beside it said
+        // "Trieste" and "Köln".
+        `${leg.mode === "sea" ? "Deniz" : "Demiryolu"} — `
+        + `${terminalNames.get(leg.from_terminal) || leg.from_terminal} → `
+        + `${terminalNames.get(leg.to_terminal) || leg.to_terminal}`),
       figures,
       el("p", { class: "hint" },
         "Motor taşıyıcının rakamıyla fiyatlıyor; bu, yerine geçen değil yanında duran "
@@ -3254,7 +3259,7 @@ function renderSeaFactor(alternative) {
   const s = alternative?.sea_factor;
   if (!s) { card.hidden = true; return; }
 
-  const f = (v) => v.toFixed(4);
+  const f = (v) => dec(v, 4);
   $("sea-factor-note").textContent = s.observed_source;
 
   // The scale spans the middle half plus whatever room the factor needs, so the marker
@@ -3304,7 +3309,7 @@ function renderSeaFactor(alternative) {
 
   const figures = el("div", { class: "hub-headline" }, [
     el("div", { class: "hub-figure" }, [
-      el("span", { class: "hub-value" }, `${s.ratio.toFixed(2)}×`),
+      el("span", { class: "hub-value" }, `${dec(s.ratio, 2)}×`),
       el("span", { class: "hub-label" }, "faktör / gözlenen medyan"),
     ]),
     el("div", { class: "hub-figure" }, [
@@ -3312,7 +3317,7 @@ function renderSeaFactor(alternative) {
       el("span", { class: "hub-label" }, `${nf.format(s.ships)} geminin faktörün altındaki payı`),
     ]),
     el("div", { class: "hub-figure" }, [
-      el("span", { class: "hub-value warn" }, `${s.spread.toFixed(1)}×`),
+      el("span", { class: "hub-value warn" }, `${dec(s.spread)}×`),
       el("span", { class: "hub-label" }, "orta yarının genişliği"),
     ]),
   ]);
@@ -3335,7 +3340,7 @@ function renderSeaFactor(alternative) {
   // The finding that outlives the pass. An interquartile range this wide means the
   // factor is a statement about a fleet, not about a sailing.
   const spread = el("p", { class: "hint" },
-    `Orta yarı ${s.spread.toFixed(1)} kat aralığa yayılıyor: aynı seferi taşıyan iki `
+    `Orta yarı ${dec(s.spread)} kat aralığa yayılıyor: aynı seferi taşıyan iki `
     + `doğrulanmış gemi arasında bu kadar fark var. Hangi filo ortalaması seçilirse `
     + `seçilsin, tek bir geminin gerçeğini veremez — bu, motorun değil yöntemin sınırı.`);
 
@@ -3383,7 +3388,7 @@ function renderEmptyRunning(alternative, total) {
   const e = alternative?.empty_running;
   if (!e) { card.hidden = true; return; }
 
-  const pct = (v) => `%${(v * 100).toFixed(1)}`;
+  const pct = (v) => `%${dec(v * 100)}`;
   $("empty-running-note").textContent = e.source;
 
   const figures = el("div", { class: "hub-headline" }, [
