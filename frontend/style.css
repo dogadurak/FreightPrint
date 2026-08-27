@@ -1042,3 +1042,35 @@ td.exposed { color: var(--bad); font-weight: 620; }
   background: var(--surface-sunken); padding: 0.1em 0.35em;
   border-radius: 3px; font-size: 0.95em;
 }
+
+/* Yönetici özeti. İki hali var ve ikisi aynı görünmemeli: ucuz *ve* temiz bir rota bir
+   fırsattır; ucuz ama daha kirli bir rota bir ödünleşimdir. Panel eskiden ikisini de
+   mavi bir "optimizasyon fırsatı" olarak gösteriyordu. */
+.cta-panel {
+  background: var(--surface-float);
+  border: 2px solid var(--sea);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.cta-panel h3 { margin: 0 0 0.5rem 0; color: var(--sea); font-size: 1.2rem; }
+.cta-panel p { margin: 0; font-size: 1.05rem; }
+.cta-panel small { color: var(--text-muted); }
+.cta-tradeoff { border-color: var(--warn-border); background: var(--warn-wash); }
+.cta-tradeoff h3 { color: var(--warn-ink); }
+.cta-button {
+  background: var(--sea);
+  color: #fff;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .cta-panel { flex-direction: column; align-items: stretch; }
+}

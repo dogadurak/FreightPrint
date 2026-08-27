@@ -43,8 +43,22 @@ yönde**. Motor şu an ikisini de uygulamıyor, ikisini de panoda yanında göst
 Okuyanın soracağı ilk soru bu ve yazılı bir cevabı yok. Yapılacak olan **gerekçeli bir
 tavsiye yazmak**, sessizce değiştirmek değil:
 
-- İkisi birden uygulanırsa çok modlu kazanç %19,4'ten %10,4'e iner (yalnız deniz
-  uygulanırsa %7,3 — yani ters yönler bulguyu *sağlamlaştırıyor*).
+**Ölçüldü (27 Ağustos 2026), pilot koridor, GLEC/TTW, Pendik → Trieste → Köln.**
+Karayolu temeli 3.620 kg; çok modlu rota **daha kirli**, ve dört senaryoda da öyle:
+
+| senaryo | kg CO2 | karayoluna göre |
+|---|---|---|
+| motorun mevcut hali | 4.323 | **+%19,4** |
+| deniz ölçümü uygulanırsa | 3.839 | **+%6,1** |
+| demiryolu ölçümü uygulanırsa | 4.453 | **+%23,0** |
+| ikisi birden | 3.969 | **+%9,6** |
+
+**İşaret hiçbir senaryoda değişmiyor.** Karar için asıl cevap bu: hangi mesafenin
+kullanıldığı büyüklüğü %6–23 arasında oynatıyor ama sonucu değiştirmiyor. Yazılacak
+metin bunu söylemeli — bir sayı seçmeyi değil.
+
+- Deniz baskın: emisyonun %87,4'ü orada, o yüzden deniz düzeltmesi tek başına 13 puan
+  oynatıyor, demiryolu düzeltmesi 3,6 puan.
 - Karar hangi koşulda hangi sayının kullanılacağını söylemeli, ve neden motorun
   varsayılanının değişmediğini.
 

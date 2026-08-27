@@ -1196,21 +1196,49 @@ function renderCEOWidget(scenario) {
 
   const costSaving = baseline.total_cost_eur - best.total_cost_eur;
   const etsSaving = (baseline.ets?.cost_eur || 0) - (best.ets?.cost_eur || 0);
-  const co2Saving = baseline.total_co2_kg - best.total_co2_kg;
+  // The same field the KPI above reads. Subtracting the two totals instead gave 700 kg
+  // where the KPI said 702, because the totals arrive rounded to three significant
+  // figures and the saving is rounded once, from the full number. Two figures for one
+  // quantity on one screen is a reason to distrust both.
+  const co2Saving = best.saving_co2_kg ?? (baseline.total_co2_kg - best.total_co2_kg);
   const co2Pct = (co2Saving / baseline.total_co2_kg) * 100;
+
+  // The carbon sentence used to read "(Karbon ayak iziniz %-19,4 azalır)": the word was
+  // fixed at "azalır" while the number was free to go negative, so on the pilot corridor
+  // the panel a manager reads first announced a fall where the engine had computed a
+  // rise — directly above a KPI reading "+702 kg CO2, %19 daha fazla". In a carbon tool
+  // this is the one number that may not be wrong, and it was wrong in the loudest place.
+  //
+  // `best` is the cheapest route and nothing here ever asked whether it was also the
+  // cleaner one. That the cheapest is the dirtier one is not a fault to paper over — it
+  // is this corridor's actual finding — so the panel now names the trade-off instead of
+  // calling it an optimisation.
+  const cleaner = co2Saving > 0;
+  const carbon = cleaner
+    ? `Karbon ayak iziniz da <strong>%${nf1.format(co2Pct)} azalır</strong>`
+    : `Ancak karbon ayak iziniz <strong>%${nf1.format(Math.abs(co2Pct))} artar</strong> `
+      + `(${nf.format(Math.abs(co2Saving))} kg CO2 daha fazla)`;
+  // A negative "saving" on the ETS line is a cost that rose, which is the opposite of a
+  // contribution to the saving.
+  const ets = Math.abs(etsSaving) < 1 ? "" : etsSaving > 0
+    ? `Bu tutarın <strong>${nf.format(etsSaving)} €</strong>'su düşen EU ETS karbon vergisinden geliyor.`
+    : `Artan EU ETS karbon vergisi bu tasarrufu <strong>${nf.format(Math.abs(etsSaving))} €</strong> azaltıyor.`;
 
   ctaSlot.hidden = false;
   ctaSlot.innerHTML = `
-    <div style="background: var(--surface-float); border: 2px solid var(--sea); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+    <div class="cta-panel ${cleaner ? "cta-win" : "cta-tradeoff"}">
       <div>
-        <h3 style="margin: 0 0 0.5rem 0; color: var(--sea); font-size: 1.2rem;">💡 Yönetici Özeti: Optimizasyon Fırsatı</h3>
-        <p style="margin: 0; font-size: 1.05rem;">
-          Sadece Karayolu yerine <strong>${best.label}</strong> rotasını tercih ederek sefer başına toplam <strong>${nf.format(costSaving)} €</strong> tasarruf edebilirsiniz.
+        <h3>${cleaner ? "💡 Yönetici özeti: optimizasyon fırsatı"
+                      : "⚖️ Yönetici özeti: maliyet–karbon ödünleşimi"}</h3>
+        <p>
+          Sadece karayolu yerine <strong>${best.label}</strong> rotasını tercih ederek sefer başına
+          <strong>${nf.format(costSaving)} €</strong> tasarruf edebilirsiniz. ${carbon}.
           <br>
-          <small style="color: var(--text-muted);">Bu tasarrufun <strong>${nf.format(etsSaving)} €</strong>'su düşen EU ETS karbon vergisinden kaynaklanmaktadır (Karbon ayak iziniz %${nf1.format(co2Pct)} azalır).</small>
+          <small>${ets}</small>
         </p>
       </div>
-      <button type="button" class="primary" style="background: var(--sea); color: white; padding: 0.75rem 1.5rem; font-weight: 600; border-radius: 4px; white-space: nowrap; margin-left: 1rem;" onclick="document.querySelector('.kpi-row').scrollIntoView({behavior: 'smooth'})">Detayları İncele</button>
+      <button type="button" class="primary cta-button"
+              onclick="document.querySelector('.kpi-row').scrollIntoView({behavior: 'smooth'})">Detayları İncele</button>
     </div>
   `;
 }
