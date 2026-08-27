@@ -10,8 +10,13 @@ silinir; bitmemiş bir işi burada bırakmak, hatırlamaya çalışmaktan iyidir
 
 ## Durum
 
-Faz 0–8 tamamlandı. **649 test** geçiyor, CI'da üç denetim koşuyor
-(`check_tracked_files.py`, `check_data_fields.py`, `source_terminals.py`).
+Faz 0–8 tamamlandı. **649 test** geçiyor, CI'da dört denetim koşuyor
+(`check_tracked_files.py`, `check_data_fields.py`, `source_terminals.py`,
+`check_turkish_text.py`).
+
+Pano ekran görüntüleri README'de; `python scripts/shoot_dashboard.py` ile yenilenir.
+**Yenilemeden önce sunucuyu yeniden başlat** — görüntüler bir kez, düzeltmelerden önce
+başlatılmış bir sunucudan alındığı için kaynak koda aykırı çıktı.
 
 **Altı dış kaynak bağlı** — hepsi `data/external/` altında, betikle türetiliyor,
 `--check` ile doğrulanıyor. Bulguları Bölüm 8.3'te ve `data/external/README.md`'de;
@@ -30,22 +35,7 @@ Faz 0–8 tamamlandı. **649 test** geçiyor, CI'da üç denetim koşuyor
 
 ## Sırada — bu sırayla
 
-### 1. Görsel özet + ekran görüntüleri ← **buradan başla**
-
-Faz 8'in **tek işaretlenmemiş maddesi** bu, ve haklı: README 757 satır ve içinde tek bir
-görsel yok. Panoya bağlanan her şey — deniz/demiryolu mesafe karşılaştırmaları, belirsizlik
-bandı, kaynak rozetleri, filo dağılım çubuğu — bu makinenin dışında kimse tarafından
-görülmedi.
-
-- [ ] Panoyu ayağa kaldır ve **tarayıcıda** gerçekten ne göründüğüne bak
-- [ ] Ekran görüntüleri al, README'ye koy
-- [ ] Altı kaynağın bulgularını tek sayfalık görsel bir özete çıkar
-
-> **Önce tarayıcı.** API'den doğrulanmış olması yetmez. Bu projenin en sık hatası
-> "kuruldu" ile "bağlandı"yı karıştırmak oldu (bkz. Bölüm 14) — bir kart `hidden`
-> kalıyorsa veya `renderSeaDistance()` çağrılmıyorsa, ancak bakınca görülür.
-
-### 2. "Hangi sayı doğru?" sorusunu kapat
+### 1. "Hangi sayı doğru?" sorusunu kapat ← **buradan başla**
 
 Deniz mesafeleri **%9–26 yüksek**, demiryolu **%4–33 düşük** okuyor — düzeltmeler **ters
 yönde**. Motor şu an ikisini de uygulamıyor, ikisini de panoda yanında gösteriyor.
@@ -61,7 +51,7 @@ tavsiye yazmak**, sessizce değiştirmek değil:
 > **Kural değişmiyor:** dış gözlem varsayımın yerine geçmez, yanına konur. Sessizce
 > değiştirmek motoru, doğrulandığı müşteri raporunu yeniden üretemez hâle getirir.
 
-### 3. Türk terminallerine kaynak — süreli kutu (~2 saat)
+### 2. Türk terminallerine kaynak — süreli kutu (~2 saat)
 
 Pendik, Yalova, Ambarlı, Halkalı: **dördü de kaynaksız**, ve dördü de Türk. Aynı boşluk
 üç kaynakta birden çıktı (Eurostat bildirimi yok, RINF bildirimi yok, Pub 151'de yalnızca
