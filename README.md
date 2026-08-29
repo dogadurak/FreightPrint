@@ -808,3 +808,34 @@ Ayrıntı, kaynak künyeleri ve gözlemin **yapamadıkları**:
 - **Deniz ve demiryolu belirsizliği ölçüm değil.** Deniz bandı tek bir bağımsız
   karşılaştırmaya (searoute, n=1) dayanıyor; demiryolu hiç kontrol edilmedi ve deniz
   değerini ödünç alıyor. `data/distance_uncertainty.csv` her satırda bunu yazıyor.
+
+## Geliştirme Yol Haritası (Eleştirilere Çözümler)
+
+Projenin jüriler ve kullanıcılar tarafından belirtilen eksikliklerini ve bilinen sınırlarını çözmek için planlanan teknik yol haritası:
+
+### 🟢 Hızlı Kazanımlar (1-2 Haftalık İşler)
+1. **Hub (Liman) Emisyonlarının Eklenmesi:** `data/terminals.geojson` dosyasına her terminal için `kwh_per_ton` veya eşdeğeri bir emisyon sabiti eklenip ISO 14083 eksikliğinin giderilmesi.
+2. **Çok Dilli Destek (İngilizce Rapor):** PDF Raporlama modülüne (`report.py`) ve arayüze dil seçeneği eklenerek uluslararası müşteriler için İngilizce çıktı alınabilmesi.
+3. **Deniz Mesafesi Düzeltmesi (Pub 151 Entegrasyonu):** Arayüze "Mesafeyi Pub 151'den (bağımsız referans) al" seçeneği eklenerek hesaplamanın alternatif olarak doğrulanmış mesafe ile de yapılabilmesi.
+
+### 🟡 Orta Vadeli Çözümler (1-2 Aylık İşler)
+4. **Birincil Veri Girişi:** API'ye kullanıcının *kendi ölçtüğü* gerçek yakıt tüketim verisini (primary data) girebileceği bir parametre eklenmesi, böylece ISO 14083 veri kalitesi skorunun 4/5 seviyesine çıkabilmesi.
+5. **API'nin Mikroservislere Bölünmesi:** Her şeyi tek seferde yapan monolitik `POST /api/routes` yapısının `/route`, `/emissions` ve `/cost` gibi ayrı ve bağımsız servislere bölünmesi.
+6. **Demiryolu Rotalaması:** Demiryolu mesafesinin statik tablodan alınması yerine, OpenRailwayMap gibi bir ağ tabanlı sistem ile dinamik olarak hesaplanması.
+
+### 🔴 Büyük Mimari Değişiklikler (Uzun Dönem)
+7. **Küresel Ölçek:** Terminallerin küresel UN/LOCODE veritabanından, servis bacaklarının ise dış sağlayıcıların (Maersk, Xeneta vb.) API'lerinden dinamik çekilerek sistemin tüm dünyaya açılması.
+8. **Frontend Mimarisinin Yeniden Yazılması:** Mevcut 150 KB'lık tek parça vanilla JS (app.js) yapısının bırakılarak React, Vue veya Svelte gibi modern, bakımı kolay bir framework'e geçilmesi.
+9. **Gerçek Zamanlı Veri Entegrasyonu:** Statik navlun tahminleri ve aktarma süreleri yerine; canlı AIS gemi takip verilerinin, liman yoğunluklarının ve piyasa spot oranlarının entegre edilmesi.
+
+## Kesin Emin Olduklarımız (Kanıtlanmış Doğrular)
+
+Projenin literatürle uyumlu olan, saha verisiyle kanıtlanmış ve doğruluğundan %100 emin olduğumuz en güçlü temelleri şunlardır:
+
+1. **Aritmetik ve Rapor Doğruluğu:** Gerçek bir firmanın hazırladığı 34 sevkiyatlık müşteri raporuyla test edildi. Karayolu emisyonlarında 34/34 satırda hata payı neredeyse sıfırdır.
+2. **Ro-Ro ve Konteyner Gemisi Ayrımı:** GLEC Framework ve ISO 14083 kurallarına tam uyumludur. Sektörde sıkça yapılan "Ro-Ro'ya konteyner faktörü (0.012) uygulama" hatası reddedilmiş ve bunun yerine 0.063'lük doğru Ro-Ro faktörü kullanılmıştır.
+3. **AB MRV Verisiyle Çapraz Doğrulama:** Seçilen 0.063'lük Ro-Ro faktörünün, Avrupa Birliği'nin yayımladığı 684 gemi-yıllık gerçek ölçüm (THETIS-MRV) verisinde "filonun orta yarısına" düştüğü kanıtlanmıştır. Ayrıca 0.012'lik değere inebilen hiçbir Ro-Ro gemisinin olmadığı resmi verilerle ispatlanmıştır.
+4. **Boş Dönüş Oranı Eleştirisi:** GLEC'in karayolu için önerdiği %30 boş dönüş payının, Eurostat'ın güncel anket verilerine göre uluslararası AB taşımacılığında aslında ~%12 civarında olduğu veriyle ortaya konmuştur.
+5. **Karayolu Mesafe Hesabı (OSRM):** Mesafeler statik taşıyıcı beyanlarına değil, açık kaynaklı OSRM (Open Source Routing Machine) harita motoruna dayanır. Gerçek raporlarla karşılaştırıldığında hata payı ortalama sadece %1.9'dur (MAPE).
+6. **Doluluk Oranı Çift Sayım Koruması:** GLEC faktörlerinin içinde zaten belirli bir doluluk oranı vardır. Sisteme yeni doluluk girildiğinde, sistem önce eski doluluğu denklemden çıkarır, sonra yenisini uygular. Böylece çift sayım matematiksel olarak engellenmiştir.
+7. **CO2 Geçiş Ücreti Maut:** Almanya'da Aralık 2023'te yürürlüğe giren ton CO2 başına 200 Euro'ya varan Maut ücreti, rotanın Almanya içinden geçen kilometrelerine (geometrik kesişimle) tam olarak yansıtılmaktadır.
