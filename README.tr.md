@@ -5,6 +5,16 @@
 Çok modlu yük taşımacılığı karbon ve rota analiz motoru.
 Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
+## Proje Amacı
+FreightPrint, lojistik operasyonlarında çok modlu yük taşımacılığı (deniz, demiryolu, karayolu) alternatiflerinin karbon emisyonlarını, maliyetlerini ve kapıdan kapıya varış sürelerini **şeffaf, denetlenebilir ve bağımsız veri kaynaklarıyla** analiz etmeyi amaçlayan bir hesaplama motorudur.
+Amacı, lojistik şirketlerinin ve yük sahiplerinin "kağıt üzerinde" yapılan manipülatif hesaplama tuzaklarına düşmeden, bilimsel ve doğrulanmış (ISO 14083, GLEC) emisyon faktörleri ile **en gerçekçi rotalama ve yatırım kararlarını almasını** sağlamaktır.
+
+## Kullanılan Teknolojiler
+- **Backend:** Python, FastAPI, Uvicorn (Yüksek performanslı, asenkron web sunucusu)
+- **Frontend:** Vanilla JavaScript, HTML5, CSS3, MapLibre GL JS (Harita görselleştirme, derleme adımı yok)
+- **Veri & Coğrafya:** OSRM (Açık Kaynak Yönlendirme Makinesi), Nominatim (Geocoding), Searoute (Deniz rotaları), GeoJSON, SQLite (Disk önbellekleme)
+- **Doğrulama & Analiz:** Pandas, Jupyter Notebook, Pytest (649+ test), Monte Carlo Simülasyonu
+
 **Durum:** Planın tüm fazları (0–8) tamamlandı. 649 test geçiyor.
 
 ![Rota haritası ve mod karşılaştırması](docs/img/07-harita.png)
@@ -127,6 +137,30 @@ olmayan bir cevabı varmış gibi gösterir.
 | **ISO 14083 öz değerlendirmesi** | Bu rakam bir denetimde ne kadar dayanır |
 | **Ağ kırılganlığı** | Bir bağlantı çalışmazsa koridor ne kaybeder |
 | **Konsolidasyon merkezi · Ters yük · Hat portföyü** | Yüklenen sevkiyat dosyası üzerinden: nerede toplamalı, hangi boş dönüş eşleşir, hangi hat hareket etmeye değer |
+
+### Arayüz Göstergeleri ve Ekran Görüntüleri (Güncel)
+
+Yüklenen ekran görüntüleri üzerinden pano üzerindeki her bir göstergenin (widget) işlevi aşağıda açıklanmıştır:
+
+**1. Senaryo Çubuğu ve KPI (Temel Performans Göstergesi) Kartları**
+![KPI Göstergeleri](docs/img/ui_1.png)
+Bu bölüm, seçilen rotanın toplam emisyonunu, tam karayolu alternatifine kıyasla olan farkını ve Monte Carlo belirsizlik aralığını gösterir. "Faktör esası" (refakatli/refakatsiz vb.) ve "Kapsam" (TTW/WTW) seçimleri, rotalama işlemini tekrarlamadan anında bu kartlara yansır.
+
+**2. Rota Haritası ve Alternatif Karşılaştırması**
+![Harita ve Karşılaştırma](docs/img/ui_2.png)
+Rota haritası, seçilen sevkiyatın coğrafi izini harita üzerine çizer ve **yolculuk oynatıcı** (player) ile emisyonun zaman içinde nerede biriktiğini animasyonlu olarak sunar. Karşılaştırma grafiği ise alternatiflerin emisyonlarını taşıma modlarına (deniz, karayolu, demiryolu) göre bölerek karşılaştırır.
+
+**3. Kapıdan Kapıya Süre ve Bacak Dökümü**
+![Süre ve Bacaklar](docs/img/ui_3.png)
+Gösterge, toplam süreyi hareket, terminal aktarması ve bekleme süreleri olarak ayırır. Özellikle çok modlu taşımalardaki "hareketsiz geçen" gizli süreleri (örneğin limandaki beklemeler) görünür kılar. Bacak dökümü, toplam kilometrenin modlar arasındaki dağılımını özetler.
+
+**4. Risk, Maliyet ve Faktör Esası Duyarlılığı**
+![Risk ve Duyarlılık](docs/img/ui_4.png)
+Navlun bedeli, ETS maliyetleri ve CO2 geçiş ücretlerini hesaplayarak finansal etkiyi ortaya koyar. Duyarlılık göstergesi ise rotanın farklı faktör esası senaryolarında (örneğin TTW'den WTW'ye geçildiğinde) karbon kazancının nasıl değiştiğini noktalarla belirtir.
+
+**5. Dış Gözlem Kartları ve ISO 14083 Öz Değerlendirmesi**
+![Dış Gözlem ve ISO](docs/img/ui_5.png)
+Motorun teorik varsayımlarını Eurostat ve EU MRV gibi bağımsız verilerle karşılaştıran dış gözlem göstergeleridir. ISO 14083 kartı, seçilen hesaplama yönteminin bir denetimde "uygun" sayılıp sayılmayacağını ve hangi eksiklikleri barındırdığını dürüstçe değerlendirir.
 
 Rotalama pahalı (~6 sn, yedi OSRM çağrısı), fiyatlama bedava. Bu yüzden panonun sunduğu
 her senaryo **tek istekte** hesaplanır; sonrasında geçiş yapmak sunucuya hiç gitmez.
@@ -653,6 +687,46 @@ taşır ve arayüzde uyarı düşer.
 Pratik sonucu: Gebze→Düsseldorf koridorunda multimodalin karayoluna göre cezası kuru yükte
 %5 iken frigo yükte **%11'e** çıkıyor. Aradaki fark multimodalin 42,5 saatlik aktarma ve
 bekleme süresi — km bazlı bir hesabın sıfır saydığı, soğutma faturasının üçte biri.
+
+## Öne Çıkan Bulgular (Grafiksel Analiz)
+
+Geliştirilen hesaplama motoru ve dış veri entegrasyonlarıyla tespit edilen en çarpıcı bulgular aşağıdaki grafiklerde özetlenmiştir.
+
+### 1. Boş Dönüş Payı: Varsayım vs. Gerçeklik
+Uluslararası taşımacılıkta GLEC'in varsaydığı %30 boş dönüş oranı, Eurostat'ın bağımsız gözlemine göre gerçekte **~%20** civarındadır. Karayolu taşımacılığı varsayılan faktörlerin iddia ettiğinden çok daha verimlidir.
+
+```mermaid
+pie title Uluslararası Taşımacılıkta Kamyon Boş Dönüş Oranı
+    "Dolu Seferler" : 79.8
+    "Eurostat Gözlemi (Boş)" : 20.2
+```
+
+### 2. Alman CO2 Geçiş Ücretinde Çok Modlu Taşımanın Etkisi
+Çok modlu taşıma, GLEC emisyon faktörleri sebebiyle TTW/WTW hesaplamasında karayoluna karşı dezavantajlı çıkabilmektedir. Ancak karayolu bacağı Avrupa'yı büyük oranda es geçtiği için Alman CO2 geçiş ücretinden **dev bir maliyet avantajı** sağlar. Karar verici için asıl fayda karbon sertifikasında değil, doğrudan navlun faturasındadır.
+
+```mermaid
+pie title CO2 Geçiş Ücreti Faturası (Almanya, 24t)
+    "Tam Karayolu (245 €)" : 245
+    "Çok Modlu (15 €)" : 15
+```
+
+### 3. Emisyon Esasına Göre Karbon Çıktısı (Pendik–Trieste–Köln)
+Ro-Ro faktörleri ile yapılan hesap (GLEC TTW/WTW) ile Konteyner Gemisi varsayımıyla (Reference) yapılan hesap arasındaki uçurum. Gerçek bir Ro-Ro gemisi, referans hesabındaki 0.012 kg CO2 faktörünün çok uzağında kalmaktadır ve bu durum çok modlu taşımanın karbon tasarrufu denklemini tamamen değiştirmektedir.
+
+```mermaid
+gantt
+    title Emisyon Esasına Göre Karbon Çıktısı (kg CO2)
+    dateFormat X
+    axisFormat %s
+    section Tam Karayolu
+    Referans       (7304) :0, 7304
+    GLEC WTW       (4527) :0, 4527
+    GLEC TTW       (3622) :0, 3622
+    section Çok Modlu
+    Referans       (1262) :0, 1262
+    GLEC WTW       (4760) :0, 4760
+    GLEC TTW       (4324) :0, 4324
+```
 
 ## Doğrulama
 

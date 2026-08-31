@@ -163,6 +163,8 @@ h1, h2, h3 { letter-spacing: -0.015em; }
 }
 .brand h1 { margin: 0; font-size: 1.02rem; }
 .brand p { margin: 0; font-size: 0.8rem; color: var(--ink-muted); }
+.topbar-right { display: flex; align-items: center; gap: 1rem; }
+.topbar-logo { height: 36px; width: auto; border-radius: 8px; }
 .shipment-summary { margin: 0; font-size: 0.84rem; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
 
 /* ── layout ──────────────────────────────────────────────────────────── */
