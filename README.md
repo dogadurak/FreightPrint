@@ -7,6 +7,16 @@ Project briefing and scope definition: [`PROJE_FreightPrint.md`](PROJE_FreightPr
 
 **Status:** All phases (0–8) of the plan are completed. 649 tests passing.
 
+## Project Purpose
+FreightPrint is a calculation engine aiming to analyze carbon emissions, costs, and door-to-door transit times of multimodal freight transport alternatives (sea, rail, road) in logistics operations with **transparent, auditable, and independent data sources**.
+Its purpose is to enable logistics companies and cargo owners to make the **most realistic routing and investment decisions** using scientific and verified emission factors (ISO 14083, GLEC) without falling into manipulative "on-paper" calculation traps.
+
+## Technologies Used
+- **Backend:** Python, FastAPI, Uvicorn (High-performance asynchronous web server)
+- **Frontend:** Vanilla JavaScript, HTML5, CSS3, MapLibre GL JS (Map visualization, no build step)
+- **Data & Geography:** OSRM (Open Source Routing Machine), Nominatim (Geocoding), Searoute (Maritime routes), GeoJSON, SQLite (Disk caching)
+- **Validation & Analysis:** Pandas, Jupyter Notebook, Pytest (649+ tests), Monte Carlo Simulation
+
 ![Route map and mode comparison](docs/img/07-harita.png)
 
 *Pendik → Trieste → Cologne: sea + rail, versus full road. The bars on the right separate the carbon of each alternative by mode.*
@@ -64,6 +74,70 @@ The core of the system is the `backend/app/core/` directory, which handles calcu
 * **`road.py`**: Uses **OSRM (Open Source Routing Machine)** for accurate road distances. Integrates the German **Maut (CO2 Toll)** system to calculate geometric intersections and apply €200/ton CO2 costs.
 * **`rail.py`**: Handles rail calculations based on static reference tables (`service_legs.csv`) and terminal network data.
 * **`schedule.py` & `jobs.py`**: Calculates transit times, custom waiting times, port delays, and creates multimodal portfolios.
+
+## UI Indicators and Screenshots (Latest)
+
+The function of each widget on the dashboard is explained below using the uploaded screenshots:
+
+**1. Scenario Bar and KPI (Key Performance Indicator) Cards**
+![KPI Indicators](docs/img/ui_1.png)
+This section shows the total emission of the selected route, the difference compared to the full road alternative, and the Monte Carlo uncertainty range. "Factor basis" (accompanied/unaccompanied etc.) and "Scope" (TTW/WTW) selections are reflected instantly on these cards without repeating the routing process.
+
+**2. Route Map and Alternative Comparison**
+![Map and Comparison](docs/img/ui_2.png)
+The route map draws the geographical footprint of the selected shipment on the map and presents an animated **journey player** showing where emissions accumulate over time. The comparison chart splits and compares the emissions of the alternatives by transport modes (sea, road, rail).
+
+**3. Door-to-Door Time and Leg Breakdown**
+![Time and Legs](docs/img/ui_3.png)
+The indicator separates the total time into movement, terminal transfer, and waiting times. It specifically makes hidden "idle" times in multimodal transport (e.g., waiting at ports) visible. The leg breakdown summarizes the distribution of total kilometers across modes.
+
+**4. Risk, Cost, and Factor Basis Sensitivity**
+![Risk and Sensitivity](docs/img/ui_4.png)
+It reveals the financial impact by calculating freight cost, ETS costs, and CO2 tolls. The sensitivity indicator pinpoints how the carbon saving changes under different factor basis scenarios (e.g., when switching from TTW to WTW).
+
+**5. External Observation Cards and ISO 14083 Self-Assessment**
+![External Observation and ISO](docs/img/ui_5.png)
+These are external observation indicators comparing the engine's theoretical assumptions with independent data such as Eurostat and EU MRV. The ISO 14083 card honestly assesses whether the selected calculation method would be deemed "compliant" in an audit and highlights any shortcomings.
+
+## Key Findings (Graphical Analysis)
+
+The most striking findings determined by the developed calculation engine and external data integrations are summarized in the charts below.
+
+### 1. Empty Return Share: Assumption vs. Reality
+While GLEC assumes a 30% empty return rate in international transport, independent observation by Eurostat shows the reality is around **~20%**. Road transport is much more efficient than the default factors claim.
+
+```mermaid
+pie title Truck Empty Return Rate in International Transport
+    "Loaded Trips" : 79.8
+    "Eurostat Observation (Empty)" : 20.2
+```
+
+### 2. Impact of Multimodal Transport on German CO2 Toll
+Multimodal transport can appear disadvantageous against full road in TTW/WTW calculations due to GLEC emission factors. However, since the road leg largely bypasses Europe, it provides a **massive cost advantage** from the German CO2 toll. For the decision-maker, the primary benefit is directly on the freight invoice, not the carbon certificate.
+
+```mermaid
+pie title CO2 Toll Invoice (Germany, 24t)
+    "Full Road (245 €)" : 245
+    "Multimodal (15 €)" : 15
+```
+
+### 3. Carbon Output by Emission Basis (Pendik–Trieste–Cologne)
+The enormous gap between the calculation using Ro-Ro factors (GLEC TTW/WTW) and the assumption of a Container Ship (Reference). A real Ro-Ro vessel remains far from the 0.012 kg CO2 factor used in the reference calculation, and this situation completely changes the carbon savings equation of multimodal transport.
+
+```mermaid
+gantt
+    title Carbon Output by Emission Basis (kg CO2)
+    dateFormat X
+    axisFormat %s
+    section Full Road
+    Reference      (7304) :0, 7304
+    GLEC WTW       (4527) :0, 4527
+    GLEC TTW       (3622) :0, 3622
+    section Multimodal
+    Reference      (1262) :0, 1262
+    GLEC WTW       (4760) :0, 4760
+    GLEC TTW       (4324) :0, 4324
+```
 
 ## Validation
 
