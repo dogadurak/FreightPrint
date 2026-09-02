@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: freightprint
+    env: docker
+    region: frankfurt
+    plan: free

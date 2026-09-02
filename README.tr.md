@@ -5,6 +5,8 @@
 Çok modlu yük taşımacılığı karbon ve rota analiz motoru.
 Proje brifingi ve kapsam tanımı: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
 ## Proje Amacı
 FreightPrint, lojistik operasyonlarında çok modlu yük taşımacılığı (deniz, demiryolu, karayolu) alternatiflerinin karbon emisyonlarını, maliyetlerini ve kapıdan kapıya varış sürelerini **şeffaf, denetlenebilir ve bağımsız veri kaynaklarıyla** analiz etmeyi amaçlayan bir hesaplama motorudur.
 Amacı, lojistik şirketlerinin ve yük sahiplerinin "kağıt üzerinde" yapılan manipülatif hesaplama tuzaklarına düşmeden, bilimsel ve doğrulanmış (ISO 14083, GLEC) emisyon faktörleri ile **en gerçekçi rotalama ve yatırım kararlarını almasını** sağlamaktır.

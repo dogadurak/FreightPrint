@@ -5,6 +5,8 @@
 Multimodal freight transport carbon and route analysis engine.
 Project briefing and scope definition: [`PROJE_FreightPrint.md`](PROJE_FreightPrint.md).
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
 **Status:** All phases (0–8) of the plan are completed. 649 tests passing.
 
 ## Project Purpose
